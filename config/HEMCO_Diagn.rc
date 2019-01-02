@@ -1,0 +1,282 @@
+#------------------------------------------------------------------------------
+#                  GEOS-Chem Global Chemical Transport Model                  !
+#------------------------------------------------------------------------------
+#BOP
+#
+# !MODULE: HEMCO_Diagn.rc 
+#
+# !DESCRIPTION: Configuration file for netCDF diagnostic output from HEMCO.
+#\\
+#\\
+# !REMARKS:
+#  Customized for the benchmark simulation.
+#  TO DO: Add long names, which are used for netCDF variable attributes.
+#
+# !REVISION HISTORY:
+#  13 Feb 2018 - E. Lundgren - Initial version
+#EOP
+#------------------------------------------------------------------------------
+#BOC
+# Name             Spec  ExtNr  Cat Hier Dim OutUnit       LongName
+
+###############################################################################
+#####   ACET emissions (in bpch ND11, ND28, ND34, ND36, ND46)             #####
+###############################################################################
+EmisACET_Total     ACET   -1     -1  -1   3   molec/cm2/s  
+EmisACET_Anthro    ACET   0      1   -1   3   atomsC/cm2/s
+EmisACET_BioBurn   ACET   111    -1  -1   2   atomsC/cm2/s
+EmisACET_Biofuel   ACET   0      2   -1   2   atomsC/cm2/s
+EmisACET_Biogenic  ACET   108    -1  -1   2   atomsC/cm2/s
+EmisACET_DirectBio ACET   108    -1  -1   2   atomsC/cm2/s ACET_from_direct_emissions
+EmisACET_MethylBut ACET   108    -1  -1   2   atomsC/cm2/s ACET_from_methyl_butenol
+EmisACET_Monoterp  ACET   108    -1  -1   2   atomsC/cm2/s ACET_from_monoterpenes
+EmisACET_Ocean     ACET   101    -1  -1   2   atomsC/cm2/s ACET_from_ocean_source
+
+###############################################################################
+#####  ALD2 emissions (in bpch ND28, ND34, ND36, ND46. ALD2_Ocean         #####
+#####  and is new)                                                        #####
+###############################################################################
+EmisALD2_Total     ALD2   -1     -1  -1   3   molec/cm2/s
+EmisALD2_Anthro    ALD2   0      1   -1   3   atomsC/cm2/s
+EmisALD2_BioBurn   ALD2   111    -1  -1   2   atomsC/cm2/s
+EmisALD2_Biofuel   ALD2   0      2   -1   2   atomsC/cm2/s
+EmisALD2_Biogenic  ALD2   108    -1  -1   2   atomsC/cm2/s
+EmisALD2_Ocean     ALD2   101    -1  -1   2   atomsC/cm2/s
+EmisALD2_Senesc    ALD2   0      4   -1   2   atomsC/cm2/s
+
+###############################################################################
+#####  ALK4 emissions (in bpch ND28, ND34, ND36)                          ##### 
+###############################################################################
+EmisALK4_Total     ALK4   -1     -1  -1   3   molec/cm2/s
+EmisALK4_Anthro    ALK4   0      1   -1   3   atomsC/cm2/s
+EmisALK4_BioBurn   ALK4   111    -1  -1   2   atomsC/cm2/s
+EmisALK4_Biofuel   ALK4   0      2   -1   2   atomsC/cm2/s
+
+###############################################################################
+#####  C2H6 emissions (in bpch ND28, ND34, ND36 )                        ######
+###############################################################################
+EmisC2H6_Total     C2H6   -1     -1  -1   3   molec/cm2/s
+EmisC2H6_Anthro    C2H6   0      1   -1   3   atomsC/cm2/s
+EmisC2H6_BioBurn   C2H6   111    -1  -1   2   atomsC/cm2/s
+EmisC2H6_Biofuel   C2H6   0      2   -1   2   atomsC/cm2/s
+
+###############################################################################
+#####   C3H8 emissions (in bpch ND28, ND34, ND36)                         ##### 
+###############################################################################
+EmisC3H8_Total     C3H8   -1     -1  -1   3   molec/cm2/s
+EmisC3H8_Anthro    C3H8   0      1   -1   3   atomsC/cm2/s
+EmisC3H8_BioBurn   C3H8   111    -1  -1   2   atomsC/cm2/s
+EmisC3H8_Biofuel   C3H8   0      2   -1   2   atomsC/cm2/s
+
+###############################################################################
+#####  CH2O emissions (in bpch ND28, ND34, ND36 )                         ##### 
+###############################################################################
+EmisCH2O_Total     CH2O   -1     -1  -1   3   molec/cm2/s
+EmisCH2O_Anthro    CH2O   0      1   -1   3   atomsC/cm2/s
+EmisCH2O_BioBurn   CH2O   111    -1  -1   2   atomsC/cm2/s
+EmisCH2O_Biofuel   CH2O   0      2   -1   2   atomsC/cm2/s
+
+###############################################################################
+#####  CO sources (in bpch ND29)                                          ##### 
+###############################################################################
+EmisCO_Total       CO     -1     -1  -1   3   molec/cm2/s
+EmisCO_Anthro      CO     0      1   -1   3   molec/cm2/s
+EmisCO_BioBurn     CO     111    -1  -1   2   molec/cm2/s
+EmisCO_Biofuel     CO     0      2   -1   2   molec/cm2/s
+EmisCO_Monoterp    CO     109    -1  -1   2   molec/cm2/s
+EmisCO_Ship        CO     0      10  -1   2   molec/cm2/s
+
+###############################################################################
+#####  DMS emissions (in bpch ND13)                                       ##### 
+###############################################################################
+EmisDMS_Ocean      DMS    101    -1  -1   2   kg
+
+###############################################################################
+#####  Dust emissions (in bpch ND06)                                      ##### 
+###############################################################################
+EmisDST1_Natural   DST1   105    -1  -1   2   kg 
+EmisDST2_Natural   DST2   105    -1  -1   2   kg
+EmisDST3_Natural   DST3   105    -1  -1   2   kg
+EmisDST4_Natural   DST4   105    -1  -1   2   kg
+
+###############################################################################
+#####  OCPI emissions (in bpch ND07 combined with OCPO)                   ##### 
+###############################################################################
+EmisOCPI_Total     OCPI   -1     -1  -1   3   kgC
+EmisOCPI_Anthro    OCPI   0      1   -1   3   kgC
+EmisOCPI_BioBurn   OCPI   111    -1  -1   2   kgC
+EmisOCPI_Biofuel   OCPI   0      2   -1   2   kgC
+EmisOCPI_Biogenic  OCPI   109    -1  -1   2   kgC
+
+###############################################################################
+#####  OCPO emissions (in bpch ND07 combined with OCPI)                   ##### 
+###############################################################################
+EmisOCPO_Total     OCPO   -1     -1  -1   3   kgC
+EmisOCPO_Anthro    OCPO   0      1   -1   3   kgC
+EmisOCPO_BioBurn   OCPO   111    -1  -1   2   kgC
+EmisOCPO_Biofuel   OCPO   0      2   -1   2   kgC
+
+###############################################################################
+#####  Sea salt emissions (in bpch ND08)                                  ##### 
+###############################################################################
+EmisSALA_Natural   SALA   107    -1  -1   2   kg
+EmisSALC_Natural   SALC   107    -1  -1   2   kg
+
+###############################################################################
+#####  SO2 emissions (in bpch ND13, ND28)                                 ##### 
+###############################################################################
+EmisSO2_Total      SO2    -1     -1  -1   3   kg
+EmisSO2_Aircraft   SO2    0      20  -1   3   kg
+EmisSO2_Anthro     SO2    0      1   -1   3   kg
+EmisSO2_BioBurn    SO2    111    -1  -1   2   kg
+EmisSO2_Biofuel    SO2    0      2   -1   2   kg
+EmisSO2_EVOL       SO2    0      51  -1   2   kg
+EmisSO2_NVOL       SO2    0      52  -1   2   kg
+EmisSO2_Ship       SO2    0      10  -1   2   kg
+
+###############################################################################
+#####  SO4 emissions (in bpch ND13)                                       ##### 
+###############################################################################
+EmisSO4_Total      SO4    -1     -1  -1   3   kg
+EmisSO4_Anthro     SO4    0      1   -1   3   kg
+EmisSO4_Biofuel    SO4    0      2   -1   2   kg
+
+###############################################################################
+#####  NH3 emissions (in bpch ND13, ND28 )                                #####
+###############################################################################
+EmisNH3_Total      NH3    -1     -1  -1   3   kg
+EmisNH3_Anthro     NH3    0      1   -1   3   kg
+EmisNH3_BioBurn    NH3    111    -1  -1   2   kg
+EmisNH3_Biofuel    NH3    0      2   -1   2   kg
+EmisNH3_Natural    NH3    0      3   -1   2   kg
+
+###############################################################################
+#####  NOx emissions (in bpch ND28, ND32, ND36)                           #####
+###############################################################################
+EmisNO_Total       NO     -1     -1  -1   3   molec/cm2/s
+EmisNO_Aircraft    NO     0      20  -1   3   molec/cm2/s
+EmisNO_Anthro      NO     0      1   -1   3   molec/cm2/s
+EmisNO_BioBurn     NO     111    -1  -1   2   molec/cm2/s
+EmisNO_Biofuel     NO     0      2   -1   2   molec/cm2/s
+EmisNO_Fert        NO     104    -1  -1   2   molec/cm2/s
+EmisNO_Lightning   NO     103    -1  -1   2   molec/cm2/s
+EmisNO_Ship        NO     102    -1  -1   2   molec/cm2/s
+EmisNO_Soil        NO     104    -1  -1   2   molec/cm2/s
+
+###############################################################################
+#####  MEK emissions (in bpch ND28, ND34, ND36)                           #####
+###############################################################################
+EmisMEK_Total      MEK    -1     -1  -1   3   molec/cm2/s
+EmisMEK_Anthro     MEK    0      1   -1   3   atomsC/cm2/s
+EmisMEK_BioBurn    MEK    111    -1  -1   2   atomsC/cm2/s
+EmisMEK_Biofuel    MEK    0      2   -1   2   atomsC/cm2/s
+
+###############################################################################
+#####  RCHO emissions (in bpch ND34?, ND36?)                              ##### 
+###############################################################################
+EmisRCHO_Total     RCHO   -1     -1  -1   3   molec/cm2/s
+EmisRCHO_Anthro    RCHO   0      1   -1   3   atomsC/cm2/s
+EmisRCHO_Biofuel   RCHO   0      2   -1   2   atomsC/cm2/s
+
+###############################################################################
+#####  MACR emissions (in bpch ND34?, ND36?)                              ##### 
+###############################################################################
+EmisMACR_Total     MACR   -1     -1  -1   3   molec/cm2/s
+EmisMACR_Anthro    MACR   0      1   -1   3   atomsC/cm2/s
+EmisMACR_Biofuel   MACR   0      2   -1   2   atomsC/cm2/s
+
+###############################################################################
+#####  PRPE emissions (in bpch ND28, ND34, ND36, ND46)                    ##### 
+###############################################################################
+EmisPRPE_Total     PRPE   -1     -1  -1   3   molec/cm2/s
+EmisPRPE_Anthro    PRPE   0      1   -1   3   atomsC/cm2/s
+EmisPRPE_BioBurn   PRPE   111    -1  -1   2   atomsC/cm2/s
+EmisPRPE_Biofuel   PRPE   0      2   -1   2   atomsC/cm2/s
+EmisPRPE_Biogenic  PRPE   108    -1  -1   2   atomsC/cm2/s
+
+###############################################################################
+#####  ISOP emissions (in bpch ND46)                                      #####
+###############################################################################
+EmisISOP_Biogenic  ISOP   108    -1  -1   2   atomsC/cm2/s
+
+###############################################################################
+#####  BC emissions (combined with BCPO in bpch ND07, ND28)               ##### 
+###############################################################################
+EmisBCPI_Total     BCPI   -1     -1  -1   3   kgC
+EmisBCPI_Anthro    BCPI   0      1   -1   3   kgC
+EmisBCPI_BioBurn   BCPI   111    -1  -1   2   kgC
+EmisBCPI_Biofuel   BCPI   0      2   -1   2   kgC
+
+###############################################################################
+##### BC emissions (combined with BCPI in bpch ND07, ND28)               ######
+###############################################################################
+EmisBCPO_Total     BCPO   -1     -1  -1   3   kgC
+EmisBCPO_Anthro    BCPO   0      1   -1   3   kgC
+EmisBCPO_BioBurn   BCPO   111    -1  -1   2   kgC
+EmisBCPO_Biofuel   BCPO   0      2   -1   2   kgC
+
+###############################################################################
+##### CHBr3 emissions (in bpch ND46)                                      ##### 
+###############################################################################
+EmisCHBr3_Ocean    CHBr3  0      1   -1   2   kg/m2/s
+
+###############################################################################
+#####  CH2Br2 emissions (in bpch ND46)                                    ##### 
+###############################################################################
+EmisCH2Br2_Ocean   CH2Br2 0      1   -1   2   kg/m2/s
+
+###############################################################################
+#####  Br2 emissions (in bpch ND46)                                       ##### 
+###############################################################################
+EmisBr2_Ocean      Br2    107    -1  -1   2   kg/m2/s
+
+###############################################################################
+#####  NO2 emissions (in bpch ND36?)                                      ##### 
+###############################################################################
+EmisNO2_Anthro     NO2    0      1   -1   3   molec/cm2/s
+
+###############################################################################
+#####  HNO2 emissions (in bpch ND36?)                                     #####
+###############################################################################
+EmisHNO2_Anthro    HNO2   0      1   -1   3   molec/cm2/s
+
+###############################################################################
+#####  BENZ emissions (in bpch ND34?, ND36?)                              ##### 
+###############################################################################
+EmisBENZ_Total     BENZ   -1     -1  -1   3   atomsC/cm2/s
+EmisBENZ_Anthro    BENZ   0      1   -1   3   atomsC/cm2/s
+EmisBENZ_BioBurn   BENZ   111    -1  -1   2   atomsC/cm2/s
+EmisBENZ_Biofuel   BENZ   0      2   -1   2   atomsC/cm2/s
+
+###############################################################################
+#####  TOLU emissions (in bpch ND34?, ND36?)                              #####
+###############################################################################
+EmisTOLU_Total     TOLU   -1     -1  -1   3   atomsC/cm2/s
+EmisTOLU_Anthro    TOLU   0      1   -1   3   atomsC/cm2/s
+EmisTOLU_BioBurn   TOLU   111    -1  -1   2   atomsC/cm2/s
+EmisTOLU_Biofuel   TOLU   0      2   -1   2   atomsC/cm2/s
+
+###############################################################################
+#####  XYLE emissions (in bpch ND34?, ND36?)                              ##### 
+###############################################################################
+EmisXYLE_Total     XYLE   -1     -1  -1   3   atomsC/cm2/s
+EmisXYLE_Anthro    XYLE   0      1   -1   3   atomsC/cm2/s
+EmisXYLE_BioBurn   XYLE   111    -1  -1   2   atomsC/cm2/s
+EmisXYLE_Biofuel   XYLE   0      2   -1   2   atomsC/cm2/s
+
+###############################################################################
+#####   EOH emissions (in bpch ND34?, ND36?, ND46?)                       ##### 
+###############################################################################
+EmisEOH_Total      EOH    -1     -1  -1   3   atomsC/cm2/s
+EmisEOH_Anthro     EOH    0      1   -1   3   atomsC/cm2/s
+EmisEOH_BioBurn    EOH    111    -1  -1   2   atomsC/cm2/s
+EmisEOH_Biofuel    EOH    0      2   -1   2   atomsC/cm2/s
+EmisEOH_Biogenic   EOH    108    -1  -1   2   atomsC/cm2/s
+EmisEOH_Senesc     EOH    0      4   -1   2   atomsC/cm2/s
+
+###############################################################################
+#####  MGLY emissions (new?)                                              ##### 
+###############################################################################
+EmisMGLY_BioBurn   MGLY   111    -1  -1   2   atomsC/cm2/s
+
+#EOC

@@ -1,0 +1,2618 @@
+#if defined( RRTMG )
+!------------------------------------------------------------------------------
+!                  GEOS-Chem Global Chemical Transport Model                  !
+!------------------------------------------------------------------------------
+!BOP
+!
+! !MODULE: rrtmg_rad_transfer_mod.F
+!
+! !DESCRIPTION: Module RRTMG\_RAD\_TRANSFER\_MOD contains arrays and routines
+!  for performing online radiative transfer in GEOS-Chem.
+!\\
+!\\
+! !INTERFACE:
+!
+      MODULE RRTMG_RAD_TRANSFER_MOD
+!
+! !USES:
+!
+      USE CMN_FJX_MOD,  ONLY : RTODAER, RTSSAER, RTASYMAER,
+     &                         WVAA, SPECMASK, LSPECRADMENU,
+     &                         NSPECRADMENU
+      USE CMN_SIZE_MOD, ONLY : IIPAR,JJPAR,LLPAR, NDUST, NAER
+#if defined( BPCH_DIAG )
+      USE DIAG_MOD,     ONLY : AD72 !RAD OUTPUT DIAGNOSTIC ARRAY
+#endif
+      USE OMP_LIB
+      USE PARRRTM,      ONLY : NBNDLW
+      USE PARRRSW,      ONLY : NBNDSW
+
+      IMPLICIT NONE
+!      PRIVATE
+!
+! !PUBLIC MEMBER FUNCTIONS
+!
+      PUBLIC  :: Cleanup_MCICA_Clouds
+      PUBLIC  :: Cleanup_Strat_Clim
+      PUBLIC  :: Cleanup_Surface_Rad
+      PUBLIC  :: Do_RRTMG_Rad_Transfer
+      PUBLIC  :: Init_MCICA_Clouds
+      PUBLIC  :: Init_Surface_Rad
+!
+! !PRIVATE:
+!
+      PRIVATE :: AttachPointersFromHemco
+!
+! !PUBLIC DATA MEMBERS:
+!
+      ! NOTE: Changed to pointers to get inputs from HEMCO (bmy, 10/30/18)
+      ! NOTE: These should eventually go into fields of State_Chm
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_ALBDFNIR(:,:  ) 
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_ALBDFVIS(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_ALBDRNIR(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_ALBDRVIS(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_EMISS_01(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_EMISS_02(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_EMISS_03(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_EMISS_04(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_EMISS_05(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_EMISS_06(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_EMISS_07(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_EMISS_08(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_EMISS_09(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_EMISS_10(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_EMISS_11(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_EMISS_12(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_EMISS_13(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_EMISS_14(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_EMISS_15(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: MODIS_EMISS_16(:,:  )
+      REAL*4,  POINTER,     PUBLIC         :: CH4CLIM       (:,:,:)
+      REAL*4,  POINTER,     PUBLIC         :: N2OCLIM       (:,:,:)
+      REAL*4,  POINTER,     PUBLIC         :: CFC11CLIM     (:,:,:)
+      REAL*4,  POINTER,     PUBLIC         :: CFC12CLIM     (:,:,:)
+      REAL*4,  POINTER,     PUBLIC         :: CCL4CLIM      (:,:,:)
+      REAL*4,  POINTER,     PUBLIC         :: CFC22CLIM     (:,:,:)
+
+      !MCICA cloud variables now stored for reuse
+      !NOTE: These should eventually go into fields of State_Chm
+      REAL*8,  ALLOCATABLE, PUBLIC, TARGET :: CLDFMCL_LW(:,:,:,:)
+      REAL*8,  ALLOCATABLE, PUBLIC, TARGET :: CIWPMCL_LW(:,:,:,:)
+      REAL*8,  ALLOCATABLE, PUBLIC, TARGET :: CLWPMCL_LW(:,:,:,:)
+      REAL*8,  ALLOCATABLE, PUBLIC, TARGET :: TAUCMCL_LW(:,:,:,:)
+      REAL*8,  ALLOCATABLE, PUBLIC, TARGET :: CLDFMCL_SW(:,:,:,:)
+      REAL*8,  ALLOCATABLE, PUBLIC, TARGET :: CIWPMCL_SW(:,:,:,:)
+      REAL*8,  ALLOCATABLE, PUBLIC, TARGET :: CLWPMCL_SW(:,:,:,:)
+      REAL*8,  ALLOCATABLE, PUBLIC, TARGET :: TAUCMCL_SW(:,:,:,:)
+      REAL*8,  ALLOCATABLE, PUBLIC, TARGET :: SSACMCL   (:,:,:,:)
+      REAL*8,  ALLOCATABLE, PUBLIC, TARGET :: ASMCMCL   (:,:,:,:)
+      REAL*8,  ALLOCATABLE, PUBLIC, TARGET :: FSFCMCL   (:,:,:,:)
+      REAL*8,  ALLOCATABLE, PUBLIC, TARGET :: REICMCL   (:,:,:  )
+      REAL*8,  ALLOCATABLE, PUBLIC, TARGET :: RELQMCL   (:,:,:  )
+!
+! !REVISION HISTORY:
+!  18 Jun 2013 - D.A. Ridley - Initial version
+!  15 Jan 2015 - M. Sulprizio- Added ProTeX headers
+!  17 May 2016 - M. Sulprizio- Add extra dimension to MCICA cloud arrays to
+!                              allow for change from IIPAR*JJPAR to IIPAR,JJPAR
+!  27 Jun 2016 - R. Yantosca - Now save species ID's in module variables
+!  29 Nov 2016 - R. Yantosca - grid_mod.F90 is now gc_grid_mod.F90
+!  18 May 2018 - C. Holmes   - Unit fix for gas concentrations
+!EOP
+!------------------------------------------------------------------------------
+!BOC
+!
+! !LOCAL VARIABLES:
+!
+      REAL*8,  ALLOCATABLE  :: LW_UFLUX (:,:,:)
+      REAL*8,  ALLOCATABLE  :: LW_DFLUX (:,:,:)
+      REAL*8,  ALLOCATABLE  :: SW_UFLUX (:,:,:)
+      REAL*8,  ALLOCATABLE  :: SW_DFLUX (:,:,:)
+      REAL*8,  ALLOCATABLE  :: LW_UFLUXC(:,:,:)
+      REAL*8,  ALLOCATABLE  :: LW_DFLUXC(:,:,:)
+      REAL*8,  ALLOCATABLE  :: SW_UFLUXC(:,:,:)
+      REAL*8,  ALLOCATABLE  :: SW_DFLUXC(:,:,:)
+
+      REAL*8  :: RRTMG_LMB(NBNDLW+NBNDSW)
+
+      INTEGER :: ID_AER_LMB0 (NBNDLW+NBNDSW)
+      INTEGER :: ID_AER_LMB1 (NBNDLW+NBNDSW)
+
+      !=================================================================
+      ! MODULE ROUTINES -- follow below the "CONTAINS" statement 
+      !=================================================================
+      CONTAINS
+!EOC
+!------------------------------------------------------------------------------
+!                  GEOS-Chem Global Chemical Transport Model                  !
+!------------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: do_rrtmg_rad_transfer
+!
+! !DESCRIPTION: INTERNAL SUBROUTINE 
+!\\
+!\\
+! !INTERFACE:
+!
+      SUBROUTINE DO_RRTMG_RAD_TRANSFER( am_I_Root,  THISDAY,
+     &                                  THISMONTH,  ICLD,
+     &                                  ISPECMENU,  ISEED,
+     &                                  Input_Opt,  State_Met,
+     &                                  State_Chm,  State_Diag,
+     &                                  RC                      )
+!
+! !USES:
+!
+      !-----------------------------------------------------------------
+      ! Modules from GeosRad
+      !-----------------------------------------------------------------
+      USE MCICA_SUBCOL_GEN_LW, ONLY : MCICA_SUBCOL_LW
+      USE MCICA_SUBCOL_GEN_SW, ONLY : MCICA_SUBCOL_SW
+      USE PARKIND,             ONLY : IM=>KIND_IM, RB=>KIND_RB
+      USE RRLW_CON,            ONLY : GASCON, AVOGAD
+      USE PARRRTM,             ONLY : NBNDLW, NGPTLW
+      USE PARRRSW,             ONLY : NBNDSW, NGPTSW,NAEREC
+      USE RRTMG_LW_RAD,        ONLY : RRTMG_LW
+      USE RRTMG_SW_RAD,        ONLY : RRTMG_SW
+
+      !-----------------------------------------------------------------
+      ! GEOS-Chem modules
+      !-----------------------------------------------------------------
+      USE CMN_FJX_MOD,         ONLY : NSPECRAD  ! NUMBER OF SPECIES FOR RT
+      USE CMN_FJX_MOD,         ONLY : NASPECRAD ! NUMBER OF AEROSOL SPECIES
+      USE CMN_FJX_MOD,         ONLY : SPECMASK,   IRTWVSELECT
+      USE CMN_FJX_MOD,         ONLY : ACOEF_RTWV, BCOEF_RTWV, CCOEF_RTWV 
+      USE CMN_FJX_MOD,         ONLY : WVAA,       NWVAA
+      USE CMN_FJX_MOD,         ONLY : NWVAA0
+      USE ErrCode_Mod
+      USE ERROR_MOD
+      USE GC_GRID_MOD,         ONLY : GET_YMID
+      USE Input_Opt_Mod,       ONLY : OptInput
+      USE PhysConstants,       ONLY : AIRMW, PI, AVO
+      USE PRESSURE_MOD,        ONLY : GET_PCENTER,      GET_PEDGE
+      USE State_Chm_Mod,       ONLY : ChmState
+      USE State_Chm_Mod,       ONLY : Ind_
+      USE State_Diag_Mod,      ONLY : DgnState
+      USE State_Met_Mod,       ONLY : MetState
+      USE TIME_MOD,            ONLY : GET_DAY_OF_YEAR, GET_HOUR
+      USE TOMS_MOD,            ONLY : GET_OVERHEAD_O3
+      USE UnitConv_Mod,        ONLY : Convert_Spc_Units
+#if defined( BPCH_DIAG )
+      USE DIAG_MOD,            ONLY : AD72
+#endif
+!
+! !INPUT PARAMETERS:
+!
+      LOGICAL,        INTENT(IN)    :: am_I_Root   ! root CPU?
+      INTEGER,        INTENT(IN)    :: THISDAY     ! CURRENT DAY
+      INTEGER,        INTENT(IN)    :: THISMONTH   ! CURRENT MONTH
+      INTEGER,        INTENT(IN)    :: ISPECMENU   ! THE SPECIES BEING INCLUDED
+                                                   ! NEEDED FOR OUTPUT PURPOSES
+      INTEGER,        INTENT(IN)    :: ISEED  
+      TYPE(OptInput), INTENT(IN)    :: Input_Opt   ! Input Options object
+      TYPE(MetState), INTENT(IN)    :: State_Met   ! Meteorology State object
+!
+! !INPUT/OUTPUT PARAMETERS:
+!
+      TYPE(ChmState), INTENT(INOUT) :: State_Chm   ! Chemistry State object
+      TYPE(DgnState), INTENT(INOUT) :: State_Diag  ! Diagnostics State object
+      INTEGER,        INTENT(INOUT) :: ICLD        ! CLOUD FLAG FOR RRTMG
+                                                   ! 0-NOCLOUD, 1-GREY CLOUD
+!
+! !OUTPUT PARAMETERS:
+!
+      INTEGER,        INTENT(OUT) :: RC          ! Failure or success
+!
+! !REMARKS:
+!  THIS ROUTINE PASSES INPUTS TO THE RRTMG DRIVER ROUTINE "RAD_DRIVER"
+!  VIA THE ARGUMENT LIST.  THIS PREVENTS CIRCULAR REFERENCES.
+!
+! !REVISION HISTORY: 
+!  17 AUG 2012 - R. YANTOSCA - INITIAL VERSION
+!  15 Dec 2014 - M. Sulprizio- Moved radiation diagnostic from ND71 to ND72 to
+!                              avoid conflicts with hourly max ppbv diagnostic.
+!  15 Jan 2015 - M. Sulprizio- Added T_CTM and P_CTM arrays and calculate them
+!                              in the same manner that we do in fast_jx_mod.F.
+!                              Also moved and fixed calculation of O3_CTM.
+!  15 Jan 2015 - M. Sulprizio- Added ProTeX headers
+!  13 Apr 2015 - R. Yantosca - Fixed inefficient loop ordering (should be J,I)
+!  13 Apr 2015 - R. Yantosca - Add error check for JLOOP > 0 in a few places
+!  23 Apr 2015 - R. Yantosca - Bug fix: YLAT was undefined; now corrected
+!  23 Apr 2015 - R. Yantosca - Bug fix: all members of State_Met now use
+!                              (I,J,L) ordering.  This is for the NASA GCM.
+!  02 Jun 2015 - R. Yantosca - Bug fix: Add missing variables to OMP PRIVATE
+!  03 Jun 2015 - R. Yantosca - Now use pointers to avoid array temporaries
+!  12 Aug 2015 - E. Lundgren - Incoming tracer units are now [kg/kg] and
+!                              are converted to [kg] for RRTMG
+!  12 Aug 2015 - E. Lundgren - Now accept am_I_Root and RC as arguments
+!  21 Dec 2015 - M. Sulprizio- Get air density directly from State_Met object
+!  22 Dec 2015 - M. Sulprizio- Replace CSPEC with State_Chm%Species
+!  19 Jan 2016 - E. Lundgren - Use global physical constants from physconstants
+!                              rather than comode_loop_mod
+!  17 May 2016 - M. Sulprizio- Remove NCOL, IJLOOP and change dimensions of
+!                              arrays from IIPAR*JJPAR to IIPAR,JJPAR
+!  31 May 2016 - E. Lundgren - Replace Input_Opt%TRACER_MW_G with emMW_g from
+!                              species database (emitted species g/mol)
+!  16 Jun 2016 - K. Yu       - Now define species ID's with the Ind_ function
+!  17 Jun 2016 - R. Yantosca - Only define species ID's on the first call
+!  27 Jun 2016 - R. Yantosca - Bug fix: replace a couple of leftover IDO3
+!                              variables with the new id_O3 species ID
+!  30 Jun 2016 - M. Sulprizio- Replace ICH4 with id_CH4 to remove dependence
+!                              on comode_loop_mod.F
+!  30 Jun 2016 - R. Yantosca - Remove instances of STT.  Now get the advected
+!                              species ID from State_Chm%Map_Advect.
+!  28 Sep 2017 - E. Lundgren - Simplify unit conversions using wrapper routine
+!  03 Jan 2018 - M. Sulprizio- Replace UCX CPP switch with Input_Opt%LUCX
+!EOP
+!------------------------------------------------------------------------------
+!BOC
+!
+! !DEFINED PARAMETERS
+!
+      INTEGER, PARAMETER     :: NWV=37
+!
+! !LOCAL VARIABLES:
+!
+      LOGICAL                :: DOAERAD      ! INCLUDE AEROSOL DETERMINED FROM
+                                             ! SPECMASK
+      LOGICAL                :: LOUTPUTAERO  ! OUTPUT AEROSOL DIAGNOSTICS?
+      INTEGER                :: NAD72        ! NUMBER OF OUTPUTS PER FIELD
+      INTEGER                :: ITIMEVALS(8)
+      INTEGER                :: IDIAGOUT     ! INDEX OF SPC OPTICS FOR OUTPUT
+      REAL*8                 :: OLDSECS, NEWSECS
+      CHARACTER(LEN=63)      :: OrigUnit
+      
+      ! SAVEd scalars
+      LOGICAL, SAVE          :: FIRST = .TRUE.
+      INTEGER, SAVE          :: id_O3,    id_CH4,  id_N2O, id_CFC11
+      INTEGER, SAVE          :: id_CFC12, id_CCL4, id_HCFC22
+
+      !-----------------------------------------------------------------
+      ! TEMPORARY AEROSOL VARIABLES
+      !-----------------------------------------------------------------
+      REAL*8                 :: LAMBDA(NWV)
+
+      !-----------------------------------------------------------------
+      ! SCALARS
+      !-----------------------------------------------------------------
+      INTEGER                :: I, J ,L, LL, N, W
+      INTEGER                :: IL, OMPID, LCHEM
+      INTEGER                :: OUTIDX,IOUTWV
+      INTEGER                :: IB,IBX,IB_SW,IS,NBNDS,NSPEC
+      INTEGER                :: IS_ON,NASPECRAD_ON
+      INTEGER                :: IASPECRAD_ON(NASPECRAD)
+      REAL*8                 :: RHOICE=0.9167, RHOLIQ=1.    ! G/CM3
+
+      !-----------------------------------------------------------------
+      ! REL AND REI FROM PERSONAL COMMUNICATION FROM LAZAROS OREOPOULOS
+      ! (GSFC) 12/12/12
+      !-----------------------------------------------------------------
+      REAL*8                 :: REL_DEF = 14.2, REI_DEF=24.8    ! MICRONS
+      INTEGER                :: DOY
+
+      INTEGER                :: IHR
+      CHARACTER(LEN=2)       :: CHR
+
+      !-----------------------------------------------------------------
+      ! ARRAYS FROM GC
+      !-----------------------------------------------------------------
+      REAL(KIND=RB)          :: PCENTER(IIPAR,JJPAR,LLPAR)
+      REAL(KIND=RB)          :: PEDGE  (IIPAR,JJPAR,LLPAR)
+      LOGICAL                :: INTROP (IIPAR,JJPAR,LLPAR)
+
+      !-----------------------------------------------------------------
+      !ARRAYS FOR RRTMG
+      !-----------------------------------------------------------------
+      REAL(KIND=RB)          :: O3VMR (IIPAR,JJPAR,LLPAR)
+      REAL(KIND=RB)          :: CH4VMR(IIPAR,JJPAR,LLPAR)
+      REAL(KIND=RB)          :: N2OVMR(IIPAR,JJPAR,LLPAR)
+      REAL(KIND=RB)          :: CFC11VMR(IIPAR,JJPAR,LLPAR)
+      REAL(KIND=RB)          :: CFC12VMR(IIPAR,JJPAR,LLPAR)
+      REAL(KIND=RB)          :: CFC22VMR(IIPAR,JJPAR,LLPAR)
+      REAL(KIND=RB)          :: CCL4VMR(IIPAR,JJPAR,LLPAR)
+
+      REAL(KIND=RB)          :: TAUCLD(IIPAR,JJPAR,LLPAR)
+      REAL(KIND=RB)          :: CLDFR (IIPAR,JJPAR,LLPAR)
+      REAL(KIND=RB)          :: RELIQ (IIPAR,JJPAR,LLPAR)
+      REAL(KIND=RB)          :: REICE (IIPAR,JJPAR,LLPAR)
+      REAL(KIND=RB)          :: CLIQWP (IIPAR,JJPAR,LLPAR)
+      REAL(KIND=RB)          :: CICEWP (IIPAR,JJPAR,LLPAR)
+      REAL(KIND=RB)          :: ALBVIS (IIPAR,JJPAR)
+
+      REAL(KIND=RB)          :: TAUAER_LW (IIPAR,JJPAR,LLPAR,NBNDLW)
+      REAL(KIND=RB)          :: TAUAER_SW (IIPAR,JJPAR,LLPAR,NBNDSW)
+      REAL(KIND=RB)          :: SSAAER (IIPAR,JJPAR,LLPAR,NBNDSW)
+      REAL(KIND=RB)          :: ASMAER (IIPAR,JJPAR,LLPAR,NBNDSW)
+
+      !-----------------------------------------------------------------
+      !TO STORE THE OPTICS FOR THE AEROSOLS WE ARE INTERESTED IN
+      !-----------------------------------------------------------------
+      REAL*8                 :: TAUAERDIAG (IIPAR,JJPAR,LLPAR,NBNDSW)
+      REAL*8                 :: SSAAERDIAG (IIPAR,JJPAR,LLPAR,NBNDSW)
+      REAL*8                 :: ASMAERDIAG (IIPAR,JJPAR,LLPAR,NBNDSW)
+
+      REAL(KIND=RB)          :: H2OVMR   (IIPAR,JJPAR,LLPAR)
+      REAL(KIND=RB)          :: TLAY     (IIPAR,JJPAR,LLPAR)
+      REAL(KIND=RB)          :: PLAY     (IIPAR,JJPAR,LLPAR)
+      REAL(KIND=RB)          :: SUNCOS   (IIPAR,JJPAR,LLPAR)
+      REAL(KIND=RB)          :: TSFC     (IIPAR,JJPAR)
+
+      !-----------------------------------------------------------------
+      !VARIABLES FOR OBTAINING STRATOSPHERIC VARIABLES
+      !-----------------------------------------------------------------
+      REAL*8                 :: O3COL, YLAT, AIR_TMP
+
+      !-----------------------------------------------------------------
+      !SURFACE
+      !-----------------------------------------------------------------
+      REAL(KIND=RB)          :: ALBDIRVIS (IIPAR,JJPAR)
+      REAL(KIND=RB)          :: ALBDIFVIS (IIPAR,JJPAR)
+      REAL(KIND=RB)          :: ALBDIRNIR (IIPAR,JJPAR)
+      REAL(KIND=RB)          :: ALBDIFNIR (IIPAR,JJPAR)
+      REAL(KIND=RB)          :: RTEMISS   (IIPAR,JJPAR,NBNDLW)
+
+      REAL*8                 :: NUMER,DENOM
+      REAL*4                 :: AODTMP,AODOUT,SSATMP,SSAOUT
+      REAL*4                 :: ASYMTMP,ASYMOUT
+      INTEGER                :: FLG_FIRST_STRAT(IIPAR,JJPAR)
+      INTEGER                :: ONECOL
+      REAL*4                 :: CH4SCL(IIPAR,JJPAR)
+
+      !-----------------------------------------------------------------
+      ! FROM RAD_DRIVER... TO BE MERGED
+      ! FLAGS AND DIMENSIONS
+      !-----------------------------------------------------------------
+      INTEGER (KIND=IM)      :: IDRV
+      INTEGER (KIND=IM)      :: INFLGLW, ICEFLGLW,LIQFLGLW
+      INTEGER (KIND=IM)      :: INFLGSW, ICEFLGSW,LIQFLGSW
+
+      !-----------------------------------------------------------------
+      ! PROFILE VARIABLES
+      !-----------------------------------------------------------------
+      REAL (KIND=RB)         :: PLEV(IIPAR,JJPAR,LLPAR+1)
+      REAL (KIND=RB)         :: TLEV(IIPAR,JJPAR,LLPAR+1)
+      REAL (KIND=RB)         :: CO2VMR(IIPAR,JJPAR,LLPAR)
+      REAL (KIND=RB)         :: O2VMR(IIPAR,JJPAR,LLPAR)
+      REAL (KIND=RB)         :: T_CTM(LLPAR+1)
+      REAL (KIND=RB)         :: P_CTM(LLPAR+2)
+      REAL (KIND=RB)         :: O3_CTM(LLPAR+1)
+      REAL (KIND=RB)         :: T_CLIM(LLPAR+1)
+      REAL (KIND=RB)         :: O3_CLIM(LLPAR+1)
+      REAL (KIND=RB)         :: Z_CLIM(LLPAR+2)
+      REAL (KIND=RB)         :: AIR_CLIM(LLPAR+1)
+
+      !-----------------------------------------------------------------
+      ! SW SOLAR VARIABLES
+      !-----------------------------------------------------------------
+      REAL(KIND=RB)          :: ADJES=1.0     ! FLUX ADJUSTMENT FOR EARTH/SUN DIST
+      REAL(KIND=RB)          :: SCON=1368.22  ! SOLAR CONSTANT (W/M2)
+
+      !-----------------------------------------------------------------
+      ! SW CLOUD VARIABLES
+      !-----------------------------------------------------------------
+      REAL(KIND=RB)          :: TAUCLD_SW(NBNDSW,IIPAR,JJPAR,LLPAR) ! IN-CLOUD OPTICAL DEPTH
+      REAL(KIND=RB)          :: TAUCLD_LW(NBNDLW,IIPAR,JJPAR,LLPAR) ! NOT USED BUT PASSED TO MCICA_LW
+      REAL(KIND=RB)          :: SSACLD(NBNDSW,IIPAR,JJPAR,LLPAR)    ! IN-CLOUD SINGLE SCATTERING ALBEDO
+      REAL(KIND=RB)          :: ASMCLD(NBNDSW,IIPAR,JJPAR,LLPAR)    ! IN-CLOUD ASYMMETRY PARAMETER
+      REAL(KIND=RB)          :: FSFCLD(NBNDSW,IIPAR,JJPAR,LLPAR)    ! IN-CLOUD FORWARD SCATTERING FRACTION
+      REAL(KIND=RB)          :: ECAER(1,LLPAR,NAEREC)               ! AEROSOL OPTICAL DEPTH AT 0.55UM (IAER=6 ONLY)
+
+      !-----------------------------------------------------------------
+      ! LONGWAVE FLUX VARIABLES
+      !-----------------------------------------------------------------
+      REAL(KIND=RB)          :: UFLX(1,LLPAR+1)  ! TOTAL SKY LONGWAVE UPWARD FLUX (W/M2)
+      REAL(KIND=RB)          :: DFLX(1,LLPAR+1)  ! TOTAL SKY LONGWAVE DOWNWARD FLUX (W/M2)
+      REAL(KIND=RB)          :: HR(1,LLPAR)      ! TOTAL SKY LONGWAVE RADIATIVE HEATING RATE (K/D)
+      REAL(KIND=RB)          :: UFLXC(1,LLPAR+1) ! CLEAR SKY LONGWAVE UPWARD FLUX (W/M2)
+      REAL(KIND=RB)          :: DFLXC(1,LLPAR+1) ! CLEAR SKY LONGWAVE DOWNWARD FLUX (W/M2)
+      REAL(KIND=RB)          :: HRC(1,LLPAR)     ! CLEAR SKY LONGWAVE RADIATIVE HEATING RATE (K/D)
+
+      !-----------------------------------------------------------------
+      !- OPTIONAL OUTPUT
+      !-----------------------------------------------------------------
+      REAL(KIND=RB)          :: DUFLX_DT(1,LLPAR) ! CHANGE IN UPWARD LONGWAVE FLUX (W/M2/K)
+      REAL(KIND=RB)          :: DUFLXC_DT(1,LLPAR)! CHANGE IN CLEAR SKY UPWARD LONGWAVE FLUX (W/M2/K)
+
+      !-----------------------------------------------------------------
+      ! SHORTWAVE FLUX VARIABLES
+      !-----------------------------------------------------------------
+      ! ----- OUTPUT -----
+      REAL(KIND=RB)          :: SWUFLX(1,LLPAR+1)  ! TOTAL SKY SHORTWAVE UPWARD FLUX (W/M2)
+      REAL(KIND=RB)          :: SWDFLX(1,LLPAR+1)  ! TOTAL SKY SHORTWAVE DOWNWARD FLUX (W/M2)
+      REAL(KIND=RB)          :: SWHR(1,LLPAR)      ! TOTAL SKY SHORTWAVE RADIATIVE HEATING RATE (K/D)
+      REAL(KIND=RB)          :: SWUFLXC(1,LLPAR+1) ! CLEAR SKY SHORTWAVE UPWARD FLUX (W/M2)
+      REAL(KIND=RB)          :: SWDFLXC(1,LLPAR+1) ! CLEAR SKY SHORTWAVE DOWNWARD FLUX (W/M2)
+      REAL(KIND=RB)          :: SWHRC(1,LLPAR)     ! CLEAR SKY SHORTWAVE RADIATIVE HEATING RATE (K/D)
+
+      !-----------------------------------------------------------------
+      ! LOCAL VARIABLES
+      !-----------------------------------------------------------------
+      REAL*8                 :: GCAIR
+      REAL*8                 :: RHOA, RHOB, RHOSUM
+      REAL*8                 :: HR_TEMP
+
+      !-----------------------------------------------------------------
+      ! MCICA VARIABLES
+      !-----------------------------------------------------------------
+      INTEGER(KIND=IM)       :: SEEDSW, SEEDLW
+      INTEGER(KIND=IM)       :: IRNG=1  ! MERSENNE TWISTER RANDOM NUMBER GENERATOR
+      INTEGER(KIND=IM)       :: ICLDMCL
+      REAL(KIND=RB)          :: RELQMCL0(1,LLPAR)
+      REAL(KIND=RB)          :: REICMCL0(1,LLPAR)
+
+      !-----------------------------------------------------------------
+      ! MCICA LW SPECIFIC
+      !-----------------------------------------------------------------
+      REAL(KIND=RB)          :: CLDFMCL_LW0(NGPTLW,1,LLPAR)
+      REAL(KIND=RB)          :: CIWPMCL_LW0(NGPTLW,1,LLPAR)
+      REAL(KIND=RB)          :: CLWPMCL_LW0(NGPTLW,1,LLPAR)
+      REAL(KIND=RB)          :: TAUCMCL_LW0(NGPTLW,1,LLPAR)
+
+      !-----------------------------------------------------------------
+      ! MCICA SW SPECIFIC
+      !-----------------------------------------------------------------
+      REAL(KIND=RB)          :: CLDFMCL_SW0(NGPTSW,1,LLPAR)
+      REAL(KIND=RB)          :: CIWPMCL_SW0(NGPTSW,1,LLPAR)
+      REAL(KIND=RB)          :: CLWPMCL_SW0(NGPTSW,1,LLPAR)
+      REAL(KIND=RB)          :: TAUCMCL_SW0(NGPTSW,1,LLPAR)
+      REAL(KIND=RB)          :: SSACMCL0(NGPTSW,1,LLPAR)
+      REAL(KIND=RB)          :: ASMCMCL0(NGPTSW,1,LLPAR)
+      REAL(KIND=RB)          :: FSFCMCL0(NGPTSW,1,LLPAR)
+      REAL(KIND=RB)          :: PCENTER0(1,LLPAR)
+      REAL(KIND=RB)          :: CLDFR0(1,LLPAR)
+      REAL(KIND=RB)          :: CICEWP0(1,LLPAR)
+      REAL(KIND=RB)          :: CLIQWP0(1,LLPAR)
+      REAL(KIND=RB)          :: REICE0(1,LLPAR)
+      REAL(KIND=RB)          :: RELIQ0(1,LLPAR)
+      REAL(KIND=RB)          :: TAUCLD_SW0(NBNDSW,1,LLPAR)
+      REAL(KIND=RB)          :: SSACLD0(NBNDSW,1,LLPAR)
+      REAL(KIND=RB)          :: ASMCLD0(NBNDSW,1,LLPAR)
+      REAL(KIND=RB)          :: FSFCLD0(NBNDSW,1,LLPAR)
+
+      !-----------------------------------------------------------------
+      ! Variables used to avoid array temporaries (bmy, 6/3/15)
+      !
+      ! NOTE: Use temporary arrays instead of pointers.  For unknown
+      ! reasons the pointer references incur segfaults. (bmy, 6/3/15)
+      !-----------------------------------------------------------------
+
+      ! For MCICA_SUBCOL_LW and MCICA_SUBCOL_LW
+      REAL(KIND=RB)          :: p_PCENTER   (         LLPAR  )
+      REAL(KIND=RB)          :: p_CLDFR     (         LLPAR  )
+      REAL(KIND=RB)          :: p_CICEWP    (         LLPAR  )
+      REAL(KIND=RB)          :: p_CLIQWP    (         LLPAR  )
+      REAL(KIND=RB)          :: p_REICE     (         LLPAR  )
+      REAL(KIND=RB)          :: p_RELIQ     (         LLPAR  )
+      REAL(KIND=RB)          :: p_TAUCLD_LW ( NBNDLW, LLPAR  )
+      REAL(KIND=RB)          :: p_TAUCLD_SW ( NBNDSW, LLPAR  )
+      REAL(KIND=RB)          :: p_SSACLD    ( NBNDSW, LLPAR  ) 
+      REAL(KIND=RB)          :: p_ASMCLD    ( NBNDSW, LLPAR  )
+      REAL(KIND=RB)          :: p_FSFCLD    ( NBNDSW, LLPAR  )
+
+      ! For RRTMG_LW and RRTMG_SW
+      REAL(KIND=RB)          :: p_PLEV      (         LLPAR+1)
+      REAL(KIND=RB)          :: p_TLAY      (         LLPAR  )
+      REAL(KIND=RB)          :: p_TLEV      (         LLPAR+1)
+      REAL(KIND=RB)          :: p_H2OVMR    (         LLPAR  )
+      REAL(KIND=RB)          :: p_O3VMR     (         LLPAR  )
+      REAL(KIND=RB)          :: p_CO2VMR    (         LLPAR  )
+      REAL(KIND=RB)          :: p_CH4VMR    (         LLPAR  )
+      REAL(KIND=RB)          :: p_N2OVMR    (         LLPAR  ) 
+      REAL(KIND=RB)          :: p_O2VMR     (         LLPAR  )
+      REAL(KIND=RB)          :: p_CFC11VMR  (         LLPAR  )
+      REAL(KIND=RB)          :: p_CFC12VMR  (         LLPAR  )
+      REAL(KIND=RB)          :: p_CFC22VMR  (         LLPAR  )
+      REAL(KIND=RB)          :: p_CCL4VMR   (         LLPAR  )
+      REAL(KIND=RB)          :: p_REICMCL   (         LLPAR  )
+      REAL(KIND=RB)          :: p_RELQMCL   (         LLPAR  ) 
+      REAL(KIND=RB)          :: p_SUNCOS    (         LLPAR  )
+      REAL(KIND=RB)          :: p_CLDFMCL_LW( NGPTLW, LLPAR  )
+      REAL(KIND=RB)          :: p_TAUCMCL_LW( NGPTLW, LLPAR  )
+      REAL(KIND=RB)          :: p_CIWPMCL_LW( NGPTLW, LLPAR  )
+      REAL(KIND=RB)          :: p_CLWPMCL_LW( NGPTLW, LLPAR  )
+      REAL(KIND=RB)          :: p_CLDFMCL_SW( NGPTSW, LLPAR  )
+      REAL(KIND=RB)          :: p_TAUCMCL_SW( NGPTSW, LLPAR  )
+      REAL(KIND=RB)          :: p_SSACMCL   ( NGPTSW, LLPAR  )
+      REAL(KIND=RB)          :: p_ASMCMCL   ( NGPTSW, LLPAR  )
+      REAL(KIND=RB)          :: p_FSFCMCL   ( NGPTSW, LLPAR  )
+      REAL(KIND=RB)          :: p_CIWPMCL_SW( NGPTSW, LLPAR  )
+      REAL(KIND=RB)          :: p_CLWPMCL_SW( NGPTSW, LLPAR  )
+      REAL(KIND=RB)          :: p_RTEMISS   (         NBNDLW )
+      REAL(KIND=RB)          :: p_TAUAER_LW ( LLPAR,  NBNDLW )
+      REAL(KIND=RB)          :: p_TAUAER_SW ( LLPAR,  NBNDSW )
+      REAL(KIND=RB)          :: p_SSAAER    ( LLPAR,  NBNDSW )
+      REAL(KIND=RB)          :: p_ASMAER    ( LLPAR,  NBNDSW )
+
+      ! Strings
+      CHARACTER(LEN=255)     :: ErrMsg, This Loc
+
+      !=================================================================
+      ! DO_RRTMG_RAD_TRANSFER begins here!
+      !=================================================================
+
+      ! Initialize
+      RC      = GC_SUCCESS
+      ErrMsg  = ''
+      ThisLoc = 
+     & ' -> at DO_RRTMG_RAD_TRANSFER (in rrtmg_rad_transfer_mod.F)'
+
+      ! Convert species units to kg/kg dry for RRTMG 
+      CALL Convert_Spc_Units( am_I_Root, Input_Opt, State_Met, 
+     &                        State_Chm, 'kg/kg dry', RC, 
+     &                        OrigUnit=OrigUnit )
+
+      ! Trap potential errors
+      IF ( RC /= GC_SUCCESS ) THEN
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !=================================================================
+      ! PREPARE INPUTS FOR RAD_DRIVER
+      !=================================================================
+
+      !CALL GET_SPECIES( .TRUE., THISMONTH, 'O3',  GMI_O3  )
+      !CALL GET_SPECIES( .TRUE., THISMONTH, 'CH4', GMI_CH4 )
+
+      !=================================================================
+      ! PREPARE INPUTS FOR RRTMG
+      !=================================================================
+
+      ! INITIALIZE
+      NSPEC                = NAER+NDUST+4
+      FLG_FIRST_STRAT(:,:) = 0 !FLAG TO DETERMINE IF THE FIRST STRATOSPHERIC
+                               ! LEVEL HAS BEEN REACHED
+ 
+      !DETERMINE IF WE ARE RUNNING WITH AEROSOL
+      !CREATE INDEX FOR AEROSOLS REQUIRED
+      LOUTPUTAERO     = .TRUE. !SET AEROSOL DIAG OUTPUT TO TRUE INITIALLY
+      DOAERAD         = .FALSE.
+      NASPECRAD_ON    = 0
+      IASPECRAD_ON(:) = 0
+
+      DO N=1,NASPECRAD
+       IF (SPECMASK(N).GT.0) THEN
+        DOAERAD = .TRUE.
+        NASPECRAD_ON = NASPECRAD_ON +1
+        !create list of species required and tag with index
+        IASPECRAD_ON(NASPECRAD_ON) = N
+        IDIAGOUT = MAX(IDIAGOUT,SPECMASK(N))
+       ENDIF
+      ENDDO
+!      write(6,*) 'SPECMASK:',SPECMASK
+
+      ! Initialize arrays
+      TAUCLD(:,:,:)       = 0.0
+      CLDFR(:,:,:)        = 0.0
+      RELIQ(:,:,:)        = 0.0
+      REICE(:,:,:)        = 0.0
+      CLIQWP(:,:,:)       = 0.0
+      CICEWP(:,:,:)       = 0.0
+      TAUAER_LW(:,:,:,:)  = 0.0
+      TAUAER_SW(:,:,:,:)  = 0.0
+      SSAAER(:,:,:,:)     = 0.0
+      ASMAER(:,:,:,:)     = 0.0
+      TAUAERDIAG(:,:,:,:) = 0.0D0
+      SSAAERDIAG(:,:,:,:) = 0.0D0
+      ASMAERDIAG(:,:,:,:) = 0.0D0
+      UFLX(:,:)           = 0.0
+      DFLX(:,:)           = 0.0
+      HR(:,:)             = 0.0
+      UFLXC(:,:)          = 0.0
+      DFLXC(:,:)          = 0.0
+      HRC(:,:)            = 0.0
+      DUFLX_DT(:,:)       = 0.0
+      DUFLXC_DT(:,:)      = 0.0
+      SWUFLX(:,:)         = 0.0
+      SWDFLX(:,:)         = 0.0
+      SWHR(:,:)           = 0.0
+      SWUFLXC(:,:)        = 0.0
+      SWDFLXC(:,:)        = 0.0
+      SWHRC(:,:)          = 0.0
+      O3VMR(:,:,:)        = 0.0
+      CH4VMR(:,:,:)       = 0.0
+      NBNDS               = NBNDLW+NBNDSW
+
+      !=================================================================
+      ! First-time setup
+      !=================================================================
+      IF ( FIRST ) THEN
+
+         ! Define species ID flags
+         id_O3     = Ind_('O3')
+         id_CH4    = Ind_('CH4')
+         id_N2O    = Ind_('N2O')
+         id_CFC11  = Ind_('CFC11')
+         id_CFC12  = Ind_('CFC12')
+         id_CCL4   = Ind_('CCL4')
+         id_HCFC22 = Ind_('HCFC22')
+
+         ! Get pointers to data fields that are read by HEMCO
+         ! NOTE: This has to be done here and not in initialization
+         ! because we have to wait for HEMCO to read the data from disk,
+         ! which is done after initialization. (bmy, 10/30/18)
+         CALL AttachPointersFromHemco( am_I_Root, RC )
+         IF ( RC /= GC_SUCCESS ) THEN
+            ErrMsg = 'Error encountered in "AttachPointersFromHemco"!'
+            CALL GC_Error( ErrMsg, RC, ThisLoc )
+            RETURN
+         ENDIF
+
+         ! Reset first-time flag
+         FIRST = .FALSE.
+      ENDIF
+
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!%%%  This parallel loop gives identical results w/r/t to a RRTMG           %%%
+!%%%  simulation compiled with OpenMP turned off. (bmy, 6/2/15)             %%%
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!$OMP PARALLEL DO
+!$OMP+DEFAULT( SHARED )
+!$OMP+PRIVATE( I, J, IB  )
+!$OMP+SCHEDULE( DYNAMIC )
+      DO J = 1, JJPAR
+      DO I = 1, IIPAR
+
+         ! BROADBAND ALBEDO
+         ! Attache the HEMCO pointers to RRTMG albedo variables (bmy, 11/1/18)
+         ALBDIRVIS(I,J) = MODIS_ALBDRVIS(I,J)
+         ALBDIFVIS(I,J) = MODIS_ALBDFVIS(I,J)
+         ALBDIRNIR(I,J) = MODIS_ALBDRNIR(I,J)
+         ALBDIFNIR(I,J) = MODIS_ALBDFNIR(I,J)
+
+         IF ((ALBDIRVIS(I,J).GT.0.999)  .OR.
+     &       (ALBDIRVIS(I,J).LT.0.001)) THEN
+            WRITE(6,*) 'ALBEDO DRVIS OUT OF RANGE',I,J,ALBDIRVIS(I,J)
+         ENDIF
+         IF ((ALBDIFVIS(I,J).GT.0.999)  .OR.
+     &       (ALBDIFVIS(I,J).LT.0.001)) THEN
+            WRITE(6,*) 'ALBEDO DFVIS OUT OF RANGE',I,J,ALBDIFVIS(I,J)
+         ENDIF
+         IF ((ALBDIRNIR(I,J).GT.0.999)  .OR.
+     &       (ALBDIRNIR(I,J).LT.0.001)) THEN
+            WRITE(6,*) 'ALBEDO DRNIR OUT OF RANGE',I,J,ALBDIRNIR(I,J)
+         ENDIF
+         IF ((ALBDIFNIR(I,J).GT.0.999)  .OR.
+     &       (ALBDIFNIR(I,J).LT.0.001)) THEN
+            WRITE(6,*) 'ALBEDO DFNIR OUT OF RANGE',I,J,ALBDIFNIR(I,J)
+         ENDIF
+
+         !-------------------------------------------------
+         ! Prior to 11/2/18:
+         ! IB_SW is not used in this loop (bmy, 11/2/18)
+         !DO IB= 1, NBNDS
+         !   IB_SW = IB-NBNDLW
+         !ENDDO
+         !-------------------------------------------------
+
+         ! Assign the MODIS emissivity pointers from HEMCO to the
+         ! different slots of the RTEMISS array (for each spectral band)
+         ! Hardcode the assignments, which is much faster (bmy, 11/2/18)
+         RTEMISS(I,J,1 ) = MODIS_EMISS_01(I,J)
+         RTEMISS(I,J,2 ) = MODIS_EMISS_02(I,J)
+         RTEMISS(I,J,3 ) = MODIS_EMISS_03(I,J)
+         RTEMISS(I,J,4 ) = MODIS_EMISS_04(I,J)
+         RTEMISS(I,J,5 ) = MODIS_EMISS_05(I,J)
+         RTEMISS(I,J,6 ) = MODIS_EMISS_06(I,J)
+         RTEMISS(I,J,7 ) = MODIS_EMISS_07(I,J)
+         RTEMISS(I,J,8 ) = MODIS_EMISS_08(I,J)
+         RTEMISS(I,J,9 ) = MODIS_EMISS_09(I,J)
+         RTEMISS(I,J,10) = MODIS_EMISS_10(I,J)
+         RTEMISS(I,J,11) = MODIS_EMISS_11(I,J)
+         RTEMISS(I,J,12) = MODIS_EMISS_12(I,J)
+         RTEMISS(I,J,13) = MODIS_EMISS_13(I,J)
+         RTEMISS(I,J,14) = MODIS_EMISS_14(I,J)
+         RTEMISS(I,J,15) = MODIS_EMISS_15(I,J)
+         RTEMISS(I,J,16) = MODIS_EMISS_16(I,J)
+
+      ENDDO
+      ENDDO
+!$OMP END PARALLEL DO
+
+      !GET PCENTER, PEDGE AND DETERMINE IF IN TROP
+      !%%% NOTE: LOOPS ARE GOING IN WRONG ORDER (bmy, 1/8/18)
+      DO I = 1, IIPAR
+      DO J = 1, JJPAR
+      DO L = 1, LLPAR
+         PCENTER(I,J,L) = GET_PCENTER( I, J, L )
+         PEDGE  (I,J,L) = GET_PEDGE  ( I, J, L )
+         H2OVMR (I,J,L) = State_Met%AVGW(I,J,L)
+         TLAY   (I,J,L) = State_Met%T(I,J,L)
+         INTROP (I,J,L) = State_Met%InTroposphere(I,J,L)
+         SUNCOS (I,J,L) = State_Met%SUNCOS(I,J)
+      ENDDO
+      TSFC  (I,J)   = State_Met%TSKIN(I,J)
+      ENDDO
+      ENDDO
+
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!%%%  NOTE: Bob Y. added T_CLIM, Z_CLIM, O3_CLIM, and AIR_CLIM to the       %%%
+!%%%  !$OMP+PRIVATE declaration.  These had been omitted.  Having done so,  %%%
+!%%%  this parallel loop now gives identical results w/r/t to a RRTMG       %%%
+!%%%  simulation compiled with OpenMP turned off. (bmy, 6/2/15)             %%%
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!$OMP PARALLEL DO
+!$OMP+DEFAULT( SHARED )
+!$OMP+PRIVATE( I,       J,      L                         )
+!$OMP+PRIVATE( AIR_TMP, YLAT,   O3COL,  O3_CTM,  T_CTM    )
+!$OMP+PRIVATE( P_CTM,   T_CLIM, Z_CLIM, O3_CLIM, AIR_CLIM )
+!$OMP+SCHEDULE( DYNAMIC )
+      DO J = 1, JJPAR
+      DO I = 1, IIPAR
+
+       ALBVIS(I,J)   = State_Met%ALBD(I,J)
+
+       ! Grid box latitude [degrees]
+       YLAT            = GET_YMID( I, J, 1 )
+
+#if defined( EXTERNAL_GRID ) || defined( EXTERNAL_FORCING )
+       ! Define the P array here, using GCM pressures
+       DO L = 1, LLPAR+1
+          P_CTM(L)     = State_Met%PEDGE( I, J, L )
+       ENDDO
+#else
+       ! Define the P array here, using Ap and Bp from GEOS-Chem
+       DO L = 1, LLPAR+1
+          P_CTM(L)     = GET_PEDGE( I, J, L )
+       ENDDO
+#endif
+
+       ! Top edge of P_CTM is top of atmosphere
+       P_CTM(LLPAR+2)  = 0d0
+
+       ! Temperature profile [K]
+       T_CTM(1:LLPAR)  = State_Met%T(I,J,1:LLPAR)
+
+       ! Top of atmosphere
+       T_CTM(LLPAR+1)  = T_CTM(LLPAR)
+
+       ! Overhead ozone column [DU]
+       ! These values are either from the met fields or TOMS/SBUV,
+       ! depending on the settings in input.geos
+       O3COL = GET_OVERHEAD_O3(I,J)
+
+       ! CTM ozone densities (molec/cm3)
+       O3_CTM          = 0d0
+       LCHEM           = State_Met%ChemGridLev(I,J)
+       DO L = 1, LCHEM
+          O3_CTM(L)    = State_Chm%Species(I,J,L,id_O3)
+       ENDDO
+       
+      DO L = 1, LLPAR
+
+            !-----------------------------
+            ! GET CLOUD PROPERTIES BY SETTING REASONABLE VALUES FOR REL
+            ! AND REI IN MICRONS AND CALCULATING LWP AND IWP FROM
+            ! VISIBLE OPTICAL DEPTH  (IN G/M2)
+            !-----------------------------
+
+            IF (ICLD.NE.0) THEN
+             ! LIQUID
+             CLIQWP(I,J,L) = 0.667*State_Met%TAUCLW(I,J,L)*
+     &                       RHOLIQ*REL_DEF
+             RELIQ(I,J,L)  = REL_DEF
+             ! ICE
+             CICEWP(I,J,L) = 0.667*State_Met%TAUCLI(I,J,L)*
+     &                       RHOICE*REI_DEF
+             REICE(I,J,L)  = REI_DEF
+             !TAUCLD DERIVED IN MCICA SUB, NOT NEEDED
+             CLDFR(I,J,L)  = State_Met%CLDF(I,J,L)
+            ENDIF !CLOUDS
+
+       IF (INTROP(I,J,L).EQ..TRUE.) THEN 
+          !-----------------------------
+          ! WE ARE IN THE TROPOSPHERE
+          !-----------------------------
+
+          ! SET O3, CH4, N2O AND CFC PROFILES
+          ! G-C CHEMISTRY IS ONLY DONE IN THE TROP
+          ! THEREFORE State_Chm%Species WILL ONLY BE DEFINED IN THE TROP
+
+          !IF O3 REQUESTED THEN SPECMASK WILL BE SET TO ZERO
+          !SO THAT O3 WILL BE REMOVED RELATIVE TO THE BASELINE CASE
+          !(WHEN SPECMASK DEFAULTS TO 1)
+          !I.E. WE WANT TO RUN WITHOUT THE GAS IF IT HAS BEEN
+          !REQUESTED SO THAT WE CAN DIFFERENCE WITH THE BASELINE RUN
+
+          IF ( Input_Opt%LUCX ) THEN
+
+            !--------------------------------------------------------
+            !          %%%%%%% UCX-based mechanisms %%%%%%%
+            !--------------------------------------------------------
+
+            IF (SPECMASK(NASPECRAD+1).EQ.1) THEN
+             O3VMR(I,J,L)  = State_Chm%Species(I,J,L,id_O3) * AIRMW /
+     &                       State_Chm%SpcData(id_O3)%Info%emMW_g
+
+            ENDIF
+
+            IF (SPECMASK(NASPECRAD+2).EQ.1) THEN
+             CH4VMR(I,J,L) = State_Chm%Species(I,J,L,id_CH4) * AIRMW /
+     &                       State_Chm%SpcData(id_CH4)%Info%emMW_g
+
+            ENDIF
+
+            N2OVMR(I,J,L) = State_Chm%Species(I,J,L,id_N2O) * AIRMW /
+     &                      State_Chm%SpcData(id_N2O)%Info%emMW_g
+
+            CFC11VMR(I,J,L) = State_Chm%Species(I,J,L,id_CFC11) *
+     &                        AIRMW / 
+     &                        State_Chm%SpcData(id_CFC11)%Info%emMW_g
+
+            CFC12VMR(I,J,L) = State_Chm%Species(I,J,L,id_CFC12) *
+     &                        AIRMW /
+     &                        State_Chm%SpcData(id_CFC12)%Info%emMW_g
+
+            CCL4VMR(I,J,L)  = State_Chm%Species(I,J,L,id_CCL4) *
+     &                        AIRMW / 
+     &                        State_Chm%SpcData(id_CCL4)%Info%emMW_g
+
+            CFC22VMR(I,J,L) = State_Chm%Species(I,J,L,id_HCFC22) *
+     &                        AIRMW /
+     &                        State_Chm%SpcData(id_HCFC22)%Info%emMW_g
+
+         ELSE
+
+            !--------------------------------------------------------
+            !        %%%%%%% Tropchem only mechanisms %%%%%%%
+            !--------------------------------------------------------
+
+            IF (SPECMASK(NASPECRAD+1).EQ.1) THEN
+             O3VMR(I,J,L)  = State_Chm%Species(I,J,L,id_O3) *
+     &                  AIRMW / State_Chm%SpcData(id_O3)%Info%emMW_g
+            ENDIF
+            IF (SPECMASK(NASPECRAD+2).EQ.1) THEN
+             CH4VMR(I,J,L) = State_Chm%Species(I,J,L,id_CH4) *
+     &                  AIRMW / State_Chm%SpcData(id_CH4)%Info%emMW_g
+            ENDIF
+            N2OVMR(I,J,L) = N2OCLIM(I,J,L)/1E9
+
+            !CFC CLIMATOLOGY FROM UARS AND MIPAS
+            CFC11VMR(I,J,L) = CFC11CLIM(I,J,L)/1E9
+            CFC12VMR(I,J,L) = CFC12CLIM(I,J,L)/1E9
+            CCL4VMR(I,J,L)  = CCL4CLIM(I,J,L)/1E9
+            CFC22VMR(I,J,L) = CFC22CLIM(I,J,L)/1E9
+         ENDIF
+
+       ELSE
+          !-----------------------------
+          ! WE ARE IN THE STRATOSPHERE
+          !-----------------------------
+
+          IF ( Input_Opt%LUCX ) THEN
+
+            !--------------------------------------------------------
+            !          %%%%%%% UCX-based mechanisms %%%%%%%
+            !--------------------------------------------------------
+
+            !N.B. STRAT CH4 NOT CURRENTLY INCLUDED IN THE DRE OF CH4
+            !N.B. STRAT O3  NOT CURRENTLY INCLUDED IN THE DRE OF O3
+            O3VMR(I,J,L)  = State_Chm%Species(I,J,L,id_O3) * AIRMW /
+     &                       State_Chm%SpcData(id_O3)%Info%emMW_g
+
+             CH4VMR(I,J,L) = State_Chm%Species(I,J,L,id_CH4) * AIRMW /
+     &                       State_Chm%SpcData(id_CH4)%Info%emMW_g
+
+            N2OVMR(I,J,L) = State_Chm%Species(I,J,L,id_N2O) * AIRMW /
+     &                      State_Chm%SpcData(id_N2O)%Info%emMW_g
+
+            CFC11VMR(I,J,L) =State_Chm%Species(I,J,L,id_CFC11) * AIRMW /
+     &                       State_Chm%SpcData(id_CFC11)%Info%emMW_g
+
+            CFC12VMR(I,J,L) =State_Chm%Species(I,J,L,id_CFC12) * AIRMW /
+     &                       State_Chm%SpcData(id_CFC12)%Info%emMW_g
+
+            CCL4VMR(I,J,L)  =State_Chm%Species(I,J,L,id_CCL4) * AIRMW /
+     &                       State_Chm%SpcData(id_CCL4)%Info%emMW_g
+
+            CFC22VMR(I,J,L) =State_Chm%Species(I,J,L,id_HCFC22) * AIRMW/
+     &                       State_Chm%SpcData(id_HCFC22)%Info%emMW_g
+
+
+! TEST IMPACT OF STRAT CHEM
+!            O3VMR(I,J,L)  = 0.0d0
+!            CH4VMR(I,J,L) = 0.0d0
+!            N2OVMR(I,J,L) = 0.0d0
+!            CFC11VMR(I,J,L) = 0.0d0
+!            CFC12VMR(I,J,L) = 0.0d0
+!            CCL4VMR(I,J,L)  = 0.0d0
+!            CFC22VMR(I,J,L) = 0.0d0
+
+         ELSE
+      
+            !--------------------------------------------------------
+            !        %%%%%%% Tropchem only mechanisms %%%%%%%
+            !--------------------------------------------------------
+
+            !N.B. STRAT CH4 NOT CURRENTLY INCLUDED IN THE DRE OF CH4
+            !N.B. STRAT O3  NOT CURRENTLY INCLUDED IN THE DRE OF O3
+
+            !! DENSITY OF AIR IN G/CM2
+            AIR_TMP = State_Met%AIRDEN(I,J,L)*
+     &                State_Met%BXHEIGHT(I,J,L)*1.0E-1
+            !! DENSITY OF AIR IN MOLEC/CM2
+            AIR_TMP = AVO*AIR_TMP/AIRMW
+
+            CALL SET_PROF_O3 (YLAT,THISMONTH,THISDAY,
+     &                        T_CTM,  P_CTM,
+     &                        O3_CTM, O3COL, T_CLIM,
+     &                        O3_CLIM,  Z_CLIM,  AIR_CLIM, Input_Opt)
+            O3VMR(I,J,L) = O3_CLIM(L)/AIR_TMP
+
+            !GET SCALINGS IF THIS IS THE FIRST LEVEL IN THE STRAT
+            IF (FLG_FIRST_STRAT(I,J).EQ.0) THEN
+                FLG_FIRST_STRAT(I,J) = 1
+                CH4SCL(I,J) = State_Chm%Species(I,J,L,id_CH4) * AIRMW /
+     &                        State_Chm%SpcData(id_CH4)%Info%emMW_g /
+     &                        (CH4CLIM(I,J,L)/1E9)
+            ENDIF
+            
+            !TES PROFILES INTERPOLATED TO GC GRID WHEN SAVED
+            !SO WE JUST NEED TO SCALE TO CURRENT CONC AT TOP OF TROP
+              
+            CH4VMR(I,J,L) = CH4SCL(I,J)*CH4CLIM(I,J,L)/1E9
+            N2OVMR(I,J,L) = N2OCLIM(I,J,L)/1E9
+
+            !CFC CLIMATOLOGY FROM UARS AND MIPAS
+            CFC11VMR(I,J,L) = CFC11CLIM(I,J,L)/1E9
+            CFC12VMR(I,J,L) = CFC12CLIM(I,J,L)/1E9
+            CCL4VMR(I,J,L)  = CCL4CLIM(I,J,L)/1E9
+            CFC22VMR(I,J,L) = CFC22CLIM(I,J,L)/1E9
+         ENDIF
+       ENDIF
+      ENDDO
+      ENDDO
+      ENDDO
+!$OMP END PARALLEL DO
+
+      IF (DOAERAD) THEN
+       DO IB = 1,NBNDS
+        !RRTMG WAVEBANDS START AFTER WVAA0 STANDARD WAVELNGTHS IN GC ARRAYS
+        !BASED ON LUT ORDER. JUST APPLY OFFSET
+        IBX=IB+NWVAA0
+        IB_SW = IB-NBNDLW
+        DO IS = 1,NASPECRAD
+         !THE AEROSOL SPECIES WE ARE CURRENTLY CALCULATING FOR WILL BE
+         !SET TO THE LSPECRADMENU VALUE FOR THAT SPECIES.
+         !THIS MEANS THAT RRTMG REQUIRES *ALL OTHER* SPECIES SO THAT THE
+         !FLUX IN ABSENCE OF THE SPECIES CAN BE CALCULATED (THE
+         !DIFFERENCE OF THIS WITH THE BASELINE GIVES THE FLUX CHANGE FOR
+         !THAT SPECIES).
+         !
+         !THEREFORE WE COMPILE TWO SETS OF AEROSOL PROPERTIES:
+         !(1) ALL BUT THE CURRENT SPECIES TO SEND TO RRTMG
+         !(2) THE CURRENT SPECIES FOR OUTPUT TO THE RT DIAGNOSTICS
+         ! ALSO, WE MUST MERGE AEROSOL PROPERTIES FOR THE SPECIES TO BE OUTPUT
+         ! (I.E. COMBINE HYDROPHILIC/PHOBIC AND MULTIPLE SIZES) 
+
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!%%%  This parallel loop gives identical results w/r/t to a RRTMG           %%%
+!%%%  simulation compiled with OpenMP turned off. (bmy, 6/2/15)             %%%
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!$OMP PARALLEL DO
+!$OMP+DEFAULT( SHARED )
+!$OMP+PRIVATE( I, J, L )
+!$OMP+SCHEDULE( DYNAMIC )
+         DO L = 1, LLPAR
+         DO J = 1, JJPAR
+         DO I = 1, IIPAR
+
+          !if UCX on, we need to go above the tropopause to get 
+          !the strat AOD, but only for IS=8 and IS=9
+          IF ((INTROP(I,J,L).EQ..TRUE.).OR.
+     &        (Input_Opt%LUCX .and. ((IS.EQ.8).OR.(IS.EQ.9)))) THEN
+
+           !MAKE SURE WE HAVE SENSIBLE DATA
+           !DONT WASTE TIME IF VIRTUALLY NO AEROSOL
+           IF (RTODAER(I,J,L,IBX,IS).GT.1e-10) THEN
+            IF (IB.LE.16) THEN !LW
+             IF (SPECMASK(IS).EQ.1) THEN
+                   TAUAER_LW(I,J,L,IB) = TAUAER_LW(I,J,L,IB) +
+     &                            RTODAER(I,J,L,IBX,IS)
+             ENDIF
+            ELSE !SW
+             !IF SPECMASK(IS)=1 THEN WE AGGREGATE THAT SPECIES FOR RRTMG
+             !IF SPECMASK(IS)>1 THEN WE SAVE THAT SPECIES FOR DIAG OUTPUT
+             IF (SPECMASK(IS).EQ.1) THEN
+              TAUAER_SW(I,J,L,IB_SW)=TAUAER_SW(I,J,L,IB_SW)+
+     &                                  RTODAER(I,J,L,IBX,IS)
+              SSAAER(I,J,L,IB_SW) =  SSAAER(I,J,L,IB_SW) + 
+     &                       RTSSAER(I,J,L,IBX,IS)*RTODAER(I,J,L,IBX,IS)
+              ASMAER(I,J,L,IB_SW) = ASMAER(I,J,L,IB_SW) +
+     &                                 RTASYMAER(I,J,L,IBX,IS) *
+     &                      RTODAER(I,J,L,IBX,IS)*RTSSAER(I,J,L,IBX,IS)
+             ENDIF
+             IF (SPECMASK(IS).GT.1) THEN
+              TAUAERDIAG(I,J,L,IB_SW)=TAUAERDIAG(I,J,L,IB_SW)+
+     &                        RTODAER(I,J,L,IBX,IS)
+              SSAAERDIAG(I,J,L,IB_SW) = SSAAERDIAG(I,J,L,IB_SW) +
+     &                       RTSSAER(I,J,L,IBX,IS)*RTODAER(I,J,L,IBX,IS)
+              ASMAERDIAG(I,J,L,IB_SW) = ASMAERDIAG(I,J,L,IB_SW) +
+     &                      RTASYMAER(I,J,L,IBX,IS) *
+     &                      RTODAER(I,J,L,IBX,IS)*RTSSAER(I,J,L,IBX,IS)
+!              IF ((IS.EQ.9).AND.(L.GT.30).AND.(IB_SW.EQ.10).AND.
+!     &           (RTODAER(I,J,L,IBX,IS).GT.0.0d0)) THEN
+!               write(6,*) 'STS',I,J,L,IBX,IS,RTODAER(I,J,L,IBX,IS),
+!     &                    RTSSAER(I,J,L,IBX,IS)
+!              ENDIF
+
+             ENDIF
+            ENDIF
+           ENDIF 
+          ENDIF
+         ENDDO
+         ENDDO
+         ENDDO
+!$OMP END PARALLEL DO 
+        ENDDO !SPECIES
+
+        !NOW AEROSOL HAVE BEEN SUMMED AND WEIGHTED BY AOD AND SSA
+        !DIVIDE THROUGH BY TOTAL AOD (FOR SSA) AND AOD*SSA (FOR ASYM)
+        IF (IB.GT.16) THEN !SW
+
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!%%%  This parallel loop gives identical results w/r/t to a RRTMG           %%%
+!%%%  simulation compiled with OpenMP turned off. (bmy, 6/2/15)             %%%
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!$OMP PARALLEL DO
+!$OMP+DEFAULT( SHARED )
+!$OMP+PRIVATE( I, J, L )
+!$OMP+SCHEDULE( DYNAMIC )
+         DO L = 1, LLPAR
+         DO J = 1, JJPAR
+         DO I = 1, IIPAR
+
+          !if UCX on, we need to go above the tropopause to get
+          !the strat AOD, but only for IS=8 and IS=9
+          IF ((INTROP(I,J,L).EQ..TRUE.).OR.
+     &        (Input_Opt%LUCX .and. ((IS.EQ.8).OR.(IS.EQ.9)))) THEN
+
+           IF ((TAUAER_SW(I,J,L,IB_SW).GT.0).AND.
+     $        (    SSAAER(I,J,L,IB_SW).GT.0)) THEN
+              !DIVIDE SUM(ASYM*SSA*OD) BY SUM(SSA*OD) TO GET 
+              !OD*SSA WEIGHTED ASYM
+              ASMAER(I,J,L,IB_SW) = ASMAER(I,J,L,IB_SW) /
+     &                                 SSAAER(I,J,L,IB_SW)
+              !DIVIDE SUM(SSA*OD) BY SUM(OD) TO GET OD WEIGHTED SSA
+              SSAAER(I,J,L,IB_SW) = SSAAER(I,J,L,IB_SW) / 
+     &                                 TAUAER_SW(I,J,L,IB_SW)
+           ENDIF
+                !AND DO THE SAME FOR THE SPECIES WE'RE INTERESTED IN
+           IF ((TAUAERDIAG(I,J,L,IB_SW).GT.0).AND.
+     $        ( SSAAERDIAG(I,J,L,IB_SW).GT.0)) THEN
+              !DIVIDE SUM(ASYM*SSA*OD) BY SUM(SSA*OD) TO GET
+              !OD*SSA WEIGHTED ASYM
+              ASMAERDIAG(I,J,L,IB_SW) = ASMAERDIAG(I,J,L,IB_SW) /
+     &                                     SSAAERDIAG(I,J,L,IB_SW)
+              !DIVIDE SUM(SSA*OD) BY SUM(OD) TO GET OD WEIGHTED SSA
+              SSAAERDIAG(I,J,L,IB_SW) = SSAAERDIAG(I,J,L,IB_SW) /
+     &                                     TAUAERDIAG(I,J,L,IB_SW)
+           ENDIF
+          ENDIF
+         ENDDO
+         ENDDO
+         ENDDO
+!$OMP END PARALLEL DO
+
+        ENDIF
+       ENDDO !BAND
+      ELSE
+       !NO AEROSOL, SET ALL TO SAFE VALUES
+
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!%%%  This parallel loop gives identical results w/r/t to a RRTMG           %%%
+!%%%  simulation compiled with OpenMP turned off. (bmy, 6/2/15)             %%%
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!$OMP PARALLEL DO
+!$OMP+DEFAULT( SHARED )
+!$OMP+PRIVATE( I, J, L, IB, IB_SW )
+!$OMP+SCHEDULE( DYNAMIC )
+       DO IB= 1, NBNDS
+        IB_SW = IB-NBNDLW
+        DO L = 1, LLPAR
+        DO J = 1, JJPAR
+        DO I = 1, IIPAR
+
+          !if UCX on, we need to go above the tropopause to get
+          !the strat AOD, but only for IS=8 and IS=9
+          IF ((INTROP(I,J,L).EQ..TRUE.).OR.
+     &        (Input_Opt%LUCX .and. ((IS.EQ.8).OR.(IS.EQ.9)))) THEN
+
+          IF (IB.LE.16) THEN
+           TAUAER_LW(I,J,L,IB)    = 0.0
+          ELSE
+           TAUAER_SW(I,J,L,IB_SW) = 0.0D0
+           SSAAER(I,J,L,IB_SW)    = 0.99D0
+           ASMAER(I,J,L,IB_SW)    = 0.2D0
+           TAUAERDIAG(I,J,L,IB_SW) = 0.0D0
+           SSAAERDIAG(I,J,L,IB_SW) = 0.99D0
+           ASMAERDIAG(I,J,L,IB_SW) = 0.2D0
+          ENDIF
+         ENDIF
+        ENDDO
+        ENDDO
+        ENDDO
+       ENDDO
+!$OMP END PARALLEL DO 
+
+      ENDIF
+
+! checking values
+       DO IB= NBNDLW+1, NBNDS
+        IB_SW = IB-NBNDLW
+        DO L = 1, LLPAR
+        DO J = 1, JJPAR
+        DO I = 1, IIPAR
+              IF (ASMAER(I,J,L,IB_SW).GT.0.999d0) THEN
+               ASMAER(I,J,L,IB_SW) = 0.999d0
+              ENDIF
+!              IF (ASMAER(I,J,L,IB_SW).LT.0.001d0) THEN
+!               ASMAER(I,J,L,IB_SW) = 0.001
+!              ENDIF
+              IF ((SSAAER(I,J,L,IB_SW).LT.0.001d0).OR.
+     &            (SSAAER(I,J,L,IB_SW).GT.1.0d0)) THEN
+               SSAAER(I,J,L,IB_SW) = 0.99
+              ENDIF
+              IF (TAUAER_SW(I,J,L,IB_SW).GT.1.0) THEN
+               TAUAER_SW(I,J,L,IB_SW) = 1.0
+              ENDIF
+              IF (ASMAERDIAG(I,J,L,IB_SW).GT.0.999d0) THEN
+               ASMAERDIAG(I,J,L,IB_SW) = 0.999d0
+              ENDIF
+!              IF (ASMAERDIAG(I,J,L,IB_SW).LT.0.001d0) THEN
+!               ASMAERDIAG(I,J,L,IB_SW) = 0.001
+!              ENDIF
+              IF ((SSAAERDIAG(I,J,L,IB_SW).LT.0.001d0).OR.
+     &            (SSAAERDIAG(I,J,L,IB_SW).GT.1.0d0)) THEN
+               SSAAERDIAG(I,J,L,IB_SW) = 0.99
+              ENDIF
+              IF (TAUAERDIAG(I,J,L,IB_SW).GT.1.0) THEN
+               TAUAERDIAG(I,J,L,IB_SW) = 1.0
+              ENDIF
+
+        ENDDO
+        ENDDO
+        ENDDO
+       ENDDO
+
+      DOY = GET_DAY_OF_YEAR()
+      ONECOL = 1
+
+       ! GET LEVEL VALUES
+       GCAIR = 1.0E-3*GASCON/AVOGAD
+       DO J=1,JJPAR
+       DO I=1,IIPAR
+          PLEV(I,J,1) = PEDGE(I,J,1) ! SET LOWEST LEVEL TO SURFACE PRESSURE
+          TLEV(I,J,1) = TLAY(I,J,1)  ! SET LOWEST LEVEL TO LAYER TEMPERATURE  (KLUDGE)
+          PLEV(I,J,LLPAR+1) = PCENTER(I,J,LLPAR)
+          TLEV(I,J,LLPAR+1) = TLAY(I,J,LLPAR)
+          DO L=2,LLPAR
+             RHOA = PCENTER(I,J,L-1)/(GCAIR*TLAY(I,J,L-1))
+             RHOB = PCENTER(I,J,L)/(GCAIR*TLAY(I,J,L))
+             RHOSUM = RHOA+RHOB
+             PLEV(I,J,L) = (RHOA*PCENTER(I,J,L-1)+RHOB*PCENTER(I,J,L))/
+     &                      RHOSUM
+             TLEV(I,J,L) = (RHOA*TLAY(I,J,L-1)+RHOB*TLAY(I,J,L))/RHOSUM
+          END DO
+       END DO
+       END DO
+
+       ! FILL CO2, N2O AND O2 ARRAYS WITH REASONABLE ATMOSPHERIC VALUES
+       CO2VMR(:,:,:) = 3.90E-4
+       O2VMR(:,:,:)  = 0.209
+
+       SELECT CASE (ICLD)
+       ! CLOUD SETUP FOR CLEAR
+       CASE (0)
+          IDRV = 0
+          ICLDMCL = 0
+          INFLGLW = 0
+          INFLGSW = 0
+          TAUCMCL_LW(:,:,:,:) = 0.0
+          TAUCMCL_SW(:,:,:,:) = 0.0
+          ICEFLGLW = 0
+          LIQFLGLW = 0
+          ICEFLGSW = 0
+          LIQFLGSW = 0
+          !PRINT *,'CLEAR'
+
+       !  CLOUD SETUP FOR MCICA CLOUD (ONLY OPTION NOW)
+       CASE (1)
+          IDRV = 0
+          ICLDMCL = 2                  !MAXIMUM RANDOM OVERLAP
+          INFLGLW = 2
+          INFLGSW = 2
+          TAUCLD_LW(:,:,:,:)  = 0.0    ! TAUCLD NOT USED
+          TAUCLD_SW(:,:,:,:)  = 0.0
+          TAUCMCL_LW(:,:,:,:) = 0.0   ! USED ONLY AS A CHECK
+          TAUCMCL_SW(:,:,:,:) = 0.0
+          SSACLD(:,:,:,:) = 0.0
+          ASMCLD(:,:,:,:) = 0.0
+          FSFCLD(:,:,:,:) = 0.0
+          ICEFLGLW = 2       !STREAMER
+          LIQFLGLW = 1       !HU AND STAMNES
+          ICEFLGSW = 2       !STREAMER
+          LIQFLGSW = 1       !HU AND STAMNES
+          RELIQ(:,:,:) = REL_DEF
+          REICE(:,:,:) = REI_DEF
+      END SELECT
+
+      ! WE ONLY NEED TO CALC CLOUDS ONCE PER RT TIMESTEP
+      ! DO THIS ON BASELINE CALL IF ALL-SKY IS REQUESTED
+      IF (ISPECMENU.EQ.0) THEN
+       SEEDLW=ISEED+NGPTSW+1
+       SEEDSW=SEEDLW+NGPTLW+1
+
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!%%%  This parallel loop gives identical results w/r/t to a RRTMG           %%%
+!%%%  simulation compiled with OpenMP turned off.  Also now save            %%%
+!%%%  inputs to scratch arrays to avoid creating array temporaries          %%%
+!%%%  in the subroutine calls.  These can adversely affect performance.     %%%
+!%%%                                                                        %%%
+!%%%  ALSO NOTE: Using pointers causes segfaults in this routine, so        %%%
+!%%%  we will just simply use temporary arrays. (bmy 6/3/15)                %%%
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!$OMP PARALLEL DO
+!$OMP+DEFAULT( SHARED )
+!$OMP+PRIVATE( I,           J,           PCENTER0,    CLDFR0      )
+!$OMP+PRIVATE( CLIQWP0,     CICEWP0,     REICE0,      RELIQ0      )
+!$OMP+PRIVATE( TAUCLD_SW0,  SSACLD0,     ASMCLD0,     FSFCLD0     )
+!$OMP+PRIVATE( CLDFMCL_LW0, CIWPMCL_LW0, CLWPMCL_LW0, REICMCL0    )
+!$OMP+PRIVATE( RELQMCL0,    TAUCMCL_LW0, CLDFMCL_SW0, CIWPMCL_SW0 )
+!$OMP+PRIVATE( CLWPMCL_SW0, TAUCMCL_SW0, SSACMCL0,    ASMCMCL0    )
+!$OMP+PRIVATE( FSFCMCL0,    p_PCENTER,   p_CLDFR,     p_CICEWP    )
+!$OMP+PRIVATE( p_CLIQWP,    p_REICE,     p_RELIQ,     p_TAUCLD_LW )
+!$OMP+PRIVATE( p_TAUCLD_SW, p_SSACLD,    p_ASMCLD,    p_FSFCLD    )
+!$OMP+SCHEDULE( DYNAMIC )
+       DO J=1, JJPAR
+       DO I=1, IIPAR
+
+          ! Avoid array temporaries in the subroutine call (bmy, 6/3/15)
+          ! These arrays are used by both MCICA_SUBCOL_LW and MCICA_SUBCOL_SW
+          p_PCENTER = PCENTER(I,J,:)
+          p_CLDFR   = CLDFR  (I,J,:)
+          p_CICEWP  = CICEWP (I,J,:)
+          p_CLIQWP  = CLIQWP (I,J,:)
+          p_REICE   = REICE  (I,J,:)
+          p_RELIQ   = RELIQ  (I,J,:)
+
+          !-------------------------------------------------------------
+          ! Long-wave radiation
+          !-------------------------------------------------------------
+          IF (Input_Opt%LLWRAD) THEN
+
+             ! Avoid array temporaries in the subroutine call (bmy, 6/3/15)
+             ! These arrays are only used in MCICA_SUBCOL_LW
+             p_TAUCLD_LW = TAUCLD_LW(:,I,J,:)
+
+             ! Call MCICA longwave
+             CALL MCICA_SUBCOL_LW( 
+                !-------------------------------------
+                ! Inputs
+     &                             ONECOL,
+     &                             LLPAR,
+     &                             ICLDMCL,
+     &                             SEEDLW,
+     &                             IRNG,
+     &                             p_PCENTER,
+     &                             p_CLDFR,
+     &                             p_CICEWP,
+     &                             p_CLIQWP,
+     &                             p_REICE,
+     &                             p_RELIQ,
+     &                             p_TAUCLD_LW,
+                !-------------------------------------
+                ! Outputs
+     &                             CLDFMCL_LW0, 
+     &                             CIWPMCL_LW0, 
+     &                             CLWPMCL_LW0,
+     &                             REICMCL0, 
+     &                             RELQMCL0, 
+     &                             TAUCMCL_LW0 )
+
+             ! Copy back into 3-D arrays
+             CLDFMCL_LW(:,I,J,:) = CLDFMCL_LW0(:,1,:)
+             CIWPMCL_LW(:,I,J,:) = CIWPMCL_LW0(:,1,:)
+             CLWPMCL_LW(:,I,J,:) = CLWPMCL_LW0(:,1,:)
+             TAUCMCL_LW(:,I,J,:) = TAUCMCL_LW0(:,1,:)
+
+          ENDIF
+
+          !-------------------------------------------------------------
+          ! Short-wave radiation
+          !-------------------------------------------------------------
+          IF (Input_Opt%LSWRAD) THEN
+
+             ! Avoid array temporaries in the subroutine call (bmy, 6/3/15)
+             ! These arrays are only used in MCICA_SUBCOL_SW
+             p_TAUCLD_SW = TAUCLD_SW(:,I,J,:)
+             p_SSACLD    = SSACLD   (:,I,J,:)
+             p_ASMCLD    = ASMCLD   (:,I,J,:)
+             p_FSFCLD    = FSFCLD   (:,I,J,:)
+
+             ! Call MCICA shortwave
+             CALL MCICA_SUBCOL_SW( 
+                !-------------------------------------
+                ! Inputs
+     &                             ONECOL, 
+     &                             LLPAR, 
+     &                             ICLDMCL,
+     &                             SEEDSW, 
+     &                             IRNG,
+     &                             p_PCENTER,
+     &                             p_CLDFR, 
+     &                             p_CICEWP, 
+     &                             p_CLIQWP,
+     &                             p_REICE, 
+     &                             p_RELIQ,
+     &                             p_TAUCLD_SW,
+     &                             p_SSACLD,
+     &                             p_ASMCLD,
+     &                             p_FSFCLD,
+                !-------------------------------------
+                ! Outputs
+     &                             CLDFMCL_SW0, 
+     &                             CIWPMCL_SW0, 
+     &                             CLWPMCL_SW0,
+     &                             REICMCL0, 
+     &                             RELQMCL0, 
+     &                             TAUCMCL_SW0, 
+     &                             SSACMCL0,
+     &                             ASMCMCL0, 
+     &                             FSFCMCL0  )
+
+             ! Copy back into 3-D arrays
+             CLDFMCL_SW(:,I,J,:) = CLDFMCL_SW0(:,1,:)
+             CIWPMCL_SW(:,I,J,:) = CIWPMCL_SW0(:,1,:)
+             CLWPMCL_SW(:,I,J,:) = CLWPMCL_SW0(:,1,:)
+             TAUCMCL_SW(:,I,J,:) = TAUCMCL_SW0(:,1,:)
+             SSACMCL   (:,I,J,:) = SSACMCL0   (:,1,:)
+             ASMCMCL   (:,I,J,:) = ASMCMCL0   (:,1,:)
+             FSFCMCL   (:,I,J,:) = FSFCMCL0   (:,1,:)
+
+          ENDIF
+
+          ! these should be independent of LW and SW
+          ! simply rearranged by the MCICA routine
+          REICMCL(I,J,:) = REICMCL0(1,:)
+          RELQMCL(I,J,:) = RELQMCL0(1,:)
+       ENDDO
+       ENDDO
+!$OMP END PARALLEL DO
+
+      ENDIF !DO MCICA CLOUDS
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!%%%  This parallel loop gives identical results w/r/t to a RRTMG           %%%
+!%%%  simulation compiled with OpenMP turned off.  Also now save            %%%
+!%%%  inputs to scratch arrays to avoid creating array temporaries          %%%
+!%%%  in the subroutine calls.  These can adversely affect performance.     %%%
+!%%%                                                                        %%%
+!%%%  ALSO NOTE: Using pointers causes segfaults in this routine, so        %%%
+!%%%  we will just simply use temporary arrays. (bmy 6/3/15)                %%%
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!$OMP PARALLEL DO
+!$OMP+DEFAULT( SHARED )
+!$OMP+PRIVATE( I,   J,       UFLX,         DFLX,         HR           )
+!$OMP+PRIVATE( UFLXC,        DFLXC,        HRC,          DUFLX_DT     )
+!$OMP+PRIVATE( DUFLXC_DT,    ECAER,        SWUFLX,       SWDFLX       )
+!$OMP+PRIVATE( SWHR,         SWUFLXC,      SWDFLXC,      SWHRC        )
+!$OMP+PRIVATE( p_PCENTER,    p_PLEV,       p_TLAY,       p_TLEV       )
+!$OMP+PRIVATE( p_H2OVMR,     p_O3VMR,      p_CO2VMR,     p_CH4VMR     )
+!$OMP+PRIVATE( p_N2OVMR,     p_O2VMR,      p_CFC11VMR,   p_CFC12VMR   )
+!$OMP+PRIVATE( p_CFC22VMR,   p_CCL4VMR,    p_RTEMISS,    p_REICMCL    )
+!$OMP+PRIVATE( p_RELQMCL,    p_CLDFMCL_LW, p_TAUCMCL_LW, p_CIWPMCL_LW )
+!$OMP+PRIVATE( p_CLWPMCL_LW, p_TAUAER_LW,  p_CLDFMCL_SW, p_TAUCMCL_SW )
+!$OMP+PRIVATE( p_SSACMCL,    p_ASMCMCL,    p_FSFCMCL,    p_CIWPMCL_SW )
+!$OMP+PRIVATE( p_CLWPMCL_SW, p_TAUAER_SW,  p_SSAAER,     p_ASMAER     )
+!$OMP+PRIVATE( p_SUNCOS                                               )
+!$OMP+SCHEDULE( DYNAMIC ) 
+      DO J=1, JJPAR
+      DO I=1, IIPAR
+ 
+         ! Avoid arrray temporaries in subroutines (bmy, 6/3/15)
+         ! These variables are used in both RRTMG_LW and RRTMG_SW
+         p_PCENTER  = PCENTER (I,J,:)
+         p_PLEV     = PLEV    (I,J,:)
+         p_TLAY     = TLAY    (I,J,:)
+         p_TLEV     = TLEV    (I,J,:)
+         p_H2OVMR   = H2OVMR  (I,J,:)
+         p_O3VMR    = O3VMR   (I,J,:)
+         p_CO2VMR   = CO2VMR  (I,J,:)
+         p_CH4VMR   = CH4VMR  (I,J,:)
+         p_N2OVMR   = N2OVMR  (I,J,:)
+         p_O2VMR    = O2VMR   (I,J,:) 
+         p_CFC11VMR = CFC11VMR(I,J,:)
+         p_CFC12VMR = CFC12VMR(I,J,:)
+         p_CFC22VMR = CFC22VMR(I,J,:)
+         p_CCL4VMR  = CCL4VMR (I,J,:)
+         p_RTEMISS  = RTEMISS (I,J,:) 
+         p_REICMCL  = REICMCL (I,J,:)
+         p_RELQMCL  = RELQMCL (I,J,:)
+
+         !--------------------------------------------------------------
+         ! RRTMG - Longwave radiation
+         !--------------------------------------------------------------
+         IF (Input_Opt%LLWRAD) THEN
+       
+            ! Avoid array temporaries in subroutine calls (bmy, 6/3/15)
+            ! These arrays are only used in RRTMG_LW
+            p_CLDFMCL_LW = CLDFMCL_LW(:,I,J,:  )
+            p_TAUCMCL_LW = TAUCMCL_LW(:,I,J,:  )
+            p_CIWPMCL_LW = CIWPMCL_LW(:,I,J,:  )
+            p_CLWPMCL_LW = CLWPMCL_LW(:,I,J,:  )
+            p_TAUAER_LW  = TAUAER_LW (  I,J,:,:)
+
+            ! Call RRTMG for longwave radiation
+            CALL RRTMG_LW( 
+                !-------------------------------------
+                ! Inputs
+     &                     ONECOL,
+     &                     LLPAR,
+     &                     ICLDMCL,
+     &                     IDRV, 
+     &                     p_PCENTER,
+     &                     p_PLEV,
+     &                     p_TLAY,
+     &                     p_TLEV,
+     &                     TSFC(I,J), 
+     &                     p_H2OVMR,
+     &                     p_O3VMR,
+     &                     p_CO2VMR,
+     &                     p_CH4VMR,
+     &                     p_N2OVMR,
+     &                     p_O2VMR, 
+     &                     p_CFC11VMR,
+     &                     p_CFC12VMR,
+     &                     p_CFC22VMR,
+     &                     p_CCL4VMR,
+     &                     p_RTEMISS, 
+     &                     INFLGLW,
+     &                     ICEFLGLW,
+     &                     LIQFLGLW,
+     &                     p_CLDFMCL_LW,
+     &                     p_TAUCMCL_LW,
+     &                     p_CIWPMCL_LW,
+     &                     p_CLWPMCL_LW,
+     &                     p_REICMCL,
+     &                     p_RELQMCL, 
+     &                     p_TAUAER_LW,
+                !-------------------------------------
+                ! Outputs
+     &                     UFLX,
+     &                     DFLX,
+     &                     HR,
+     &                     UFLXC,
+     &                     DFLXC,
+     &                     HRC, 
+     &                     DUFLX_DT,
+     &                     DUFLXC_DT )
+
+            ! Copy back into 3-D arrays
+            LW_UFLUX (I,J,:) = UFLX (1,:)
+            LW_DFLUX (I,J,:) = DFLX (1,:)
+            LW_UFLUXC(I,J,:) = UFLXC(1,:)
+            LW_DFLUXC(I,J,:) = DFLXC(1,:)
+            
+         ENDIF                  !LW
+
+         !--------------------------------------------------------------
+         ! RRTMG - Shortwave radiation
+         !--------------------------------------------------------------
+         IF (Input_Opt%LSWRAD) THEN
+
+!### Debug output
+!        write(6,*) 'SWSHIZ',TAUAER_SW(I,J,1,5),SWUFLX(1,1),SWDFLX(1,1),
+!     &         SWUFLXC(1,1),SWDFLXC(1,1)
+
+            ! Avoid array temporaries in subroutine calls (bmy, 6/3/15)
+            ! These arrays are only used in RRTMG_SW
+            p_SUNCOS     = SUNCOS    (  I,J,:  )
+            p_CLDFMCL_SW = CLDFMCL_SW(:,I,J,:  )
+            p_TAUCMCL_SW = TAUCMCL_SW(:,I,J,:  )
+            p_SSACMCL    = SSACMCL   (:,I,J,:  )
+            p_ASMCMCL    = ASMCMCL   (:,I,J,:  )
+            p_FSFCMCL    = FSFCMCL   (:,I,J,:  ) 
+            p_CIWPMCL_SW = CIWPMCL_SW(:,I,J,:  )
+            p_CLWPMCL_SW = CLWPMCL_SW(:,I,J,:  )
+            p_TAUAER_SW  = TAUAER_SW (  I,J,:,:)
+            p_SSAAER     = SSAAER    (  I,J,:,:)
+            p_ASMAER     = ASMAER    (  I,J,:,:)
+
+            ! Call RRTMG for shortwave radiation
+            CALL RRTMG_SW( 
+                !-------------------------------------
+                ! Inputs
+     &                     ONECOL,
+     &                     LLPAR,
+     &                     ICLDMCL, 
+     &                     p_PCENTER,
+     &                     p_PLEV,
+     &                     p_TLAY,
+     &                     p_TLEV,
+     &                     TSFC(I,J), 
+     &                     p_H2OVMR,
+     &                     p_O3VMR,
+     &                     p_CO2VMR,
+     &                     p_CH4VMR,
+     &                     p_N2OVMR,
+     &                     p_O2VMR, 
+     &                     ALBDIRVIS(I,J),
+     &                     ALBDIFVIS(I,J),
+     &                     ALBDIRNIR(I,J),
+     &                     ALBDIFNIR(I,J), 
+     &                     p_SUNCOS,
+     &                     ADJES,
+     &                     DOY,
+     &                     SCON, 
+     &                     INFLGSW,
+     &                     ICEFLGSW,
+     &                     LIQFLGSW,
+     &                     p_CLDFMCL_SW,
+     &                     p_TAUCMCL_SW,
+     &                     p_SSACMCL,
+     &                     p_ASMCMCL,
+     &                     p_FSFCMCL,
+     &                     p_CIWPMCL_SW,
+     &                     p_CLWPMCL_SW,
+     &                     p_REICMCL,
+     &                     p_RELQMCL, 
+     &                     p_TAUAER_SW,
+     &                     p_SSAAER,
+     &                     p_ASMAER,
+                !-------------------------------------
+                ! Outputs
+     &                     ECAER, 
+     &                     SWUFLX,
+     &                     SWDFLX,
+     &                     SWHR,
+     &                     SWUFLXC,
+     &                     SWDFLXC,
+     &                     SWHRC    )
+
+            ! Copy back into 3-D arrays
+            SW_UFLUX (I,J,:) = SWUFLX (1,:)
+            SW_DFLUX (I,J,:) = SWDFLX (1,:)
+            SW_UFLUXC(I,J,:) = SWUFLXC(1,:)
+            SW_DFLUXC(I,J,:) = SWDFLXC(1,:)
+
+         ENDIF !SW
+      ENDDO !IIPAR
+      ENDDO !JJPAR
+!$OMP END PARALLEL DO
+
+      
+      ! OUTPUT RADIATION VARIABLES TO DIAGNOSTIC
+      ! IF CALC WITH AEROSOLS AND GASES COMPLETED
+      ! USE ISPECMENU (REFERENCES THE INPUT.GEOS.RAD LIST)
+      ! TO DETERMINE WHICH FLUX HAS BEEN CALCULATED
+      ! OUTPUT DIAGNOSTIC INDEX IS ISPECMENU+1 (ISPECMENU=0 FOR BASELINE)
+      OUTIDX = ISPECMENU + 1
+
+      !THE NUMBER OF ND72 OUTPUTS PER FIELD
+      IF ( Input_Opt%LUCX ) THEN
+         NAD72 = NSPECRADMENU + 1
+      ELSE
+         NAD72 = NSPECRADMENU
+      ENDIF
+
+      !FIRST CHECK IF WE HAVE ALREADY OUTPUT AEROSOL DIAGNOSTICS
+      !(I.E. IF BOTH ALL-SKY AND CLEAR-SKY ARE SWITCHED ON)
+      IF ((Input_Opt%LSKYRAD(1)).AND.(Input_Opt%LSKYRAD(2))) THEN
+      !WE ONLY NEED TO OUTPUT DURING ONE OF THESE, SO DONT WHEN ICLD=0
+       IF (ICLD.EQ.0) THEN
+        LOUTPUTAERO=.FALSE.
+       ENDIF
+      ENDIF
+
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!%%%  This parallel loop gives identical results w/r/t to a RRTMG           %%%
+!%%%  simulation compiled with OpenMP turned off. (bmy, 6/2/15)             %%%
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!$OMP PARALLEL DO
+!$OMP+DEFAULT( SHARED )
+!$OMP+PRIVATE( I, J, LL, W )
+!$OMP+PRIVATE( AODTMP, SSATMP, ASYMTMP)
+!$OMP+PRIVATE( AODOUT, SSAOUT, ASYMOUT)
+!$OMP+SCHEDULE( DYNAMIC )
+      DO J=1,JJPAR
+      DO I=1,IIPAR
+#if defined( BPCH_DIAG )
+       !================================================================
+       ! %%%%% ND72 (bpch) DIAGNOSTIC %%%%%
+       !
+       ! Save clear-sky and all-sky fluxes from RRTMG [W/m2]
+       !================================================================
+
+       IF (ICLD.GT.0) THEN
+        !-------------------------------------------------------
+        !ALL-SKY (WE GET CLEAR-SKY WITH THIS TOO)
+        !N.B. UPWELLING SHOULD BE NEGATIVE AS DOWN IS +VE
+        !-------------------------------------------------------
+
+        ! All-sky SW flux @ TOA [W/m2]
+        AD72(I,J,OUTIDX) = AD72(I,J,OUTIDX) -  
+     &                     SNGL(SW_UFLUX(I,J,LLPAR+1))
+
+        ! All-sky SW flux @ surface [W/m2]
+        AD72(I,J,OUTIDX+NAD72) = AD72(I,J,OUTIDX+NAD72) +
+     &                     SNGL(SW_DFLUX(I,J,1))
+
+        ! All-sky LW flux @ TOA [W/m2]
+        AD72(I,J,OUTIDX+2*NAD72) = AD72(I,J,OUTIDX+2*NAD72) -
+     &                     SNGL(LW_UFLUX(I,J,LLPAR+1))
+
+        ! All-sky LW flux @ surface [W/m2]
+        AD72(I,J,OUTIDX+3*NAD72) = AD72(I,J,OUTIDX+3*NAD72) +
+     &                     SNGL(LW_DFLUX(I,J,1))
+
+        ! Clear-sky SW flux @ TOA [W/m2]
+        AD72(I,J,OUTIDX+4*NAD72) = AD72(I,J,OUTIDX+4*NAD72) -
+     &                     SNGL(SW_UFLUXC(I,J,LLPAR+1))
+
+        ! Clear-sky SW flux @ surface [W/m2]
+        AD72(I,J,OUTIDX+5*NAD72) = AD72(I,J,OUTIDX+5*NAD72) +
+     &                     SNGL(SW_DFLUXC(I,J,1))
+
+        ! Clear-sky LW flux @ TOA [W/m2]
+        AD72(I,J,OUTIDX+6*NAD72) = AD72(I,J,OUTIDX+6*NAD72) -
+     &                     SNGL(LW_UFLUXC(I,J,LLPAR+1))
+
+        ! Clear-sky LW flux @ surface [W/m2]
+        AD72(I,J,OUTIDX+7*NAD72) = AD72(I,J,OUTIDX+7*NAD72) +
+     &                     SNGL(LW_DFLUXC(I,J,1))
+       ELSE
+        !-------------------------------------------------------
+        ! CLEAR-SKY (RUNNING WITH CLOUDS OFF)
+        !-------------------------------------------------------
+          
+        ! Clear-sky SW flux @ TOA [w/m2]
+        AD72(I,J,OUTIDX+4*NAD72) = AD72(I,J,OUTIDX+4*NAD72) -
+     &                     SNGL(SW_UFLUX(I,J,LLPAR+1))
+
+        ! Clear-sky SW flux @ surface [W/m2]
+        AD72(I,J,OUTIDX+5*NAD72) = AD72(I,J,OUTIDX+5*NAD72) +
+     &                     SNGL(SW_DFLUX(I,J,1))
+
+        ! Clear-sky LW flux @ TOA [W/m2]
+        AD72(I,J,OUTIDX+6*NAD72) = AD72(I,J,OUTIDX+6*NAD72) -
+     &                     SNGL(LW_UFLUX(I,J,LLPAR+1))
+
+        ! Clear-sky LW flux @ surface [W/m2]
+        AD72(I,J,OUTIDX+7*NAD72) = AD72(I,J,OUTIDX+7*NAD72) +
+     &                     SNGL(LW_DFLUX(I,J,1))
+       ENDIF
+#endif
+
+#if defined( NC_DIAG ) 
+       !================================================================
+       ! %%%%% HISTORY (aka netCDF diagnostics) %%%%%
+       !
+       ! Save clear-sky and all-sky fluxes from RRTMG [W/m2]
+       !================================================================
+       IF ( ICLD > 0 ) THEN
+
+          !-------------------------------------------------------
+          !ALL-SKY (WE GET CLEAR-SKY WITH THIS TOO)
+          !N.B. UPWELLING SHOULD BE NEGATIVE AS DOWN IS +VE
+          !-------------------------------------------------------
+
+          ! All-sky SW flux @ TOA [W/m2]
+          IF ( State_Diag%Archive_RadAllSkySWTOA ) THEN
+             State_Diag%RadAllSkySWTOA(I,J) = -SW_UFLUX(I,J,LLPAR+1)
+          ENDIF
+
+          ! All-sky SW flux @ surface [W/m2]
+          IF ( State_Diag%Archive_RadAllSkySWSurf ) THEN
+             State_Diag%RadAllSkySWSurf(I,J) = SW_DFLUX(I,J,1)
+          ENDIF
+
+          ! All-sky LW flux @ TOA [W/m2]
+          IF ( State_Diag%Archive_RadAllSkyLWTOA ) THEN
+             State_Diag%RadAllSkyLWTOA(I,J) = -LW_UFLUX(I,J,LLPAR+1)
+          ENDIF
+
+          ! All-sky LW flux @ surface [W/m2]
+          IF ( State_Diag%Archive_RadAllSkyLWSurf ) THEN
+             State_Diag%RadAllSkyLWSurf(I,J) = LW_DFLUX(I,J,1)
+          ENDIF
+
+          ! Clear-sky SW flux @ TOA [W/m2]
+          IF ( State_Diag%Archive_RadClrSkySWTOA ) THEN
+             State_Diag%RadClrSkySWTOA(I,J) = -SW_UFLUXC(I,J,LLPAR+1)
+          ENDIF
+
+          ! Clear-sky SW flux @ surface [W/m2]
+          IF ( State_Diag%Archive_RadClrSkySWSurf ) THEN
+             State_Diag%RadClrSkySWSurf(I,J) = SW_DFLUXC(I,J,1)
+          ENDIF
+
+          ! Clear-sky LW flux @ TOA [W/m2]
+          IF ( State_Diag%Archive_RadClrSkyLWTOA ) THEN
+             State_Diag%RadClrSkyLWTOA(I,J) = -LW_UFLUXC(I,J,LLPAR+1)
+          ENDIF
+
+          ! Clear-sky LW flux @ surface [W/m2]
+          IF ( State_Diag%Archive_RadClrSkyLWSurf ) THEN
+             State_Diag%RadClrSkyLWSurf(I,J) = LW_DFLUXC(I,J,1)
+          ENDIF
+
+       ELSE
+     
+          !-------------------------------------------------------
+          ! CLEAR-SKY (RUNNING WITH CLOUDS OFF)
+          !-------------------------------------------------------
+
+          ! Clear-sky SW flux @ TOA [W/m2]
+          IF ( State_Diag%Archive_RadClrSkySWTOA ) THEN
+             State_Diag%RadClrSkySWTOA(I,J) = -SW_UFLUXC(I,J,LLPAR+1)
+          ENDIF
+
+          ! Clear-sky SW flux @ surface [W/m2]
+          IF ( State_Diag%Archive_RadClrSkySWSurf ) THEN
+             State_Diag%RadClrSkySWSurf(I,J) = SW_DFLUXC(I,J,1)
+          ENDIF
+
+          ! Clear-sky LW flux @ TOA [W/m2]
+          IF ( State_Diag%Archive_RadClrSkyLWTOA ) THEN
+             State_Diag%RadClrSkyLWTOA(I,J) = -LW_UFLUXC(I,J,LLPAR+1)
+          ENDIF
+
+          ! Clear-sky LW flux @ surface [W/m2]
+          IF ( State_Diag%Archive_RadClrSkyLWSurf ) THEN
+             State_Diag%RadClrSkyLWSurf(I,J) = LW_DFLUXC(I,J,1)
+          ENDIF
+
+       ENDIF
+#endif
+
+       !OUTPUT OPTICS FOR EACH AEROSOL...
+       !CHECK THAT WE HAVE SOME AEROSOL TO OUTPUT 
+       !SKIP OUTIDX=1,2,3 (BASELINE, OZONE AND CH4)
+       IF ((OUTIDX.GE.4).AND.(LOUTPUTAERO)) THEN
+        !INTERPOLATE TO THE REQUESTED WAVELENGTH       
+        DO W=1,Input_Opt%NWVSELECT
+         AODTMP  = 0.0D0
+         SSATMP  = 0.0D0
+         ASYMTMP = 0.0D0
+         AODOUT  = 0.0D0
+         SSAOUT  = 0.0D0
+         ASYMOUT = 0.0D0
+         DO LL=1,LLPAR
+          !CHECK AOD IS NON-ZERO BEFORE LOG...
+          IF((TAUAERDIAG(I,J,LL,IRTWVSELECT(2,W)).GT.0).AND.
+     &       (TAUAERDIAG(I,J,LL,IRTWVSELECT(1,W)).GT.0)) THEN
+           AODTMP=SNGL(TAUAERDIAG(I,J,LL,IRTWVSELECT(2,W))*
+     &            ACOEF_RTWV(W)**(BCOEF_RTWV(W)*
+     &            LOG(TAUAERDIAG(I,J,LL,IRTWVSELECT(1,W))/
+     &             TAUAERDIAG(I,J,LL,IRTWVSELECT(2,W)))))
+           SSATMP=SNGL( CCOEF_RTWV(W)*
+     &            SSAAERDIAG(I,J,LL,IRTWVSELECT(2,W))+
+     &            (1.0D0-CCOEF_RTWV(W))*
+     &            SSAAERDIAG(I,J,LL,IRTWVSELECT(1,W)))
+           ASYMTMP=SNGL( CCOEF_RTWV(W)*
+     &            ASMAERDIAG(I,J,LL,IRTWVSELECT(2,W))+
+     &            (1.0D0-CCOEF_RTWV(W))*
+     &            ASMAERDIAG(I,J,LL,IRTWVSELECT(1,W)))
+           AODOUT=AODOUT+AODTMP
+           SSAOUT=SSAOUT+SSATMP*AODTMP
+           ASYMOUT=ASYMOUT+ASYMTMP*SSATMP*AODTMP
+          ENDIF
+         ENDDO !LLPAR
+         !WE ARE SAVING COLUMN AVERAGED VALUES FOR EACH SPECIES
+         !DIVIDE THROUGH BY AOD*SSA (AOD-SSA WEIGHTING ACCOUNTS FOR
+         !GRIDBOXES)
+         ASYMOUT=ASYMOUT/SSAOUT
+         !DIVIDE THROUGH BY AOD
+         SSAOUT=SSAOUT/AODOUT
+         !offsetting output depending on wavelength
+#if defined( BPCH_DIAG )
+         AD72(I,J,OUTIDX+(8+3*(W-1))*NAD72) = 
+     &   AD72(I,J,OUTIDX+(8+3*(W-1))*NAD72) + AODOUT
+         AD72(I,J,OUTIDX+(9+3*(W-1))*NAD72) = 
+
+     &   AD72(I,J,OUTIDX+(9+3*(W-1))*NAD72) + SSAOUT
+         AD72(I,J,OUTIDX+(10+3*(W-1))*NAD72)= 
+     &   AD72(I,J,OUTIDX+(10+3*(W-1))*NAD72) + ASYMOUT
+#endif
+        ENDDO !NWVSELECT
+       ENDIF
+      ENDDO 
+      ENDDO
+!$OMP END PARALLEL DO
+
+      ! Convert species units back to original unit 
+      CALL Convert_Spc_Units( am_I_Root, Input_Opt, State_Met, 
+     &                        State_Chm, OrigUnit,  RC )
+      IF ( RC /= GC_SUCCESS ) THEN
+         CALL GC_Error('Unit conversion error', RC,     
+     &                 'DO_RRTMG_RAD_TRANSFER')
+         RETURN
+      ENDIF
+
+!EOC
+      END SUBROUTINE DO_RRTMG_RAD_TRANSFER
+!EOC
+!------------------------------------------------------------------------------
+!                  GEOS-Chem Global Chemical Transport Model                  !
+!------------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: set_specmask
+!
+! !DESCRIPTION: Subroutine SET\_SPECMASK converts the species switches in the
+!  input.mod radiation section into the list of species that should be passed
+!  through to RRTMG. This must be done in a subtractive way, e.g. If we require
+!  the DRE of sulfate then the baseline will contain all species and the
+!  sulfate run will contain everything but sulfate, this way the contribution
+!  of sulfate can be inferred. Therefore, all species are initially set to 1
+!  and their inclusion results in SPECMASK for the particular species being
+!  set to zero. (dar 10/2013)
+!\\
+!\\
+! !INTERFACE:
+!
+
+      SUBROUTINE SET_SPECMASK(ISPECRADMENU)
+!
+! !USES:
+!
+      USE CMN_FJX_MOD,   ONLY :  SPECMASK,NSPECRAD,NASPECRAD,
+     &                           LSPECRADMENU
+!
+! !INPUT PARAMETERS:
+!
+      INTEGER, INTENT(IN)    :: ISPECRADMENU
+! 
+! !REVISION HISTORY:
+!  18 Jun 2013 - D.A. Ridley - Initial version
+!  15 Jan 2015 - M. Sulprizio- Added ProTeX headers
+!  26 Jun 2015 - E. Lundgren - Fix typo in NXTRA definition
+!EOP
+!------------------------------------------------------------------------------
+!BOC
+!
+! !LOCAL VARIABLES:
+!
+      INTEGER                :: N0,N,I,II,NXTRA
+
+      !=================================================================
+      ! SET_SPECMASK begins here!
+      !=================================================================
+
+      !ISPECRADMENU IS THE INDEX OF THE SPECIES WITHIN THE INPUT MENU
+      !THE INDEX OF SPECMASK INDICATES THE POSITION OF THE SPECIES IN
+      !THE RT OPTICS ARRAY FOR THE AEROSOL 
+      !E.G. SO4 = 1 I.E. RTODAER(*,*,*,*,1)
+      !
+      !===FUNCTIONALITY FOR ADDING NEW SPECIES===
+      !EXTRA SPECIES ARE ADDED AFTER NAER (BEFORE NDUST AND GASES)
+      !SO WE NEED TO BUMP ALL THE SPECIES AFTER THAT BY NXTRA
+      !WHERE NXTRA=NUMBER OF NEW SPECIES ADDED ABOVE THE STANDARD CODE
+      !E.G. IF UCX=YES THEN NASPECRAD=18 AND STS AND NAT ARE INCLUDED
+      !IN RTODAER INDEX 8 AND 9, BEFORE DUST
+      NXTRA=NSPECRAD-16
+      !CONVERT THE CURRENT SPECIES SELECTION FROM THE INPUT MENU INTO
+      !THE REQUIRED SPECIES TO BE INCLUDED IN THE RRTMG CALCULATION
+      SPECMASK(:)=1
+
+      !IF ISPECRADMENU IS ZERO, WE JUST WANTED BASELINE, I.E. SPECMASK(:)=1
+      IF (ISPECRADMENU.GT.0) THEN
+       !CHECK THIS IS A REQUESTED SPECIES
+       IF(LSPECRADMENU(ISPECRADMENU).EQ.1) THEN 
+       SELECT CASE( ISPECRADMENU )
+       !OZONE
+       CASE( 1 ) 
+        SPECMASK(15+NXTRA)=0
+       !METHANE
+       CASE( 2 )
+        SPECMASK(16+NXTRA)=0
+       !SU
+       CASE( 3 )
+        SPECMASK(1)=3
+       !NI
+       CASE( 4 )
+        SPECMASK(2)=4
+       !AM
+       CASE( 5 )
+        SPECMASK(3)=5
+       !BC
+       CASE( 6 )
+        !Hydrophillic+phobic
+        SPECMASK(4)=6
+       !OA
+       CASE( 7 )
+        !Hydrophillic+phobic
+        SPECMASK(5)=7
+       !SS
+       CASE( 8 )
+        SPECMASK(6)=8
+        SPECMASK(7)=8
+       !DUST
+       CASE( 9 )
+        SPECMASK(8+NXTRA)=9
+        SPECMASK(9+NXTRA)=9
+        SPECMASK(10+NXTRA)=9
+        SPECMASK(11+NXTRA)=9
+        SPECMASK(12+NXTRA)=9
+        SPECMASK(13+NXTRA)=9
+        SPECMASK(14+NXTRA)=9
+       CASE( 10 )
+        !SET ALL BUT GASES TO 10
+        DO II = 1, NASPECRAD
+         SPECMASK(II)=10
+        ENDDO
+       !STRAT AEROSOL 
+       CASE( 11 )
+        !LSA
+        SPECMASK(8) = 11
+        !NAT
+        SPECMASK(9) = 11
+       END SELECT
+       ENDIF    
+      ENDIF
+
+      END SUBROUTINE SET_SPECMASK
+!EOC
+!------------------------------------------------------------------------------
+!                  GEOS-Chem Global Chemical Transport Model                  !
+!------------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: init_surface_rad
+!
+! !DESCRIPTION: Subroutine INIT\_SURFACE\_RAD initializes all allocatable
+!  module arrays.
+!\\
+!\\
+! !INTERFACE:
+!
+      SUBROUTINE INIT_SURFACE_RAD()
+!
+! !USES:
+!
+      USE CMN_FJX_MOD
+      USE CMN_SIZE_MOD
+      USE ERROR_MOD,    ONLY : ALLOC_ERR
+! 
+! !REVISION HISTORY:
+!  18 Jun 2013 - D.A. Ridley - Initial version
+!  15 Jan 2015 - M. Sulprizio- Added ProTeX headers
+!EOP
+!------------------------------------------------------------------------------
+!BOC
+!
+! !LOCAL VARIABLES:
+!
+      INTEGER :: AS
+
+      !=================================================================
+      ! INIT_SURFACE_RAD begins here!
+      !=================================================================
+
+      ALLOCATE( LW_UFLUX(IIPAR,JJPAR,LLPAR+1), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'LW_UFLUX' )
+      LW_UFLUX = 0D0
+
+      ALLOCATE( LW_DFLUX(IIPAR,JJPAR,LLPAR+1), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'LW_DFLUX' )
+      LW_DFLUX = 0D0
+
+      ALLOCATE( SW_UFLUX(IIPAR,JJPAR,LLPAR+1), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'SW_UFLUX' )
+      SW_UFLUX = 0D0
+
+      ALLOCATE( SW_DFLUX(IIPAR,JJPAR,LLPAR+1), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'SW_DFLUX' )
+      SW_DFLUX = 0D0
+
+      ALLOCATE( LW_UFLUXC(IIPAR,JJPAR,LLPAR+1), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'LW_UFLUXC' )
+      LW_UFLUXC = 0D0
+
+      ALLOCATE( LW_DFLUXC(IIPAR,JJPAR,LLPAR+1), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'LW_DFLUXC' )
+      LW_DFLUXC = 0D0
+
+      ALLOCATE( SW_UFLUXC(IIPAR,JJPAR,LLPAR+1), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'SW_UFLUXC' )
+      SW_UFLUXC = 0D0
+
+      ALLOCATE( SW_DFLUXC(IIPAR,JJPAR,LLPAR+1), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'SW_DFLUXC' )
+      SW_DFLUXC = 0D0
+
+      END SUBROUTINE INIT_SURFACE_RAD
+!EOC
+!------------------------------------------------------------------------------
+!                  GEOS-Chem Global Chemical Transport Model                  !
+!------------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: AttachPointersFromHemco
+!
+! !DESCRIPTION: Subroutine AttachPointersFromHemco attaches pointers for 
+!  various RRTMG input data that is read in via HEMCO to module variables.
+!\\
+!\\
+! !INTERFACE:
+!
+      SUBROUTINE AttachPointersFromHemco( am_I_root, RC )
+!
+! !USES:
+!
+      USE ErrCode_Mod
+      USE HCO_Interface_Mod, ONLY : HcoState
+      USE HCO_EmisList_Mod,  ONLY : HCO_GetPtr
+!
+! !INPUT PARAMETERS:
+!
+      LOGICAL, INTENT(IN)  :: am_I_Root   ! Are we on the root CPU?
+!
+! !OUTPUT PARAMETERS:
+!
+      INTEGER, INTENT(OUT) :: RC          ! Success or failure
+!
+! !REVISION HISTORY:
+!  18 Jun 2013 - D.A. Ridley - Initial version
+!  15 Jan 2015 - M. Sulprizio- Added ProTeX headers
+!  30 Oct 2018 - R. Yantosca - Now get inputs via HEMCO
+!EOP
+!------------------------------------------------------------------------------
+!BOC
+!
+! !LOCAL VARIABLES:
+!
+      CHARACTER(LEN=20)  :: FieldName
+      CHARACTER(LEN=255) :: ErrMsg, ThisLoc
+
+      !=================================================================
+      ! AttachPointersFromHemco begins here!
+      !=================================================================
+
+      ! Initialize
+      RC      = GC_SUCCESS
+      ErrMsg  = ''
+      ThisLoc =
+     & ' -> at AttachPointersFromHemco (in rrtmg_rad_transfer_mod.F)'
+
+      !-------------------------------
+      ! CCl4 [ppb]
+      !-------------------------------
+      FieldName = 'TES_CLIM_CCL4'
+      CALL HCO_GetPtr( am_I_Root, HcoState, FieldName, CCL4CLIM,  RC )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! CFC11 [ppb]
+      !-------------------------------
+      FieldName = 'TES_CLIM_CFC11'
+      CALL HCO_GetPtr( am_I_Root, HcoState, FieldName, CFC11CLIM, RC )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! CFC12 [ppb]
+      !-------------------------------
+      FieldName = 'TES_CLIM_CFC12'
+      CALL HCO_GetPtr( am_I_Root, HcoState, FieldName, CFC12CLIM, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! CFC22 [ppb]
+      !-------------------------------
+      FieldName = 'TES_CLIM_CFC22'
+      CALL HCO_GetPtr( am_I_Root, HcoState, FieldName, CFC22CLIM, RC  )
+
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! CH4 [ppb]
+      !-------------------------------
+      FieldName = 'TES_CLIM_CH4'
+      CALL HCO_GetPtr( am_I_Root, HcoState, FieldName, CH4CLIM,   RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! N2O [ppb]
+      !-------------------------------
+      FieldName = 'TES_CLIM_N2O'
+      CALL HCO_GetPtr( am_I_Root, HcoState, FieldName, N2OCLIM,   RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! Diffuse Near-IR albedo [1]
+      !-------------------------------
+      FieldName = 'MODIS_ALBDFNIR'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_ALBDFNIR, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! Diffuse visible albedo [1]
+      !-------------------------------
+      FieldName = 'MODIS_ALBDFVIS'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_ALBDFVIS, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! Direct Near-IR albedo [1]
+      !-------------------------------
+      FieldName = 'MODIS_ALBDRNIR'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_ALBDRNIR, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! Direct visible albedo [1]
+      !-------------------------------
+      FieldName = 'MODIS_ALBDRVIS'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_ALBDRVIS, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! MODIS emissivity, band 1 [1]
+      !-------------------------------
+      FieldName = 'MODIS_EMISSIVITY_01'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_EMISS_01, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! MODIS emissivity, band 2 [1]
+      !-------------------------------
+      FieldName = 'MODIS_EMISSIVITY_02'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_EMISS_02, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! MODIS emissivity, band 3 [1]
+      !-------------------------------
+      FieldName = 'MODIS_EMISSIVITY_03'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_EMISS_03, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! MODIS emissivity, band 4 [1]
+      !-------------------------------
+      FieldName = 'MODIS_EMISSIVITY_04'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_EMISS_04, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! MODIS emissivity, band 5 [1]
+      !-------------------------------
+      FieldName = 'MODIS_EMISSIVITY_05'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_EMISS_05, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! MODIS emissivity, band 6 [1]
+      !-------------------------------
+      FieldName = 'MODIS_EMISSIVITY_06'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_EMISS_06, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! MODIS emissivity, band 7 [1]
+      !-------------------------------
+      FieldName = 'MODIS_EMISSIVITY_07'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_EMISS_07, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! MODIS emissivity, band 8 [1]
+      !-------------------------------
+      FieldName = 'MODIS_EMISSIVITY_08'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_EMISS_08, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! MODIS emissivity, band 9 [1]
+      !-------------------------------
+      FieldName = 'MODIS_EMISSIVITY_09'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_EMISS_09, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! MODIS emissivity, band 10 [1]
+      !-------------------------------
+      FieldName = 'MODIS_EMISSIVITY_10'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_EMISS_10, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! MODIS emissivity, band 11 [1]
+      !-------------------------------
+      FieldName = 'MODIS_EMISSIVITY_11'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_EMISS_11, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! MODIS emissivity, band 12 [1]
+      !-------------------------------
+      FieldName = 'MODIS_EMISSIVITY_12'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_EMISS_12, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! MODIS emissivity, band 13 [1]
+      !-------------------------------
+      FieldName = 'MODIS_EMISSIVITY_13'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_EMISS_13, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! MODIS emissivity, band 14 [1]
+      !-------------------------------
+      FieldName = 'MODIS_EMISSIVITY_14'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_EMISS_14, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! MODIS emissivity, band 15 [1]
+      !-------------------------------
+      FieldName = 'MODIS_EMISSIVITY_15'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_EMISS_15, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+      !-------------------------------
+      ! MODIS emissivity, band 16 [1]
+      !-------------------------------
+      FieldName = 'MODIS_EMISSIVITY_16'
+      CALL HCO_GetPtr( am_I_Root, HcoState, 
+     &                 FieldName, MODIS_EMISS_16, RC  )
+      IF ( RC /= GC_SUCCESS ) THEN
+         ErrMsg = 'Cannot get pointer to ' // TRIM( FieldName )
+         CALL GC_Error( ErrMsg, RC, ThisLoc )
+         RETURN
+      ENDIF
+
+
+      END SUBROUTINE AttachPointersFromHemco
+!EOC
+!------------------------------------------------------------------------------
+!                  GEOS-Chem Global Chemical Transport Model                  !
+!------------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: init_mcica_clouds
+!
+! !DESCRIPTION: Subroutine INIT\_MCICA\_CLOUDS initializes all allocatable
+!  module arrays.
+!\\
+!\\
+! !INTERFACE:
+!
+      SUBROUTINE INIT_MCICA_CLOUDS()
+!
+! !USES:
+!
+      USE CMN_FJX_MOD
+      USE CMN_SIZE_MOD
+      USE ERROR_MOD,    ONLY : ALLOC_ERR
+      USE PARRRTM,      ONLY : NGPTLW
+      USE PARRRSW,      ONLY : NGPTSW
+! 
+! !REVISION HISTORY:
+!  18 Jun 2013 - D.A. Ridley - Initial version
+!  15 Jan 2015 - M. Sulprizio- Added ProTeX headers
+!  17 May 2016 - M. Sulprizio- Change array dimensions from IIPAR*JJPAR to
+!                              IIPAR,JJPAR
+!EOP
+!------------------------------------------------------------------------------
+!BOC
+!
+! !LOCAL VARIABLES:
+!
+      INTEGER :: AS
+
+      !=================================================================
+      ! INIT_MCICA_CLOUDS begins here!
+      !=================================================================
+
+      ALLOCATE( CLDFMCL_LW( NGPTLW, IIPAR, JJPAR, LLPAR ), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'CLDFMCL_LW' )
+      CLDFMCL_LW = 0D0
+
+      ALLOCATE( CIWPMCL_LW( NGPTLW, IIPAR, JJPAR, LLPAR ), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'CIWPMCL_LW' )
+      CIWPMCL_LW = 0D0
+
+      ALLOCATE( CLWPMCL_LW( NGPTLW, IIPAR, JJPAR, LLPAR ), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'CLWPMCL_LW' )
+      CLWPMCL_LW = 0D0
+
+      ALLOCATE( TAUCMCL_LW( NGPTLW, IIPAR, JJPAR, LLPAR ), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'TAUCMCL_LW' )
+      TAUCMCL_LW = 0D0
+
+      ALLOCATE( CLDFMCL_SW( NGPTSW, IIPAR, JJPAR, LLPAR ), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'CLDFMCL_SW' )
+      CLDFMCL_SW = 0D0
+
+      ALLOCATE( CIWPMCL_SW( NGPTSW, IIPAR, JJPAR, LLPAR ), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'CIWPMCL_SW' )
+      CIWPMCL_SW = 0D0
+
+      ALLOCATE( CLWPMCL_SW( NGPTSW, IIPAR, JJPAR, LLPAR ), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'CLWPMCL_SW' )
+      CLWPMCL_SW = 0D0
+
+      ALLOCATE( TAUCMCL_SW( NGPTSW, IIPAR, JJPAR, LLPAR ), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'TAUCMCL_SW' )
+      TAUCMCL_SW = 0D0
+
+      ALLOCATE( SSACMCL( NGPTSW, IIPAR, JJPAR, LLPAR ), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'SSACMCL' )
+      SSACMCL = 0D0
+
+      ALLOCATE( ASMCMCL( NGPTSW, IIPAR, JJPAR, LLPAR ), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'ASMCMCL' )
+      ASMCMCL = 0D0
+
+      ALLOCATE( FSFCMCL( NGPTSW, IIPAR, JJPAR, LLPAR ), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'FSFCMCL' )
+      FSFCMCL = 0D0
+
+      ALLOCATE( RELQMCL( IIPAR, JJPAR, LLPAR ), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'RELQMCL' )
+      RELQMCL = 0D0
+
+      ALLOCATE( REICMCL( IIPAR, JJPAR, LLPAR ), STAT=AS )
+      IF ( AS /= 0 ) CALL ALLOC_ERR( 'REICMCL' )
+      REICMCL = 0D0
+
+      END SUBROUTINE INIT_MCICA_CLOUDS
+!EOC
+!------------------------------------------------------------------------------
+!                  GEOS-Chem Global Chemical Transport Model                  !
+!------------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: cleanup_surface_rad
+!
+! !DESCRIPTION: Subroutine CLEANUP\_SURFACE\_RAD deallocates all module arrays.
+!\\
+!\\
+! !INTERFACE:
+!
+      SUBROUTINE CLEANUP_SURFACE_RAD
+!
+! !REVISION HISTORY:
+!  18 Jun 2013 - D.A. Ridley - Initial version
+!  15 Jan 2015 - M. Sulprizio- Added ProTeX headers
+!EOP
+!------------------------------------------------------------------------------
+!BOC
+!
+      !=================================================================
+      ! CLEANUP_SURFACE_RAD begins here!
+      !=================================================================
+      IF ( ALLOCATED( LW_UFLUX        ) ) DEALLOCATE( LW_UFLUX        )
+      IF ( ALLOCATED( LW_DFLUX        ) ) DEALLOCATE( LW_DFLUX        )
+      IF ( ALLOCATED( SW_UFLUX        ) ) DEALLOCATE( SW_UFLUX        )
+      IF ( ALLOCATED( SW_DFLUX        ) ) DEALLOCATE( SW_DFLUX        )
+      IF ( ALLOCATED( LW_UFLUXC       ) ) DEALLOCATE( LW_UFLUXC       )
+      IF ( ALLOCATED( LW_DFLUXC       ) ) DEALLOCATE( LW_DFLUXC       )
+      IF ( ALLOCATED( SW_UFLUXC       ) ) DEALLOCATE( SW_UFLUXC       )
+      IF ( ALLOCATED( SW_DFLUXC       ) ) DEALLOCATE( SW_DFLUXC       )
+
+      END SUBROUTINE CLEANUP_SURFACE_RAD
+!EOC
+!------------------------------------------------------------------------------
+!                  GEOS-Chem Global Chemical Transport Model                  !
+!------------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: cleanup_strat_clim
+!
+! !DESCRIPTION: Subroutine CLEANUP\_STRAT\_CLIM deallocates all module arrays.
+!\\
+!\\
+! !INTERFACE:
+!
+      SUBROUTINE CLEANUP_STRAT_CLIM
+!
+! !REVISION HISTORY:
+!  18 Jun 2013 - D.A. Ridley - Initial version
+!  15 Jan 2015 - M. Sulprizio- Added ProTeX headers
+!EOP
+!------------------------------------------------------------------------------
+!BOC
+!
+      !=================================================================
+      ! CLEANUP_STRAT_CLIM begins here!
+      !=================================================================
+
+      ! Climatology
+      CH4CLIM        => NULL()
+      N2OCLIM        => NULL()
+      CFC11CLIM      => NULL()
+      CFC12CLIM      => NULL()
+      CCL4CLIM       => NULL()
+      CFC22CLIM      => NULL()
+
+      ! Albedoes
+      MODIS_ALBDFNIR => NULL() 
+      MODIS_ALBDFVIS => NULL()
+      MODIS_ALBDRNIR => NULL()
+      MODIS_ALBDRVIS => NULL()
+
+      ! Emissivity
+      MODIS_EMISS_01 => NULL() 
+      MODIS_EMISS_02 => NULL() 
+      MODIS_EMISS_03 => NULL() 
+      MODIS_EMISS_04 => NULL() 
+      MODIS_EMISS_05 => NULL() 
+      MODIS_EMISS_06 => NULL() 
+      MODIS_EMISS_07 => NULL() 
+      MODIS_EMISS_08 => NULL() 
+      MODIS_EMISS_09 => NULL() 
+      MODIS_EMISS_10 => NULL() 
+      MODIS_EMISS_11 => NULL() 
+      MODIS_EMISS_12 => NULL() 
+      MODIS_EMISS_13 => NULL() 
+      MODIS_EMISS_14 => NULL() 
+      MODIS_EMISS_15 => NULL() 
+      MODIS_EMISS_16 => NULL() 
+
+      END SUBROUTINE CLEANUP_STRAT_CLIM
+!EOC
+!------------------------------------------------------------------------------
+!                  GEOS-Chem Global Chemical Transport Model                  !
+!------------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: cleanup_mcica_clouds
+!
+! !DESCRIPTION: Subroutine CLEANUP\_MCICA\_CLOUDS deallocates all module arrays.
+!\\
+!\\
+! !INTERFACE:
+!
+      SUBROUTINE CLEANUP_MCICA_CLOUDS
+!
+! !REVISION HISTORY:
+!  18 Jun 2013 - D.A. Ridley - Initial version
+!  15 Jan 2015 - M. Sulprizio- Added ProTeX headers
+!EOP
+!------------------------------------------------------------------------------
+!BOC
+!
+      !=================================================================
+      ! CLEANUP_MCICA_CLOUDS begins here!
+      !=================================================================
+      IF ( ALLOCATED( CLDFMCL_LW     ) ) DEALLOCATE( CLDFMCL_LW       )
+      IF ( ALLOCATED( CIWPMCL_LW     ) ) DEALLOCATE( CIWPMCL_LW       )
+      IF ( ALLOCATED( CLWPMCL_LW     ) ) DEALLOCATE( CLWPMCL_LW       )
+      IF ( ALLOCATED( TAUCMCL_LW     ) ) DEALLOCATE( TAUCMCL_LW       )
+      IF ( ALLOCATED( CLDFMCL_SW     ) ) DEALLOCATE( CLDFMCL_SW       )
+      IF ( ALLOCATED( CIWPMCL_SW     ) ) DEALLOCATE( CIWPMCL_SW       )
+      IF ( ALLOCATED( CLWPMCL_SW     ) ) DEALLOCATE( CLWPMCL_SW       )
+      IF ( ALLOCATED( TAUCMCL_SW     ) ) DEALLOCATE( TAUCMCL_SW       )
+      IF ( ALLOCATED( SSACMCL        ) ) DEALLOCATE( SSACMCL          )
+      IF ( ALLOCATED( ASMCMCL        ) ) DEALLOCATE( ASMCMCL          )
+      IF ( ALLOCATED( FSFCMCL        ) ) DEALLOCATE( FSFCMCL          )
+      IF ( ALLOCATED( REICMCL        ) ) DEALLOCATE( REICMCL          )
+      IF ( ALLOCATED( RELQMCL        ) ) DEALLOCATE( RELQMCL          )
+
+      END SUBROUTINE CLEANUP_MCICA_CLOUDS
+!EOC
+      END MODULE RRTMG_RAD_TRANSFER_MOD
+#endif
