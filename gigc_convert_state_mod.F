@@ -622,7 +622,7 @@ contains
         do i = its, ite
             II = i - its + 1
             JJ = j - jts + 1
-            State_Met%AREA_M2(II, JJ, k) = grid%dx * grid%dy / grid%msftx(i, j) / grid%msfty(i, j)
+            State_Met%AREA_M2(II, JJ, 1) = grid%dx * grid%dy / grid%msftx(i, j) / grid%msfty(i, j)
             if(k .ne. kts) then ! Start from kts + 1
                 State_Met%PEDGE(II, JJ, k) = .01*(grid%fnm(k)*(grid%p(i, k, j) + grid%pb(i, k, j)) + grid%fnp(k)*(grid%p(i, k-1, j) + grid%pb(i, k-1, j)))
             endif
