@@ -189,7 +189,7 @@ the_thermonuclear_option:
 
 gchp_utils.o                : gchp_utils.F90
 
-gigc_stateful_mod.o         : gigc_stateful_mod.F90 gigc_mpi_wrap.o
+gigc_stateful_mod.o         : gigc_stateful_mod.F90
 
-gigc_chunk_mod.o            : gigc_chunk_mod.F90 gigc_mpi_wrap.o gchp_utils.o gigc_stateful_mod.o
+gigc_chunk_mod.o            : gigc_chunk_mod.F90 gchp_utils.o gigc_stateful_mod.o
 

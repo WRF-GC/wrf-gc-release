@@ -190,6 +190,7 @@ LIB     :=$(ROOT)/lib
 KPP     :=$(ROOT)/KPP
 MOD     :=$(ROOT)/mod
 NCDF    :=$(ROOT)/NcdfUtil
+OBSP    :=$(ROOT)/ObsPack
 RAD     :=$(ROOT)/GeosRad
 UTIL    :=$(ROOT)/GeosUtil
 DYN     :=$(GCHP)/FVdycoreCubed_GridComp
@@ -267,6 +268,7 @@ lib:                                               # Build all G-C libraries
 	@$(MAKE) libutil 
 	@$(MAKE) libkpp
 	@$(MAKE) libhistory
+	@$(MAKE) libobspack
 	@$(MAKE) libhemco
 	@$(MAKE) libiso
 	@$(MAKE) librad
@@ -319,6 +321,9 @@ kppfirstpass:                                      # Compile some KPP code 1st
 libnc:                                             # Build code in NcdfUtil/
 	@$(MAKE) -C $(NCDF) libnc
 
+libobspack:                                        # Build code in ObsPack/
+	@$(MAKE) -C $(OBSP) lib
+
 libutil:                                           # Build code in GeosUtil/
 	@$(MAKE) -C $(UTIL)			  
 
@@ -356,6 +361,7 @@ realclean:                                         # Remove files everywhere
 	@$(MAKE) -C $(HEMCO) clean
 	@$(MAKE) -C $(HDR)   clean
 	@$(MAKE) -C $(HIST)  clean
+	@$(MAKE) -C $(OBSP)  clean
 	@$(MAKE) -C $(ISO)   clean
 	@$(MAKE) -C $(KPP)   realclean
 	@$(MAKE) -C $(NCDF)  clean
@@ -378,6 +384,7 @@ realclean_except_rrtmg:                            # Don't realclean RRTMG
 	@$(MAKE) -C $(HEMCO) slowclean
 	@$(MAKE) -C $(HDR)   slowclean
 	@$(MAKE) -C $(HIST)  slowclean
+	@$(MAKE) -C $(OBSP)  slowclean
 	@$(MAKE) -C $(ISO)   slowclean
 	@$(MAKE) -C $(KPP)   slowrealclean
 	@$(MAKE) -C $(NCDF)  slowclean
@@ -643,7 +650,8 @@ gc_environment_mod.o        : gc_environment_mod.F90                         \
                               toms_mod.o              tpcore_bc_mod.o        \
                               vdiff_pre_mod.o         wetscav_mod.o
 
-get_met_mod.o               : get_met_mod.F90
+get_met_mod.o               : get_met_mod.F90                                \
+                              hco_interface_mod.o
 
 get_ndep_mod.o              : get_ndep_mod.F                              
 
@@ -668,7 +676,8 @@ hcoi_gc_main_mod.o          : hcoi_gc_main_mod.F90                           \
                               get_ndep_mod.o          drydep_mod.o           \
                               modis_lai_mod.o         fast_jx_mod.o          \
                               hcoi_gc_diagn_mod.o     tomas_mod.o            \
-                              hco_interface_mod.o
+                              hco_interface_mod.o     flexgrid_read_mod.o    \
+                              ocean_mercury_mod.o
 
 initialize.o                : initialize.F                                   \
                               diag_mod.o              diag03_mod.o           \

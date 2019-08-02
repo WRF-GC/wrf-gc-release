@@ -205,6 +205,11 @@ MODULE State_Met_Mod
      REAL(fp), POINTER :: DP_DRY_PREV   (:,:,:) ! Previous State_Met%DELP_DRY
 
      !----------------------------------------------------------------------
+     ! Age of air for diagnosing transport
+     !----------------------------------------------------------------------
+     INTEGER,  POINTER :: AgeOfAir      (:,:,:) ! Age of air [s]
+     
+     !----------------------------------------------------------------------
      ! Offline land type, leaf area index, and chlorophyll fields
      !----------------------------------------------------------------------
      INTEGER,  POINTER :: IREG          (:,:  ) ! # of landtypes in box (I,J) 
@@ -224,6 +229,11 @@ MODULE State_Met_Mod
      REAL(fp), POINTER :: LandTypeFrac  (:,:,:) ! Olson frac per type (I,J,type)
      REAL(fp), POINTER :: XLAI_NATIVE   (:,:,:) ! avg LAI per type (I,J,type)
      REAL(fp), POINTER :: XCHLR_NATIVE  (:,:,:) ! avg CHLR per type (I,J,type)
+
+     REAL(fp), POINTER :: XLAI2         (:,:,:) ! MODIS LAI per land type, 
+                                                !  for next month
+     REAL(fp), POINTER :: XCHLR2        (:,:,:) ! MODIS CHLR per land type,
+                                                !  for next month    
 
      !----------------------------------------------------------------------
      ! Fields for querying in which vertical regime a grid box is in
@@ -521,6 +531,7 @@ CONTAINS
     State_Met%InTroposphere  => NULL()
     State_Met%IsLocalNoon    => NULL()
     State_Met%LocalSolarTime => NULL()
+    State_Met%AgeOfAir       => NULL()
 
     !=======================================================================
     ! Allocate 2-D Fields
@@ -1687,6 +1698,17 @@ CONTAINS
                             State_Met, RC )
     IF ( RC /= GC_SUCCESS ) RETURN
 
+    !-------------------------
+    ! Age of Air [s]
+    !-------------------------
+    ALLOCATE( State_Met%AgeOfAir( IM, JM, LM ), STAT=RC )
+    CALL GC_CheckVar( 'State_Met%AgeOfAir', 0, RC )
+    IF ( RC /= GC_SUCCESS ) RETURN
+    State_Met%AgeOfAir = 0
+    CALL Register_MetField( am_I_Root, 'AgeOfAir', State_Met%AgeOfAir, &
+                            State_Met, RC )
+    IF ( RC /= GC_SUCCESS ) RETURN
+    
     !=======================================================================
     ! Allocate land type and leaf area index fields for dry deposition
     !=======================================================================
@@ -1754,6 +1776,28 @@ CONTAINS
     IF ( RC /= GC_SUCCESS ) RETURN
     State_Met%XCHLR = 0.0_fp
     CALL Register_MetField( am_I_Root, 'XCHLR', State_Met%XCHLR, &
+                            State_Met, RC )
+    IF ( RC /= GC_SUCCESS ) RETURN
+
+    !-------------------------
+    ! XLAI2 [1]
+    !-------------------------
+    ALLOCATE( State_Met%XLAI2( IM, JM, NSURFTYPE ), STAT=RC )
+    CALL GC_CheckVar( 'State_Met%XLAI2', 0, RC )
+    IF ( RC /= GC_SUCCESS ) RETURN
+    State_Met%XLAI2 = 0.0_fp
+    CALL Register_MetField( am_I_Root, 'XLAI2', State_Met%XLAI2, &
+                            State_Met, RC )
+    IF ( RC /= GC_SUCCESS ) RETURN
+
+    !-------------------------
+    ! XCHLR2 [mg m-3]
+    !-------------------------
+    ALLOCATE( State_Met%XCHLR2( IM, JM, NSURFTYPE ), STAT=RC )
+    CALL GC_CheckVar( 'State_Met%XCHLR2', 0, RC )
+    IF ( RC /= GC_SUCCESS ) RETURN
+    State_Met%XCHLR2 = 0.0_fp
+    CALL Register_MetField( am_I_Root, 'XCHLR2', State_Met%XCHLR2, &
                             State_Met, RC )
     IF ( RC /= GC_SUCCESS ) RETURN
 
@@ -2921,6 +2965,28 @@ CONTAINS
 #endif
     ENDIF
 
+    IF ( ASSOCIATED( State_Met%XLAI2 ) ) THEN
+#if defined( ESMF_ ) || defined( MODEL_WRF )
+       State_Met%XLAI2 => NULL()
+#else
+       DEALLOCATE( State_Met%XLAI2, STAT=RC  )
+       CALL GC_CheckVar( 'State_Met%XLAI2', 2, RC )
+       IF ( RC /= GC_SUCCESS ) RETURN
+       State_Met%XLAI2 => NULL()
+#endif
+    ENDIF
+
+    IF ( ASSOCIATED( State_Met%XCHLR2 ) ) THEN
+#if defined( ESMF_ ) || defined( MODEL_WRF )
+       State_Met%XCHLR2 => NULL()
+#else
+       DEALLOCATE( State_Met%XCHLR2, STAT=RC  )
+       CALL GC_CheckVar( 'State_Met%XCHLR2', 2, RC )
+       IF ( RC /= GC_SUCCESS ) RETURN
+       State_Met%XCHLR2 => NULL()
+#endif
+    ENDIF
+
     IF ( ASSOCIATED( State_Met%XLAI_NATIVE ) ) THEN
 #if defined( ESMF_ ) || defined( MODEL_WRF )
        State_Met%XLAI_NATIVE => NULL()
@@ -2943,6 +3009,17 @@ CONTAINS
 #endif
     ENDIF
 
+    IF ( ASSOCIATED( State_Met%AgeOfAir ) ) THEN
+#if defined( ESMF_ ) || defined( MODEL_WRF )
+       State_Met%AgeOfAir => NULL()
+#else
+       DEALLOCATE( State_Met%AgeOfAir, STAT=RC  )
+       CALL GC_CheckVar( 'State_Met%AgeOfAir', 2, RC )
+       IF ( RC /= GC_SUCCESS ) RETURN
+       State_Met%AgeOfAir => NULL()
+#endif
+    ENDIF
+    
     !=======================================================================
     ! Fields for querying which vertical regime a grid box is in
     ! or if it is near local solar noon at a grid box
@@ -3759,6 +3836,12 @@ CONTAINS
           IF ( isUnits ) Units = 'm2 m-2'
           IF ( isRank  ) Rank  = 3
 
+       CASE ( 'XLAI2' )
+          IF ( isDesc  ) Desc  = 'MODIS LAI for each Olson land type, ' // &
+                                 'next month'
+          IF ( isUnits ) Units = 'm2 m-2'
+          IF ( isRank  ) Rank  = 3
+
        CASE ( 'MODISLAI' )
           IF ( isDesc  ) Desc  = 'Daily LAI computed from monthly ' // &
                                  'offline MODIS values'
@@ -3768,6 +3851,12 @@ CONTAINS
        CASE ( 'XCHLR' )
           IF ( isDesc  ) Desc  = 'MODIS chlorophyll-a per land type, ' // &
                                  'current month'
+          IF ( isUnits ) Units = 'mg m-3'
+          IF ( isRank  ) Rank  = 3
+
+       CASE ( 'XCHLR2' )
+          IF ( isDesc  ) Desc  = 'MODIS chlorophyll-a per land type, ' // &
+                                 'next month'
           IF ( isUnits ) Units = 'mg m-3'
           IF ( isRank  ) Rank  = 3
 
@@ -3792,6 +3881,12 @@ CONTAINS
           IF ( isUnits ) Units = 'mg m-3'
           IF ( isRank  ) Rank  = 3
 
+       CASE ( 'AGEOFAIR' )
+          IF ( isDesc  ) Desc  = 'Age of air'
+          IF ( isUnits ) Units = 's'
+          IF ( isRank  ) Rank  = 3
+          IF ( isVLoc  ) VLoc  = VLocationCenter
+          
 !       CASE ( 'INCHEMGRID' )
 !          IF ( isDesc  ) Desc  = 'Is each grid box in the chemistry grid?'
 !          IF ( isUnits ) Units = 'boolean'

@@ -6,15 +6,15 @@
 !                  \  /\  /  | | \ \| |         | |__| | |____                 !
 !                   \/  \/   |_|  \_\_|          \_____|\_____|                !
 !                                                                              !
-!----------------------- ALPHA VERSION, v0.1 (20190101) -----------------------!
+!----------------------- ALPHA VERSION, v0.9 (20190802) -----------------------!
 !
 ! WRF-GC: GEOS-Chem High Performance-powered Chemistry Add-On for WRF Model
-! Developed by Haipeng Lin <linhaipeng@pku.edu.cn>, Xu Feng <fengx7@pku.edu.cn>
+! Developed by Haipeng Lin <hplin@g.harvard.edu>, Xu Feng <fengx7@pku.edu.cn>
 !    January 2018, Peking University, Dept of Atmospheric and Oceanic Sciences
-!    Correspondence to: Tzung-May Fu <tmfu@pku.edu.cn>
+!    Correspondence to: Tzung-May Fu <fuzm@sustech.edu.cn>
 !
 ! ALPHA INFORMATION:
-!    WRF-GC Alpha (version 0.1) is experimental. Please notify the authors of
+!    WRF-GC Alpha (version 0.9) is experimental. Please notify the authors of
 !    any bugs, suggestions and feature requests through email or the GitHub
 !    repository.
 !
@@ -46,11 +46,12 @@
 !
 !------------------------------------------------------------------------------- 
 module GIGC_Convert_State_Mod
+
     use module_domain
     use module_dm
     use module_model_constants
     use module_state_description
-    use module_chem_utilities, only: calc_zenithb, getpar
+    use module_chem_utilities, only: calc_zenithb, getpar, get_cloud_optical_depth
     use module_convection_prep
 
     use GIGC_Chunk_Mod
@@ -64,6 +65,7 @@ module GIGC_Convert_State_Mod
 
     implicit none
     private
+
     public :: GIGC_IdxSetup
     public :: GIGC_Get_WRF
     public :: GIGC_Set_WRF
@@ -353,7 +355,8 @@ contains
     subroutine GIGC_Get_WRF(am_I_Root, &
         config_flags, grid, &
         num_chem, chem, num_scalar, scalar, num_moist, moist, &
-        dz8w, p8w, pi_phy, &
+        dz8w, p8w, t8w, pi_phy, &
+        f_qc, f_qi, f_qs, &
         its, ite, jts, jte, &
         ide, jde, &
         kts, kte, &
@@ -364,15 +367,16 @@ contains
         use PRESSURE_MOD,  only: ACCEPT_EXTERNAL_APBP
 
         implicit none
+
         logical, intent(in) :: am_I_Root
         type(grid_config_rec_type), intent(in) :: config_flags
 
         type(domain), target :: grid
-        integer, intent(in)  :: num_chem, num_scalar, num_moist
+        integer, intent(in)  :: num_chem, num_scalar, num_moist ! # of WRF chem, moist variables. Check "dummy_new_args.inc" & "actual_new_args.inc" in WRF compile.
         real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33, num_chem), intent(in)   :: chem
         real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33, num_scalar), intent(in) :: scalar
         real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33, num_moist), intent(in)  :: moist
-        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33, num_moist), intent(in)  :: dz8w, p8w, pi_phy
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33), intent(in)  :: dz8w, p8w, pi_phy, t8w
         integer, intent(in) :: its, ite, jts, jte, ide, jde, kts, kte, ids, jds, kds
 
         real(KIND=8) :: curr_secs
@@ -380,63 +384,109 @@ contains
         type(MetState), intent(inout) :: State_Met
         type(ChmState), intent(inout) :: State_Chm
 
-        real(KIND=8), intent(inout)   :: WRFGC_Phys_Time
-        integer :: debug_level      
-        integer :: GEOS_CHEM_RC     
-        integer :: IM, II           
-        integer :: JM, JJ           
-        integer :: LM               
-        integer :: i, j, k          
+        real(KIND=8), intent(inout)   :: WRFGC_Phys_Time  ! Cumulative time spent in physics/parameterization calculation time
+
+        integer :: debug_level      ! WRF Debug Level
+        integer :: GEOS_CHEM_RC     ! GEOS-Chem Return Code (0 = Success)
+
+        integer :: IM, II           ! # of lons on this PET
+        integer :: JM, JJ           ! # of lats on this PET
+        integer :: LM               ! # of levs on this PET
+        integer :: i, j, k          ! Loop variable over xts, xte (x = i, j, k)
         integer :: N
-        real :: zen, pardb, pardif
-        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33) :: cmfmc, pmflxrain, pmflxsnow
-        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33) :: dqrcu
-        integer, dimension(grid%sm31:grid%em31, grid%sm33:grid%em33) :: cloud_bot
-        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33) :: dtrainu, dtraind, dtrain
-        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33) :: reevapcn
-        logical, dimension(grid%sm31:grid%em31, grid%sm33:grid%em33) :: cu_act_flag
+
+        real :: zen, pardb, pardif  ! For computing %SUNCOSmid, %PARDB, %PARDF
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33) :: cmfmc, pmflxrain, pmflxsnow    ! For computing %CMFMC, %PFLCU, %PFICU
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33) :: dqrcu  ! For computing %DQRCU
+        integer, dimension(grid%sm31:grid%em31, grid%sm33:grid%em33) :: cloud_bot ! For computing %DQRCU
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33) :: dtrainu, dtraind, dtrain ! For computing %DTRAIN
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33) :: reevapcn ! For computing %REEVAPCN
+        logical, dimension(grid%sm31:grid%em31, grid%sm33:grid%em33) :: cu_act_flag ! For cu_ntiedtke
+        real, dimension(grid%sm31:grid%em31, grid%sm33:grid%em33) :: raincv_diag, pratec_diag ! For cu_ntiedtke
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33) :: rqccuten_diag, rqicuten_diag, rqvcuten_diag, &
+                                                                                          rthcuten_diag, rucuten_diag, rvcuten_diag ! For preventing re-writing the values of grid%
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33) :: taucldc, taucldi, optd !For computing %TAUCLW, %TAUCLI, %OPTD
+        logical, optional, intent(in) :: f_qc, f_qi, f_qs ! For computing %TAUCLW, %TAUCLI, %OPTD        
+
         real(fp), allocatable :: Ap(:)
         real(fp), allocatable :: Bp(:)
+
         character*256 :: mminlu_loc
+
         real(KIND=8)          :: WRFGC_Time_Temp_Start, WRFGC_Time_Temp_End
+
         logical, save :: FIRST = .true.      ! Is first run?
+
         call nl_get_debug_level(1, debug_level)
         call set_wrf_debug_level(debug_level)
+
         call nl_get_mminlu(1, mminlu_loc) 
+
         IM = ite - its + 1
         JM = jte - jts + 1
         LM = kte - kts + 1
+
+
         WRFGC_Time_Temp_Start = MPI_Wtime()
 
         if(config_flags%cu_physics .eq. 16) then
+        
+            raincv_diag   = grid%raincv
+            pratec_diag   = grid%pratec
+            rqccuten_diag = grid%rqccuten
+            rqicuten_diag = grid%rqicuten
+            rqvcuten_diag = grid%rqvcuten
+            rthcuten_diag = grid%rthcuten
+            rucuten_diag  = grid%rucuten
+            rvcuten_diag  = grid%rvcuten
+        
             call cu_ntiedtke(                                         &
                  grid%dt, grid%itimestep, grid%stepcu                 &
-                ,grid%raincv, grid%pratec, grid%qfx, grid%hfx         &
+                ,raincv_diag, pratec_diag, grid%qfx, grid%hfx         &
                 ,grid%u_phy, grid%v_phy, grid%w_2, grid%t_phy         &
                 ,moist(grid%sm31,grid%sm32,grid%sm33,p_qv)            &
                 ,moist(grid%sm31,grid%sm32,grid%sm33,p_qc)            &
                 ,moist(grid%sm31,grid%sm32,grid%sm33,p_qi)            &
                 ,pi_phy, grid%rho                                     &
                 ,grid%rqvften, grid%rthften                           &
-                ,dz8w, grid%p_hyd, p8w, grid%xland, cu_act_flag       &
-                ,grid%dx, ids, ide, jds, jde, kds, kte+1              &
+                ,dz8w, grid%p_hyd, grid%p_hyd_w, grid%xland           & 
+                ,cu_act_flag, grid%dx                                 &
+                ,ids, ide, jds, jde, kds, kte+1                       &
                 ,grid%sm31, grid%em31, grid%sm33, grid%em33           &
                 ,grid%sm32, grid%em32                                 &
                 ,its, ite, jts, jte, kts, kte                         &
-                ,grid%rthcuten, grid%rqvcuten, grid%rqccuten          &
-                ,grid%rqicuten, grid%rucuten, grid%rvcuten            &
+                ,rthcuten_diag, rqvcuten_diag, rqccuten_diag          &
+                ,rqicuten_diag, rucuten_diag, rvcuten_diag            &
                 ,pmflxrain, pmflxsnow, cmfmc, dqrcu, cloud_bot        &
                 ,dtrainu, dtraind, dtrain, reevapcn                   )
         endif
+        
+        if(config_flags%ra_lw_physics .eq. 4) then
+           call get_cloud_optical_depth(t8w, dz8w                     & 
+               ,grid%t_phy, grid%p_hyd_w                              &
+               ,moist(grid%sm31,grid%sm32,grid%sm33,p_qc)             &
+               ,moist(grid%sm31,grid%sm32,grid%sm33,p_qi)             &
+               ,moist(grid%sm31,grid%sm32,grid%sm33,p_qs)             &
+               ,taucldc, taucldi, optd                                &
+               ,f_qc, f_qi, f_qs                                      &
+               ,grid%sm31, grid%em31, grid%sm33, grid%em33            &
+               ,grid%sm32, grid%em32                                  &
+               ,its, ite, jts, jte, kts, kte                          )
+        endif
+        
         if(config_flags%hybrid_opt .eq. 2) then
             allocate(Ap(LM+1))
             allocate(Bp(LM+1))
+
             do k = kts, kte
                 Ap(k) = (grid%c4f(k) + (1 - grid%c3f(k)) * grid%p_top) * .01_fp
                 Bp(k) = grid%c3f(k)
             enddo
-            Ap(LM+1) = grid%p_top / p1000mb * .01_fp
+
+            Ap(LM+1) = grid%p_top * .01_fp
             Bp(LM+1) = 0
+
+
             call ACCEPT_EXTERNAL_APBP(am_I_Root, Ap, Bp, GEOS_CHEM_RC)
 
             deallocate(Ap)
@@ -455,17 +505,26 @@ contains
             write(6, *) "  BE INACCURATE AND OUTRIGHT WRONG. PLEASE CHECK.    "
             write(6, *) "====================================================="
         endif
+
         WRFGC_Time_Temp_End = MPI_Wtime()
         WRFGC_Phys_Time = WRFGC_Phys_Time + (WRFGC_Time_Temp_End - WRFGC_Time_Temp_Start)
+
         call wrf_debug(100, "GIGC_Convert_State_Mod before State_Met% Conversion")
+
         do j = jts, jte
         do i = its, ite
             II = i - its + 1
             JJ = j - jts + 1
+
             State_Met%ALBD(II, JJ) = grid%albedo(i, j)
+
             State_Met%CLDFRC(II, JJ) = grid%CLDT(i, j)
+
+            
             State_Met%EFLUX(II, JJ) = grid%LH(i, j)
+
             State_Met%FRCLND(II, JJ) = State_Met%FRLAND(II, JJ)
+
             if(grid%lu_mask(i, j) .eq. 0 .and. grid%lakemask(i, j) .eq. 0 .and. grid%snowh(i, j) .eq. 0) then
                  State_Met%FRLAND(II, JJ) = 1.0_fp
                  State_Met%FROCEAN(II, JJ) = 0.0_fp
@@ -491,7 +550,9 @@ contains
                  State_Met%FRLAKE(II, JJ) = 0.0_fp
                  State_Met%FRLANDIC(II, JJ) = 1.0_fp
             endif
+
             State_Met%FRSEAICE(II, JJ) = grid%icefrac_gc(i, j)
+
             if(mminlu_loc .eq. 'USGS') then
                 select case(int(grid%lu_index(i, j)))
                 case (1, 31, 32, 33) ! Urban, residential
@@ -543,90 +604,144 @@ contains
                     State_Met%LandTypeFrac(II, JJ, 8 ) = 1.0_fp ! Bare Desert
                     State_Met%XLAI        (II, JJ, 8 ) = grid%lai(i, j)
                 case default
-
                     State_Met%LandTypeFrac(II, JJ, 2 ) = 1.0_fp
                     State_Met%XLAI        (II, JJ, 2 ) = grid%lai(i, j)
                 end select
             else if(mminlu_loc .eq. 'MODIFIED_IGBP_MODIS_NOAH') then
 
             endif
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            
             State_Met%GWETROOT(II, JJ) = grid%sm100200(i, j)
+            
             State_Met%GWETTOP(II, JJ) = grid%sm000010(i, j)
+            
             State_Met%HFLUX(II, JJ) = grid%hfx(i, j)
+
             State_Met%LAI(II, JJ) = grid%lai(i, j)
+
             State_Met%MODISLAI(II, JJ) = grid%lai(i, j)
+
+            
             if(grid%lu_mask(i, j) .eq. 0) then
                 State_Met%LWI(II, JJ) = 1
             else if(grid%lu_mask(i, j) .eq. 1) then
                 State_Met%LWI(II, JJ) = 0
             endif
+            
             State_Met%PBLH(II, JJ) = grid%pblh(i, j)
+
             State_Met%PBL_TOP_L(II, JJ) = grid%kpbl(i, j)
+
             State_Met%PHIS(II, JJ) = grid%ph_2(i, kts, j) + grid%phb(i, kts, j)
+            
             State_Met%PRECANV(II, JJ) = (grid%snowncv(i, j) + grid%graupelncv(i, j) + grid%hailncv(i, j))/grid%dt
+            
             State_Met%PRECCON(II, JJ) = grid%pratec(i, j)
+            
             State_Met%PRECTOT(II, JJ) = (grid%rainncv(i, j) + grid%snowncv(i, j) + grid%graupelncv(i, j) + grid%hailncv(i, j))/grid%dt + grid%pratec(i, j)
+            
             State_Met%PRECLSC(II, JJ) = grid%rainncv(i, j)/grid%dt
+
             State_Met%PS1_WET(II, JJ) = .01*grid%psfc(i, j)
             State_Met%PS2_WET(II, JJ) = .01*(grid%psfc(i, j) + grid%dpsdt(i, j) * grid%dt)
             State_Met%PSC2_WET(II, JJ) = .01*grid%psfc(i, j)
+
+            
             State_Met%PS1_DRY(II, JJ) = .01*grid%psfc(i, j) - 28.97e-3_fp*max(moist(i, kts, j, p_qv) * (1._fp / (1._fp + moist(i, kts, j, p_qv))), 1.0e-30_fp) /&
                                     (18.01e+0_fp + 10.96e-3_fp * max(moist(i, kts, j, p_qv) * (1._fp / (1._fp + moist(i, kts, j, p_qv))), 1.0e-30_fp)) * grid%psfc(i, j)
             State_Met%PS2_DRY(II, JJ) = State_Met%PS1_DRY(II, JJ) + .01 * grid%dpsdt(i, j) * grid%dt
             State_Met%PSC2_DRY(II, JJ) = .01*grid%psfc(i, j) - 28.97e-3_fp*max(moist(i, kts, j, p_qv) * (1._fp / (1._fp + moist(i, kts, j, p_qv))), 1.0e-30_fp) /&
                                     (18.01e+0_fp + 10.96e-3_fp * max(moist(i, kts, j, p_qv) * (1._fp / (1._fp + moist(i, kts, j, p_qv))), 1.0e-30_fp)) * grid%psfc(i, j)
+            
+
+
+
             State_Met%SEAICE00(II, JJ) = 1.0_fp
+
             State_Met%SLP(II, JJ) = grid%pslv_gc(i, j) / 100.
+
+
             State_Met%SNODP(II, JJ) = grid%snowh(i, j)
+
             State_Met%SNOMAS(II, JJ) = grid%acsnow(i, j)
+            
             State_Met%SUNCOS(II, JJ) = grid%coszen(i, j)
+            
             call calc_zenithb(grid%xlat(i, j), grid%xlong(i, j)*(-1.), grid%julday, grid%dt, grid%gmt, curr_secs, zen)
             State_Met%SUNCOSmid(II, JJ) = cos(zen)
+
             call getpar(grid%swdown(i, j), 0.01*(grid%p(i, kts, j)+grid%pb(i, kts, j)), zen, pardb, pardif)
             State_Met%PARDR(II, JJ) = pardb
             State_Met%PARDF(II, JJ) = pardif
+
             State_Met%SWGDN(II, JJ) = grid%swdown(i, j)
+            
             if (.not. FIRST) then
                 State_Met%TO3(II, JJ) = 0.0_fp
                 do k = kts, kte
                    State_Met%TO3(II, JJ) =  State_Met%TO3(II, JJ) + chem(i, k, j, p_o3) * State_Met%AD(II, JJ, k) / (grid%dx * grid%dy / grid%msftx(i, j) / grid%msfty(i, j)) * 22.4e+0_fp / 28.97e+0_fp * 0.1_fp
                 enddo
             endif
+
             State_Met%TROPP(II, JJ) = grid%tropo_p(i, j) / 100.
+
             State_Met%TS(II, JJ) = grid%t2(i, j)
+
             State_Met%TSKIN(II, JJ) = grid%tsk(i, j)
+            
             State_Met%U10M(II, JJ) = grid%u10(i, j)
+
             State_Met%USTAR(II, JJ) = grid%ust(i, j)
+            
             State_Met%UVALBEDO(II, JJ) = grid%albedo(i, j)
+            
             State_Met%V10M(II, JJ) = grid%v10(i, j)
+
             State_Met%Z0(II, JJ) = grid%znt(i, j)
+            
+
             State_Met%PFLCU(II, JJ, LM+1) = 0._fp
             State_Met%PFICU(II, JJ, LM+1) = 0._fp
             State_Met%PFLLSAN(II, JJ, LM+1) = 0._fp
             State_Met%PFILSAN(II, JJ, LM+1) = 0._fp
-            State_Met%PEDGE(II, JJ, 1) = .01*((grid%ph_2(i, 1, j) + grid%phb(i, 1, j) - grid%ph_2(i, 3, j) - grid%phb(i, 3, j))/                                         &
-                                               (grid%ph_2(i, 1, j) + grid%phb(i, 1, j) - grid%ph_2(i, 2, j) - grid%phb(i, 2, j))*(grid%p(i, 1, j) + grid%pb(i, 1, j)) +  &
-                                               (grid%ph_2(i, 3, j) + grid%phb(i, 3, j) - grid%ph_2(i, 2, j) - grid%phb(i, 2, j))/                                        &
-                                               (grid%ph_2(i, 1, j) + grid%phb(i, 1, j) - grid%ph_2(i, 2, j) - grid%phb(i, 2, j))*(grid%p(i, 2, j) + grid%pb(i, 2, j)))
-            State_Met%PEDGE(II, JJ, LM + 1) = .01*(exp((grid%ph_2(i, 1, j) + grid%phb(i, 1, j) - grid%ph_2(i, 3, j) - grid%phb(i, 3, j))/                                &
-                                                      (grid%ph_2(i, 1, j) + grid%phb(i, 1, j) - grid%ph_2(i, 2, j) - grid%phb(i, 2, j))*                                 &
-                                                   log(grid%p(i, kte, j) + grid%pb(i, kte, j)) +                                                                         &
-                                                      (grid%ph_2(i, 3, j) + grid%phb(i, 3, j) - grid%ph_2(i, 2, j) - grid%phb(i, 2, j))/                                 &
-                                                      (grid%ph_2(i, 1, j) + grid%phb(i, 1, j) - grid%ph_2(i, 2, j) - grid%phb(i, 2, j))*                                 &
-                                                   log(grid%p(i, kte-1, j) + grid%pb(i, kte-1, j))))
+            
+            State_Met%PEDGE(II, JJ, kts) = 0.01_fp*grid%psfc(i, j)
+
+            State_Met%PEDGE(II, JJ, LM + 1) = 0.01_fp*grid%p_top
         enddo
         enddo
+
         call wrf_debug(100, "GIGC_Convert_State_Mod after 2-D State_Met% Conversion")
+
         do k = kts, kte
         do j = jts, jte
         do i = its, ite
             II = i - its + 1
             JJ = j - jts + 1
+
+
             State_Met%AREA_M2(II, JJ, 1) = grid%dx * grid%dy / grid%msftx(i, j) / grid%msfty(i, j)
+
             if(k .ne. kts) then ! Start from kts + 1
-                State_Met%PEDGE(II, JJ, k) = .01*(grid%fnm(k)*(grid%p(i, k, j) + grid%pb(i, k, j)) + grid%fnp(k)*(grid%p(i, k-1, j) + grid%pb(i, k-1, j)))
+                State_Met%PEDGE(II, JJ, k) = .01_fp*(grid%c3f(k)*(grid%psfc(i, j) - grid%p_top) + grid%c4f(k) + grid%p_top)
             endif
+
             State_Met%CLDF(II, JJ, k) = grid%cldfra(i, k, j)
+
             if(config_flags%cu_physics .eq. 10) then
                 State_Met%CMFMC(II, JJ, k) = grid%mfup_cup(i, k, j)
             else if(config_flags%cu_physics .eq. 7) then
@@ -634,17 +749,21 @@ contains
             else if(config_flags%cu_physics .eq. 16) then
                 State_Met%CMFMC(II, JJ, k) = cmfmc(i, k, j)
             endif
+
             State_Met%T(II, JJ, k) = (grid%t_2(i, k, j) + t0)*((grid%p(i, k, j) + grid%pb(i, k, j))/p1000mb)**rcp
+
             if(config_flags%cu_physics .eq. 7) then
                 State_Met%DQRCU(II, JJ, k) = grid%zmntprpd(i, k, j)
             else if(config_flags%cu_physics .eq. 16) then
                 State_Met%DQRCU(II, JJ, k) = dqrcu(i, k, j)
             endif
+            
             if(config_flags%mp_physics .eq. 10 .or. config_flags%mp_physics .eq. 8) then
                 State_Met%DQRLSAN(II, JJ, k) = grid%rainprod(i, k, j)
             else if(config_flags%mp_physics .eq. 11) then
                 State_Met%DQRLSAN(II, JJ, k) = grid%prain3d(i, k, j)
             endif
+            
             if(config_flags%cu_physics .eq. 7) then
                 State_Met%DTRAIN(II, JJ, k) = grid%du3d(i, k, j)*grid%dp3d(i, k, j)*100._fp/9.8_fp
                 if(State_Met%DTRAIN(II, JJ, k) > 0.5) then
@@ -653,24 +772,30 @@ contains
             else if(config_flags%cu_physics .eq. 16) then
                 State_Met%DTRAIN(II, JJ, k) = dtrain(i, k, j)
             endif
+
             if(State_Met%AIRVOL(II, JJ, k) .ne. 0) then
                 State_Met%OMEGA(II, JJ, k) = -9.8_fp*State_Met%AD(II, JJ, k)/State_Met%AIRVOL(II, JJ, k)*grid%w_2(i, k, j)
             endif
+
             State_Met%QI(II, JJ, k) = moist(i, k, j, p_qi)
             State_Met%QL(II, JJ, k) = moist(i, k, j, p_qc)
+
             if(config_flags%cu_physics .eq. 7) then
                 State_Met%REEVAPCN(II, JJ, k) = abs(grid%evapcdp3d(i, k, j))
             else if(config_flags%cu_physics .eq. 16) then
                 State_Met%REEVAPCN(II, JJ, k) = abs(reevapcn(i, k, j)*State_Met%AD(II, JJ, k)/State_Met%AREA_M2(II, JJ, k))
             endif
+            
             if(config_flags%mp_physics .eq. 10) then
                 State_Met%REEVAPLS(II, JJ, k) = abs(grid%evapprod(i, k, j))
             else if(config_flags%mp_physics .eq. 11) then
                 State_Met%REEVAPLS(II, JJ, k) = abs(grid%nevapr3d(i, k, j))
             endif
+
             State_Met%RH(II, JJ, k) = max(.1, min(.95, moist(i, k, j, p_qv)/ &
                                    (3.80*exp(17.27*(State_Met%T(II, JJ, k) - 273.)/ &
                                              (State_Met%T(II, JJ, k) - 36.))/(.01*(grid%p(i, k, j) + grid%pb(i, k, j)))))) * 100
+
             State_Met%SPHU(II, JJ, k) = max(moist(i, k, j, p_qv) * (1._fp / (1._fp + moist(i, k, j, p_qv))), 1.0e-30_fp)
             State_Met%SPHU1(II, JJ, k) = State_Met%SPHU(II, JJ, k)
             if(config_flags%cu_physics .eq. 7) then
@@ -678,19 +803,29 @@ contains
             else ! Unsupported physics option
                 State_Met%SPHU2(II, JJ, k) = State_Met%SPHU(II, JJ, k)
             endif
+
             if(i .ne. ide) then
                 State_Met%U(II, JJ, k) = 0.5*(grid%u_2(i, k, j) + grid%u_2(i + 1, k, j))
             else
                 State_Met%U(II, JJ, k) = grid%u_2(i, k, j)
             endif
+
             if(j .ne. jde) then
                 State_Met%V(II, JJ, k) = 0.5*(grid%v_2(i, k, j) + grid%v_2(i, k, j + 1))
             else
                 State_Met%V(II, JJ, k) = grid%v_2(i, k, j)
             endif
-            State_Met%TAUCLI(II, JJ, k) = grid%taucldi(i, k, j)
-            State_Met%TAUCLW(II, JJ, k) = grid%taucldc(i, k, j)
-            State_Met%OPTD(II, JJ, k) = State_Met%TAUCLI(II, JJ, k) + State_Met%TAUCLW(II, JJ, k)
+
+            if(config_flags%ra_lw_physics .eq. 3 .or. config_flags%ra_lw_physics .eq. 5) then
+                State_Met%TAUCLI(II, JJ, k) = grid%taucldi(i, k, j)
+                State_Met%TAUCLW(II, JJ, k) = grid%taucldc(i, k, j)
+                State_Met%OPTD(II, JJ, k) = State_Met%TAUCLI(II, JJ, k) + State_Met%TAUCLW(II, JJ, k)
+            else if(config_flags%ra_lw_physics .eq. 4) then
+                State_Met%TAUCLI(II, JJ, k) = taucldi(i, k, j)
+                State_Met%TAUCLW(II, JJ, k) = taucldc(i, k, j)
+                State_Met%OPTD(II, JJ, k) = optd(i, k, j)
+            endif
+
             if(config_flags%cu_physics .eq. 7) then
                 State_Met%PFLCU(II, JJ, k) = grid%zmflxprc(i, k, j)
                 State_Met%PFICU(II, JJ, k) = grid%zmflxsnw(i, k, j)
@@ -698,13 +833,17 @@ contains
                 State_Met%PFLCU(II, JJ, k) = pmflxrain(i, k, j)
                 State_Met%PFICU(II, JJ, k) = pmflxsnow(i, k, j)
             endif
+
             State_Met%PFLLSAN(II, JJ, k) = grid%precr(i, k, j)
             State_Met%PFILSAN(II, JJ, k) = grid%preci(i, k, j) + grid%precs(i, k, j) + grid%precg(i, k, j)
+
             State_Met%TMPU1(II, JJ, k) = State_Met%T(II, JJ, k)
             State_Met%TMPU2(II, JJ, k) = State_Met%T(II, JJ, k)
+
             if(State_Met%AIRVOL(II, JJ, k) .ne. 0) then
                 State_Met%UPDVVEL(II, JJ, k) = -9.8_fp*State_Met%AD(II, JJ, k)/State_Met%AIRVOL(II, JJ, k)*grid%w_2(i, k, j)
             endif
+
             grid%diagikj0(i, k, j) = State_Met%CMFMC(II, JJ, k)
             grid%diagikj1(i, k, j) = State_Met%DTRAIN(II, JJ, k)
             grid%diagikj2(i, k, j) = State_Met%PFLCU(II, JJ, k)
@@ -717,9 +856,11 @@ contains
             grid%diagij1(i, j) = State_Met%PRECCON(II, JJ)
             grid%diagij2(i, j) = State_Met%PRECLSC(II, JJ)
             grid%diagij3(i, j) = State_Met%TO3(II, JJ)
+
             if(k .eq. kte) then
                 if(minval(State_Met%PEDGE(II, JJ, 1:LM)) .ge. State_Met%TROPP(II, JJ)) then
                     State_Met%TROPP(II, JJ) = minval(State_Met%PEDGE(II, JJ, 1:LM))
+                    write(6, *) "GIGC_Convert_State_Mod fixed T-PAUSE for GEOS-CHEM-CGM, set T-PAUSE to LLPAR"
                 endif
             endif
 
@@ -886,11 +1027,14 @@ contains
                 State_Chm%Species(II, JJ, k, gi_isalc) = chem(i, k, j, p_isalc) * 1.0e-6_fp
                 State_Chm%Species(II, JJ, k, gi_aeri) = chem(i, k, j, p_aeri) * 1.0e-6_fp
                 State_Chm%Species(II, JJ, k, gi_pfe) = chem(i, k, j, p_pfe) * 1.0e-6_fp
+
             endif
         enddo ! Loop over i
         enddo ! Loop over j
         enddo ! Loop over k
+
         call wrf_debug(100, "GIGC_Convert_State_Mod after 3-D State_Met% Conversion")
+
         if(config_flags%have_bcs_chem .and. FIRST) then
             call wrf_debug(1, "GIGC_Convert_State_Mod updating chemistry concentrations in GEOS-Chem from WRF IC values")
             do k = kts, kte
@@ -898,6 +1042,7 @@ contains
             do i = its, ite
                 II = i - its + 1
                 JJ = j - jts + 1
+
                 State_Chm%Species(II, JJ, k, gi_no) = chem(i, k, j, p_no) * 1.0e-6_fp
                 State_Chm%Species(II, JJ, k, gi_o3) = chem(i, k, j, p_o3) * 1.0e-6_fp
                 State_Chm%Species(II, JJ, k, gi_pan) = chem(i, k, j, p_pan) * 1.0e-6_fp
@@ -954,6 +1099,15 @@ contains
 
         call wrf_debug(100, "GIGC_Convert_State_Mod after State Conversion")
 
+        if(debug_level .ge. 999 .and. FIRST) then
+            write(6, *) "%%%%%% GIGC_Convert_State_Mod Chemistry State Export %%%%%%"
+            write(6, *) "Units: ", State_Chm%Spc_Units
+            do N = 1, State_Chm%nSpecies
+                WRITE(6, *) "N:", N, State_Chm%SpcData(N)%Info%Name, &
+                            "Is_Adv:", State_Chm%SpcData(N)%Info%Is_Advected
+            enddo
+        endif
+
         FIRST = .false.
 
     end subroutine GIGC_Get_WRF
@@ -966,38 +1120,66 @@ contains
         Input_Opt, State_Met, State_Chm, State_Diag)
         use aerosol_mod, only:   PM25
         implicit none
+
         logical, intent(in) :: am_I_Root
         type(grid_config_rec_type), intent(in) :: config_flags
         type(domain), target :: grid
+
         integer, intent(in) :: num_chem, num_scalar, num_moist ! # of WRF chem, moist variables. Check "dummy_new_args.inc" & "actual_new_args.inc" in WRF compile.
         real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33, num_chem), intent(inout)   :: chem
         real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33, num_scalar), intent(inout) :: scalar
         real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33, num_moist), intent(inout)  :: moist
+
         integer, intent(in) :: its, ite, jts, jte, ide, jde, kts, kte
+
         type(OptInput), intent(inout) :: Input_Opt
         type(MetState), intent(inout) :: State_Met
         type(ChmState), intent(inout) :: State_Chm
         type(DgnState), intent(inout) :: State_Diag
-        integer :: debug_level 
+        integer :: debug_level      ! WRF Debug Level
         integer :: N
-        integer :: IM, II      
-        integer :: JM, JJ      
-        integer :: LM          
-        integer :: i, j, k     
+
+        integer :: IM, II           ! # of lons on this PET
+        integer :: JM, JJ           ! # of lats on this PET
+        integer :: LM               ! # of levs on this PET
+        integer :: i, j, k          ! Loop variable over xts, xte (x = i, j, k)
+
         call nl_get_debug_level(1, debug_level)
         call set_wrf_debug_level(debug_level)
+
         IM = ite - its + 1
         JM = jte - jts + 1
         LM = kte - kts + 1
+
+
+
+
+
         where(State_Chm%Species < 0.0e0)
             State_Chm%Species = 1.0e-36
         endwhere
+
         call wrf_debug(1, "GIGC_Convert_State_Mod updating chemistry concs/diags in WRF from GEOS-Chem values")
+
         do j = jts, jte
         do k = kts, kte
         do i = its, ite
+
             II = i - its + 1
             JJ = j - jts + 1
+
+            if(IT_IS_NAN(State_Chm%Species(II, JJ, k, 7))) then
+                State_Chm%Species(II, JJ, k, 8) = 1.0e-36_fp
+            endif
+
+            if(IT_IS_NAN(State_Chm%Species(II, JJ, k, 8))) then
+                State_Chm%Species(II, JJ, k, 8) = 1.0e-36_fp
+            endif
+
+            if(IT_IS_NAN(State_Chm%Species(II, JJ, k, 26))) then
+                State_Chm%Species(II, JJ, k, 26) = 1.0e-36_fp
+            endif
+
             chem(i, k, j, p_no) = State_Chm%Species(II, JJ, k, gi_no) * 1.0e+6_fp
             chem(i, k, j, p_o3) = State_Chm%Species(II, JJ, k, gi_o3) * 1.0e+6_fp
             chem(i, k, j, p_pan) = State_Chm%Species(II, JJ, k, gi_pan) * 1.0e+6_fp
@@ -1256,9 +1438,22 @@ contains
             chem(i, k, j, p_n2) = State_Chm%Species(II, JJ, k, gi_n2) * 1.0e+6_fp
             chem(i, k, j, p_o2) = State_Chm%Species(II, JJ, k, gi_o2) * 1.0e+6_fp
             chem(i, k, j, p_rcooh) = State_Chm%Species(II, JJ, k, gi_rcooh) * 1.0e+6_fp
-            grid%pm2_5_dry(i, k, j) = PM25(II, JJ, k) * 1.0e+9_fp ! kg/m^3 -> \mug/m^3
+
+            if(allocated(PM25)) then
+                grid%pm2_5_dry(i, k, j) = PM25(II, JJ, k) * 1.0e+9_fp ! kg/m^3 -> \mug/m^3
+            endif
+
+
+
+
+
+
+
+
             if(config_flags%gc_diagn_spc_n0 .ne. 0 .and. config_flags%gc_diagn_spc_n0 .le. State_Chm%nSpecies) then
                 grid%cldcnvflx_n0(i, k, j) = State_Diag%CloudConvFlux(II, JJ, k, config_flags%gc_diagn_spc_n0)
+
+
                 grid%gcemisdrydep_full_n0(i, j) = State_Diag%BudgetEmisDryDepFull(II, JJ, &
                                                   State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%AdvectID)
                 grid%gcemisdrydep_trop_n0(i, j) = State_Diag%BudgetEmisDryDepTrop(II, JJ, &
@@ -1305,8 +1500,8 @@ contains
             endif
 
             if(config_flags%gc_diagn_spc_n1 .ne. 0 .and. config_flags%gc_diagn_spc_n1 .le. State_Chm%nSpecies) then
-
                 grid%cldcnvflx_n1(i, k, j) = State_Diag%CloudConvFlux(II, JJ, k, config_flags%gc_diagn_spc_n1)
+
                 grid%gcemisdrydep_full_n1(i, j) = State_Diag%BudgetEmisDryDepFull(II, JJ, &
                                                   State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%AdvectID)
                 grid%gcemisdrydep_trop_n1(i, j) = State_Diag%BudgetEmisDryDepTrop(II, JJ, &
@@ -1355,10 +1550,7 @@ contains
             endif
 
             if(config_flags%gc_diagn_spc_n2 .ne. 0 .and. config_flags%gc_diagn_spc_n2 .le. State_Chm%nSpecies) then
-
                 grid%cldcnvflx_n2(i, k, j) = State_Diag%CloudConvFlux(II, JJ, k, config_flags%gc_diagn_spc_n2)
-
-
 
                 grid%gcemisdrydep_full_n2(i, j) = State_Diag%BudgetEmisDryDepFull(II, JJ, &
                                                   State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%AdvectID)
@@ -1407,10 +1599,7 @@ contains
             endif
 
             if(config_flags%gc_diagn_spc_n3 .ne. 0 .and. config_flags%gc_diagn_spc_n3 .le. State_Chm%nSpecies) then
-
                 grid%cldcnvflx_n3(i, k, j) = State_Diag%CloudConvFlux(II, JJ, k, config_flags%gc_diagn_spc_n3)
-
-
 
                 grid%gcemisdrydep_full_n3(i, j) = State_Diag%BudgetEmisDryDepFull(II, JJ, &
                                                   State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%AdvectID)
@@ -1460,13 +1649,76 @@ contains
         enddo
         enddo
         enddo
+
+
+        if(debug_level .ge. 100) then
+            WRITE(6, *) "%%%% REGISTERED STATE_CHM SPECIES DUMP %%%%"
+            do N = 1, MIN(State_Chm%nSpecies, 15)
+                WRITE(6, *) "N:", N, "Name:", State_Chm%SpcData(N)%Info%Name
+                WRITE(6, *) "Value at PET (1,1,1):", State_Chm%Species(1, 1, 1, N)
+            enddo
+        endif
+
+        if(debug_level .ge. 1 .and. debug_level .lt. 100) then
+            WRITE(6, *) "%%%% State_Chm IMPORTANT SPECIES DUMP - DEBUG WRF|GCHP %%%%"
+            WRITE(6, *) "At I = 1, J = 1, L = 1, units: ", State_Chm%Spc_Units
+            WRITE(6, *) "O3:", State_Chm%Species(1, 1, 1, IND_('O3'))
+            WRITE(6, *) "CO:", State_Chm%Species(1, 1, 1, IND_('CO'))
+            WRITE(6, *) "NH3:", State_Chm%Species(1, 1, 1, IND_('NH3'))
+            WRITE(6, *) "NO2:", State_Chm%Species(1, 1, 1, IND_('NO2'))
+
+            WRITE(6, *) "Sums at L = 1"
+            WRITE(6, *) "O3:", SUM(State_Chm%Species(:, :, 1, IND_('O3')))
+            WRITE(6, *) "CO:", SUM(State_Chm%Species(:, :, 1, IND_('CO')))
+            WRITE(6, *) "NH3:", SUM(State_Chm%Species(:, :, 1, IND_('NH3')))
+
+            WRITE(6, *) "%%%% State_Diag DUMP - DEBUG WRF|GC %%%%"
+            WRITE(6, *) "At I = 1, J = 1 (L = 1) - diagnostic states"
+            WRITE(6, *) "Species#", config_flags%gc_diagn_spc_n0, " ",        &
+                                    config_flags%gc_diagn_spc_n1, " ",        &
+                                    config_flags%gc_diagn_spc_n2, " ",        &
+                                    config_flags%gc_diagn_spc_n3
+            WRITE(6, *) "Species Names -"
+            IF(config_flags%gc_diagn_spc_n0 .ne. 0 .and. config_flags%gc_diagn_spc_n0 .le. State_Chm%nSpecies) THEN
+                WRITE(6, *) "0: ", State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%Name
+            ENDIF
+            IF(config_flags%gc_diagn_spc_n1 .ne. 0 .and. config_flags%gc_diagn_spc_n1 .le. State_Chm%nSpecies) THEN
+                WRITE(6, *) "1: ", State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%Name
+            ENDIF
+            IF(config_flags%gc_diagn_spc_n2 .ne. 0 .and. config_flags%gc_diagn_spc_n2 .le. State_Chm%nSpecies) THEN
+                WRITE(6, *) "2: ", State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%Name
+            ENDIF
+            IF(config_flags%gc_diagn_spc_n3 .ne. 0 .and. config_flags%gc_diagn_spc_n3 .le. State_Chm%nSpecies) THEN
+                WRITE(6, *) "3: ", State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%Name
+            ENDIF
+            WRITE(6, *) "Budget Diags:", State_Diag%Archive_Budget,           &
+                                         State_Diag%Archive_BudgetEmisDryDep, &
+                                         State_Diag%Archive_BudgetMixing,     &
+                                         State_Diag%Archive_BudgetConvection, &
+                                         State_Diag%Archive_BudgetChemistry,  &
+                                         State_Diag%Archive_BudgetWetDep
+            WRITE(6, *) "(Glo|EmisDryDep|Mix|Conv|Chem|WetDep)"
+            WRITE(6, *) "Values - FULL for N0", config_flags%gc_diagn_spc_n0
+            WRITE(6, *) State_Diag%BudgetEmisDryDepFull(1, 1, config_flags%gc_diagn_spc_n0)
+            WRITE(6, *) State_Diag%BudgetMixingFull(1, 1, config_flags%gc_diagn_spc_n0)
+            WRITE(6, *) State_Diag%BudgetConvectionFull(1, 1, config_flags%gc_diagn_spc_n0)
+            WRITE(6, *) State_Diag%BudgetChemistryFull(1, 1, config_flags%gc_diagn_spc_n0)
+            WRITE(6, *) State_Diag%BudgetWetDepFull(1, 1, config_flags%gc_diagn_spc_n0)
+            WRITE(6, *) "-- end of wrf|gc temporary diagnostics debug --"
+        endif
+
     end subroutine GIGC_Set_WRF
     subroutine GIGC_Chunk_Cleanup(config_flags, kts, kte, Input_Opt, State_Met, State_Chm)
         implicit none
+
         type(grid_config_rec_type), intent(in) :: config_flags
         integer, intent(in) :: kts, kte
         type(OptInput), intent(inout) :: Input_Opt
         type(MetState), intent(inout) :: State_Met
         type(ChmState), intent(inout) :: State_Chm
+
+
+
     end subroutine GIGC_Chunk_Cleanup
+
 end module GIGC_Convert_State_Mod
