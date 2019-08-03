@@ -386,4 +386,155 @@ contains
 
    END SUBROUTINE getpar
 
+   SUBROUTINE get_cloud_optical_depth(t8w, dz8w, t3d, p8w3d, qc3d, qi3d, qs3d, taucldc, taucldi, optd,    &
+                                      f_qc, f_qi, f_qs,                                                   &
+                                      ims, ime, jms, jme, kms, kme,                                       &
+                                      its, ite, jts, jte, kts, kte                                   )
+   ! calculating the ice/liquid cloud optical depth (visible broadband) baed on
+   ! the GODDARD radiation parameterization
+     
+         integer, parameter                                                :: fp_kind = selected_real_kind(15)   !Real precision (6-single 15-double 20-quad)
+         real, dimension(ims:ime, kms:kme, jms:jme), intent(in)            :: t8w,                           &   ! temperature at full levels (K)
+                                                                              p8w3d,                         &   ! pressure at full levels (Pa)
+                                                                              dz8w,                          &   ! dz between full levels (m)
+                                                                              t3d                                ! temperature (K)              
+         real, dimension(ims:ime, kms:kme, jms:jme), optional, intent(in)  :: qc3d,                          &   ! cloud water mixint ratio (kg/kg)
+                                                                              qi3d,                          &   ! cloud ice mixint ratio (kg/kg)
+                                                                              qs3d                               ! snow mixing ratio (kg/kg)                                                                                                                             
+         real, dimension(ims:ime, kms:kme, jms:jme), intent(inout)         :: taucldc,                       &   ! liquid cloud optical depth
+                                                                              taucldi,                       &   ! ice cloud optical depth
+                                                                              optd                               ! cloud optical depth
+         logical, optional,                          intent(in)            :: f_qc, f_qi, f_qs
+         integer,                                    intent(in)            :: ims, ime, jms, jme, kms, kme,  &   
+                                                                              its, ite, jts, jte, kts, kte    
+         real(kind=fp_kind), parameter                                     :: re = 10.                           ! cloud droplet effective radius (micron)
+         
+   !-----------------------------local variable-----------------------------
+     integer :: i, j, k, nk
+         real(kind = fp_kind), dimension(its:ite, kts:kte+1)     :: phyd       
+         real(kind = fp_kind), dimension(its:ite, kts-1:kte, 3)  :: reff,  &  ! 1-ice cloud, 2-liquid cloud, 3-rain particale effective size (micron)
+                                                                    cwc       ! hydrometer mixing ratio (kg/kg) or (g/g)
+         real(kind = fp_kind), dimension(its:ite, kts-1:kte+1)   :: p8w2d, &  ! pressure in full level (mb)
+                                                                    t8w2d     ! temperature in full level (K)
+         real(kind = fp_kind), dimension(its:ite, kts-1:kte)     :: t2d       ! temperature (K)
+         real(kind = fp_kind)                                    :: x                                                                                     
+         
+     j_loop: do j = jts,jte
+   !------------------------------------------------------------------------
+        do k = kts, kte+1
+           do i = its, ite
+              taucldc(i, k, j) = 0._fp_kind
+              taucldi(i, k, j) = 0._fp_kind
+              optd(i, k, j) = 0._fp_kind
+           enddo
+        enddo
+            
+        do k = kts, kte+1
+           do i = its, ite
+              if (k .eq. kts)then
+                 phyd(i, k) = p8w3d(i, kts, j)
+              else
+                 phyd(i, k) = phyd(i, k-1)*exp(-9.8/287.04*dz8w(i, k-1, j)/t3d(i, k-1, j))
+              endif
+           enddo
+        enddo
+                
+   ! reverse vars
+        do k = kts, kte+1
+           do i = its, ite
+              nk = kme-k+kms
+              p8w2d(i, k) = phyd(i, nk)*0.01
+              t8w2d(i, k) = t8w(i, nk, j)
+           enddo
+        enddo
+                
+        do k = kts, kte
+           do i = its, ite
+              nk = kme-1-k+kms
+              t2d(i, k) = t3d(i, nk, j)
+           enddo
+        enddo
+                
+        do i = its, ite
+           p8w2d(i, 0) = .0
+        enddo
+                
+        do i = its, ite
+           t2d(i, 0)    = t2d(i, 1)
+           cwc(i, 0, 3) = 0.
+           cwc(i, 0, 2) = 0.
+           cwc(i, 0, 1) = 0.
+        enddo
+                
+   ! cloud water mixint ratio   
+                
+        if ( present( f_qc ) .and. present( qc3d ) )then
+           do k = kts,kte
+              do i = its, ite
+                 nk = kme-1-k+kms
+                 if ( (f_qc) ) then
+                    cwc(i, k, 2) = max( 0.,qc3d(i, nk, j) )
+                    reff(i, k, 2) = re
+                    x=1.02*10000.*( p8w2d(i, k+1) - p8w2d(i, k) )
+                    taucldc(i, nk, j) = x * cwc(i, k, 2) * ( 3.33e-4 + 2.52/reff(i, k, 2) )
+                 else
+                    cwc(i, k, 2) = 0.
+                    reff(i, k, 2) = 0.
+                    taucldc(i, nk, j) = 0.
+                 endif
+              enddo
+           enddo
+        endif
+   
+   ! cloud ice mixing ratio (current adding the snow)
+   
+        if ( present( f_qi ) .and. present( qi3d ) ) then
+           do k = kts, kte
+              do i = its, ite
+                 nk = kme-1-k+kms
+                 if( ( f_qi ) ) then
+                      cwc(i, k, 1) = max( 0., qi3d(i, nk, j) )
+                      reff(i, k, 1) = 125. + (t2d(i, k) - 243.16)*5.   ! ice effective radius depends on temperature
+                      reff(i, k, 1) = min( 125._fp_kind, max(25._fp_kind, reff(i, k, 1)) )
+                      x = 1.02*10000. * (p8w2d(i, k+1) - p8w2d(i, k) )
+                      taucldi(i, nk, j) = x * cwc(i, k, 1) * ( -6.59e-3 + 1.65/reff(i, k, 1) )
+                 else
+                      cwc(i, k, 1) = 0.
+                      reff(i, k, 1) = 0.
+                      taucldi(i, nk, j) = 0.
+                 endif
+               enddo
+            enddo
+        endif
+                
+        if ( present( f_qs ) .and. present( qs3d ) ) then
+           do k = kts, kte
+              do i = its, ite
+                 nk = kme-1-k+kms
+                 if ( ( f_qs ) ) then
+                    if ( cwc(i, k, 1) > 0. ) then ! ice exist
+                       cwc(i, k, 1) = cwc(i, k, 1) + max(0., qs3d(i, nk, j) ) ! ice + snow
+                       reff(i, k, 1) = 125. + (t2d(i, k) - 243.16)*5
+                       reff(i, k, 1) = min( 125._fp_kind, max(25._fp_kind, reff(i, k, 1)) )
+                    else
+                       cwc(i, k, 1) = max( 0., qs3d(i, nk, j) )
+                       reff(i, k, 1) = 125.
+                    endif
+                       x = 1.02*10000. * ( p8w2d(i, k+1)-p8w2d(i, k) )
+                       taucldi(i, nk, j) = x * cwc(i, k, 1) * ( -6.59e-3 + 1.65/reff(i, k, 1) )
+                 endif
+              enddo
+           enddo
+        endif              
+         
+        do k = kts, kte
+           do i = its, ite
+              optd(i, k, j) = taucldc(i, k, j) + taucldi(i, k, j)
+           enddo
+        enddo
+                                                    
+     enddo j_loop
+   
+   END SUBROUTINE get_cloud_optical_depth
+   
 END MODULE module_chem_utilities

@@ -44,6 +44,7 @@ MODULE Species_Database_Mod
 ! !PRIVATE MEMBER FUNCTIONS:
 !
   PRIVATE :: TranUc
+  PRIVATE :: SpcData_To_JSON
 
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 !%%% Uncomment this if you want to use the new henry's law constants
@@ -56,7 +57,8 @@ MODULE Species_Database_Mod
 !
 ! !REVISION HISTORY:
 !  28 Aug 2015 - R. Yantosca - Initial version
-!  02 Aug 2016 - M. Sulprizio- Add KppSpcId to store all KPP species incices.
+!  02 Aug 2016 - M. Sulprizio- Add KppSpcId to store all KPP species indices.
+!  04 Feb 2019 - R. Yantosca - Add function to save species DB in JSON format
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -195,9 +197,6 @@ CONTAINS
     ! For values from Input_Opt
     LOGICAL             :: Is_Advected
     LOGICAL             :: prtDebug
-
-    ! For passive species
-!    LOGICAL             :: IsPassive
 
     ! Species information
     REAL(fp)               :: EmMW_g           ! Emissions mol. wt [g]
@@ -382,10 +381,16 @@ CONTAINS
 
        ! Print info about each species
        ! testing only
-       CALL Spc_Print( am_I_Root, SpcData(N)%Info, RC )
        IF ( prtDebug ) CALL Spc_Print( am_I_Root, SpcData(N)%Info, RC )
 
     ENDDO
+
+    !-----------------------------------------------------------------------
+    ! Print Species Database to JSON format
+    ! NOTE: Comment this out unless you really need it!
+    !CALL SpcData_To_JSON( am_I_Root, SpcData, RC )
+    !STOP
+    !-----------------------------------------------------------------------
 
     ! Deallocate temporary work arrays
     CALL Cleanup_Work_Arrays()
@@ -494,6 +499,7 @@ CONTAINS
 !
     ! local species information
     CHARACTER(LEN=31)   :: Name
+    CHARACTER(LEN=31)   :: PName
     CHARACTER(LEN=80)   :: FullName
     CHARACTER(LEN=80)   :: Formula
     REAL(fp)            :: MW_g             ! Molecular weight [g]
@@ -538,7 +544,8 @@ CONTAINS
     INTEGER             :: P, IDX, CNT
     LOGICAL             :: IsPassive
     LOGICAL             :: Uscore    
-
+    INTEGER             :: C !ramnarine 12/2018
+    
     ! Arrays
     REAL(fp)            :: DvzMinVal(2)
     REAL(fp)            :: KcScale(3)
@@ -866,7 +873,7 @@ CONTAINS
              Is_Wetdep     = F
              DD_F0         = 1.0_fp
 #if defined( NEW_HENRY_CONSTANTS )
-             Henry_K0      = 1.90e+5_f8 * To_M_atm
+             Henry_K0      = 1.90e-5_f8 * To_M_atm
              Henry_CR      = 2400.0_f8
 #endif
 
@@ -3885,6 +3892,28 @@ CONTAINS
              WD_KcScaleFac = KcScale
              WD_RainoutEff = RainEff
 
+          CASE( 'PBSTRAT', '210PBSTRAT', 'PB210STRAT' )
+
+             ! Halve the Kc (cloud condensate -> precip) rate
+             ! for the temperature range 237 K <= T < 258 K.
+             KcScale       = (/ 1.0_fp, 0.5_fp, 1.0_fp /)
+
+             ! Turn off rainout only when 237 K <= T < 258K.
+             RainEff       = (/ 1.0_fp, 0.0_fp, 1.0_fp /)
+
+             FullName      = 'Lead-210 isotope in stratosphere'
+             Formula       = 'Pb'
+             MW_g          = 210.0_fp
+             Is_Gas        = F
+             Is_Drydep     = T
+             Is_Wetdep     = T
+             DD_DvzAerSnow = 0.03_fp
+             DD_F0         = 0.0_fp
+             DD_HStar_old  = 0.0_fp
+             WD_AerScavEff = 1.0_fp
+             WD_KcScaleFac = KcScale
+             WD_RainoutEff = RainEff
+
           CASE( 'BE', '7BE', 'BE7' )
 
              ! Halve the Kc (cloud condensate -> precip) rate
@@ -3895,8 +3924,74 @@ CONTAINS
              RainEff       = (/ 1.0_fp, 0.0_fp, 1.0_fp /)
 
              FullName      = 'Beryllium-7 isotope'
-             Formula       = 'Be'
+             Formula       = 'Be7'
              MW_g          = 7.0_fp
+             Is_Gas        = F
+             Is_Drydep     = T
+             Is_Wetdep     = T
+             DD_DvzAerSnow = 0.03_fp
+             DD_F0         = 0.0_fp
+             DD_HStar_old  = 0.0_fp
+             WD_AerScavEff = 1.0_fp
+             WD_KcScaleFac = KcScale
+             WD_RainoutEff = RainEff
+
+          CASE( 'BESTRAT', '7BESTRAT', 'BE7STRAT' )
+
+             ! Halve the Kc (cloud condensate -> precip) rate
+             ! for the temperature range 237 K <= T < 258 K.
+             KcScale       = (/ 1.0_fp, 0.5_fp, 1.0_fp /)
+
+             ! Turn off rainout only when 237 K <= T < 258K.
+             RainEff       = (/ 1.0_fp, 0.0_fp, 1.0_fp /)
+
+             FullName      = 'Beryllium-7 isotope in stratosphere'
+             Formula       = 'Be7'
+             MW_g          = 7.0_fp
+             Is_Gas        = F
+             Is_Drydep     = T
+             Is_Wetdep     = T
+             DD_DvzAerSnow = 0.03_fp
+             DD_F0         = 0.0_fp
+             DD_HStar_old  = 0.0_fp
+             WD_AerScavEff = 1.0_fp
+             WD_KcScaleFac = KcScale
+             WD_RainoutEff = RainEff
+
+          CASE( '10BE', 'BE10' )
+
+             ! Halve the Kc (cloud condensate -> precip) rate
+             ! for the temperature range 237 K <= T < 258 K.
+             KcScale       = (/ 1.0_fp, 0.5_fp, 1.0_fp /)
+
+             ! Turn off rainout only when 237 K <= T < 258K.
+             RainEff       = (/ 1.0_fp, 0.0_fp, 1.0_fp /)
+
+             FullName      = 'Beryllium-10 isotope'
+             Formula       = 'Be10'
+             MW_g          = 10.0_fp
+             Is_Gas        = F
+             Is_Drydep     = T
+             Is_Wetdep     = T
+             DD_DvzAerSnow = 0.03_fp
+             DD_F0         = 0.0_fp
+             DD_HStar_old  = 0.0_fp
+             WD_AerScavEff = 1.0_fp
+             WD_KcScaleFac = KcScale
+             WD_RainoutEff = RainEff
+
+          CASE( '10BESTRAT', 'BE10STRAT' )
+
+             ! Halve the Kc (cloud condensate -> precip) rate
+             ! for the temperature range 237 K <= T < 258 K.
+             KcScale       = (/ 1.0_fp, 0.5_fp, 1.0_fp /)
+
+             ! Turn off rainout only when 237 K <= T < 258K.
+             RainEff       = (/ 1.0_fp, 0.0_fp, 1.0_fp /)
+
+             FullName      = 'Beryllium-10 isotope in stratosphere'
+             Formula       = 'Be10'
+             MW_g          = 10.0_fp
              Is_Gas        = F
              Is_Drydep     = T
              Is_Wetdep     = T
@@ -4555,13 +4650,13 @@ CONTAINS
              WD_KcScaleFac = KcScale
              WD_RainoutEff = RainEff
 
-          CASE( 'ECIL1',  'ECIL2',  'ECIL3',  'ECIL4',  'ECIL5'
-                'ECIL6',  'ECIL7',  'ECIL8',  'ECIL9',  'ECIL10'
-                'ECIL11', 'ECIL12', 'ECIL13', 'ECIL14', 'ECIL15'
-                'ECIL16', 'ECIL17', 'ECIL18', 'ECIL19', 'ECIL20'
-                'ECIL21', 'ECIL22', 'ECIL23', 'ECIL24', 'ECIL25'
-                'ECIL26', 'ECIL27', 'ECIL28', 'ECIL29', 'ECIL30'
-                'ECIL31', 'ECIL32', 'ECIL33', 'ECIL34', 'ECIL35'
+          CASE( 'ECIL1',  'ECIL2',  'ECIL3',  'ECIL4',  'ECIL5',  &
+                'ECIL6',  'ECIL7',  'ECIL8',  'ECIL9',  'ECIL10', &
+                'ECIL11', 'ECIL12', 'ECIL13', 'ECIL14', 'ECIL15', &
+                'ECIL16', 'ECIL17', 'ECIL18', 'ECIL19', 'ECIL20', &
+                'ECIL21', 'ECIL22', 'ECIL23', 'ECIL24', 'ECIL25', &
+                'ECIL26', 'ECIL27', 'ECIL28', 'ECIL29', 'ECIL30', &
+                'ECIL31', 'ECIL32', 'ECIL33', 'ECIL34', 'ECIL35', &
                 'ECIL36', 'ECIL37', 'ECIL38', 'ECIL39', 'ECIL40'  )
 
              ! Add TOMAS bin number to full name
@@ -4593,13 +4688,13 @@ CONTAINS
              WD_KcScaleFac = KcScale
              WD_RainoutEff = RainEff
 
-          CASE( 'ECOB1',  'ECOB2',  'ECOB3',  'ECOB4',  'ECOB5'
-                'ECOB6',  'ECOB7',  'ECOB8',  'ECOB9',  'ECOB10'
-                'ECOB11', 'ECOB12', 'ECOB13', 'ECOB14', 'ECOB15'
-                'ECOB16', 'ECOB17', 'ECOB18', 'ECOB19', 'ECOB20'
-                'ECOB21', 'ECOB22', 'ECOB23', 'ECOB24', 'ECOB25'
-                'ECOB26', 'ECOB27', 'ECOB28', 'ECOB29', 'ECOB30'
-                'ECOB31', 'ECOB32', 'ECOB33', 'ECOB34', 'ECOB35'
+          CASE( 'ECOB1',  'ECOB2',  'ECOB3',  'ECOB4',  'ECOB5',  &
+                'ECOB6',  'ECOB7',  'ECOB8',  'ECOB9',  'ECOB10', &
+                'ECOB11', 'ECOB12', 'ECOB13', 'ECOB14', 'ECOB15', &
+                'ECOB16', 'ECOB17', 'ECOB18', 'ECOB19', 'ECOB20', &
+                'ECOB21', 'ECOB22', 'ECOB23', 'ECOB24', 'ECOB25', &
+                'ECOB26', 'ECOB27', 'ECOB28', 'ECOB29', 'ECOB30', &
+                'ECOB31', 'ECOB32', 'ECOB33', 'ECOB34', 'ECOB35', &
                 'ECOB36', 'ECOB37', 'ECOB38', 'ECOB39', 'ECOB40'  )
 
              ! Add TOMAS bin number to full name
@@ -5043,19 +5138,22 @@ CONTAINS
 
              ! Check if passive species
              IsPassive = .FALSE.
-             !MW_g = 0.0_fp
-             !BackgroundVV = 0.0_fp
 
              IF ( Present(Input_Opt) ) THEN
                 IF ( Input_Opt%NPASSIVE > 0 ) THEN
    
                    ! Loop over all passive species
                    DO P = 1, Input_Opt%NPASSIVE
-                      IF ( TRIM(Name) ==    &
-                           TRIM(Input_Opt%PASSIVE_NAME(P)) ) THEN
-                         IsPassive = .TRUE.
+
+                      ! Make sure its all caps
+                      PName = TRIM(Input_Opt%PASSIVE_NAME(P))
+                      CALL TranUc( PName )
+
+                      IF ( TRIM(Name) == TRIM(PName) ) THEN
+                         IsPassive    = .TRUE.
                          BackgroundVV = Input_Opt%PASSIVE_INITCONC(P)
-                         MW_g   = Input_Opt%PASSIVE_MW(P)
+                         MW_g         = Input_Opt%PASSIVE_MW(P)
+                         FullName     = TRIM(Input_Opt%PASSIVE_LONGNAME(P))
                          EXIT
                       ENDIF
                    ENDDO
@@ -5517,5 +5615,208 @@ CONTAINS
     IF ( ALLOCATED( KppSpcId      ) ) DEALLOCATE( KppSpcId      )
 
   END SUBROUTINE Cleanup_Work_Arrays
+!EOC
+!------------------------------------------------------------------------------
+!                  GEOS-Chem Global Chemical Transport Model                  !
+!------------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: SpcData_To_JSON
+!
+! !DESCRIPTION: Prints the GEOS-Chem species database to a JSON file.
+!\\
+!\\
+! !INTERFACE:
+!
+  SUBROUTINE SpcData_To_JSON( am_I_Root, SpcData, RC )
+
+    USE ErrCode_Mod
+    USE Species_Mod, ONLY : Species, SpcPtr
+!
+! !INPUT PARAMETERS:
+!
+    LOGICAL,      INTENT(IN)  :: am_I_Root    ! Are we on the root CPU
+    TYPE(SpcPtr), POINTER     :: SpcData(:)   ! GEOS-Chem Species Database
+!
+! !OUTPUT PARAMETERS:
+!
+    INTEGER,      INTENT(OUT) :: RC           ! Success or failure
+!
+! !REMARKS:
+!  This routine can be used to generate JSON output for use with Python
+!  code for GEOS-Chem post-processing.  You can generate a new JSON file
+!  for each of the GEOS_Chem simulation types.
+!                                                                             .
+!  For now the file name and unit number are hardwired.  We can make this
+!  more flexible if so desired.
+!                                                                             .
+!  A good overview of the JSON format may be found here:
+!     https://www.w3schools.com/js/js_json_datatypes.asp
+!
+! !REVISION HISTORY:
+!  04 Feb 2019 - R. Yantosca - Initial version
+!EOP
+!------------------------------------------------------------------------------
+!BOC
+!
+! !LOCAL VARIABLES:
+!
+    ! Scalars
+    INTEGER                :: N, nSpc, Unit
+
+    ! Strings
+    CHARACTER(LEN=255)     :: FileName
+    
+    ! Pointers
+    TYPE(Species), POINTER :: ThisSpc
+
+    !=======================================================================
+    ! SpcData_to_Dict begins here!
+    !=======================================================================
+
+    ! Assume success
+    RC       = GC_SUCCESS
+
+    ! Hardwire the file name and unit for now
+    ! (we typically won't call this routine unless we want this printout)
+    FileName = 'GEOS-Chem_Species_Database_Dict.txt'
+    Unit     = 700
+
+    ! Number of species in database
+    nSpc     = SIZE( SpcData )
+
+    !=======================================================================
+    ! Write species database to JSON format
+    !
+    ! NOTE: Some species database fields are only relevant for passing
+    ! parameters to specific GEOS-Chem operations (e.g. drydep, wetdep, 
+    ! etc).  Therefore, we have only included those properties which we
+    ! feel would be most relevant to post-processing of data in Python
+    ! or other tools. (bmy, 2/4/18)
+    !=======================================================================
+
+    ! Open file
+    OPEN( Unit, File=TRIM(FileName), Status='Unknown', FORM='Formatted' )
+
+    ! Write header
+    WRITE( Unit, '(a)' ) '{'
+
+    ! Loop over the number of elements in the species database
+    DO N = 1, nSpc
+
+       ! Point to this entry of the species database
+       ThisSpc => SpcData(N)%Info
+
+       ! Write individual fields of the species database
+       WRITE( Unit, 100 ) TRIM( ThisSpc%Name )
+       WRITE( Unit, '(10x,a)' ) '{'
+
+       WRITE( Unit, 110 ) '"Fullname"', TRIM( ThisSpc%FullName )
+
+       IF ( LEN_TRIM( ThisSpc%Formula ) > 0 ) THEN
+          WRITE( Unit, 110 ) '"Formula"',  TRIM( ThisSpc%Formula  )
+       ENDIF
+
+       IF ( ThisSpc%Is_Advected ) THEN
+          WRITE( Unit, 111 ) '"Is_Advected"', 'true'
+       ELSE
+          WRITE( Unit, 111 ) '"Is_Advected"', 'false'
+       ENDIF
+
+       IF ( ThisSpc%Is_Aero ) THEN
+          WRITE( Unit, 111 ) '"Is_Aero"', 'true'
+       ELSE
+          WRITE( Unit, 111 ) '"Is_Aero"', 'false'
+       ENDIF
+
+       IF ( ThisSpc%Is_Drydep ) THEN
+          WRITE( Unit, 111 ) '"Is_DryDep"', 'true'
+       ELSE
+          WRITE( Unit, 111 ) '"Is_DryDep"', 'false'
+       ENDIF
+
+       IF ( ThisSpc%Is_DryDep ) THEN
+          WRITE( Unit, 111 ) '"Is_Gas"', 'true'
+       ELSE
+          WRITE( Unit, 111 ) '"Is_Gas"', 'false'
+       ENDIF
+
+       IF ( ThisSpc%Is_HygroGrowth ) THEN
+          WRITE( Unit, 111 ) '"Is_HygroGrowth"', 'true'
+       ELSE
+          WRITE( Unit, 111 ) '"Is_HygroGrowth"', 'false'
+       ENDIF
+
+       IF ( ThisSpc%Is_Photolysis ) THEN
+          WRITE( Unit, 111 ) '"Is_Photolysis"', 'true'
+       ELSE
+          WRITE( Unit, 111 ) '"Is_Photolysis"', 'false'
+       ENDIF
+
+       IF ( ThisSpc%Is_WetDep ) THEN
+          WRITE( Unit, 111 ) '"Is_WetDep"', 'true'
+       ELSE
+          WRITE( Unit, 111 ) '"Is_WetDep"', 'false'
+       ENDIF
+
+       IF ( ThisSpc%Density > 0.0_fp ) THEN
+          WRITE( Unit, 120 ) '"Density"',    ThisSpc%Density
+       ENDIF
+
+       IF ( ThisSpc%Radius > 0.0_fp ) THEN
+          WRITE( Unit, 120 ) '"Radius"',     ThisSpc%Radius
+       ENDIF
+          
+       IF ( ThisSpc%Henry_K0 > 0.0_fp ) THEN
+          WRITE( Unit, 130 ) '"Henry_K0"',   ThisSpc%Henry_K0
+       ENDIF
+
+       IF ( ThisSpc%Henry_CR > 0.0_fp ) THEN
+          WRITE( Unit, 130 ) '"Henry_CR"',   ThisSpc%Henry_CR
+       ENDIF
+
+       IF ( ThisSpc%Henry_PKA > 0.0_fp ) THEN
+          WRITE( Unit, 130 ) '"Henry_PKA"',  ThisSpc%Henry_PKA
+       ENDIF
+
+       IF ( ThisSpc%Mw_g > 0.0_fp ) THEN 
+          WRITE( Unit, 120 ) '"MW_g"',       ThisSpc%MW_g
+       ENDIF
+
+       IF ( ThisSpc%EmMW_g > 0.0_fp ) THEN
+          WRITE( Unit, 120 ) '"EmMW_g"',     ThisSpc%EmMW_g
+       ENDIF
+
+       IF ( ThisSpc%MolecRatio > 0.0_fp ) THEN
+          WRITE( Unit, 121 ) '"MolecRatio"', ThisSpc%MolecRatio
+       ENDIF
+
+       ! Write closing bracket
+       IF ( n < nSpc ) THEN
+          WRITE( Unit, '(10x,a)' ) '},'
+       ELSE
+          WRITE( Unit, '(10x,a)' ) '}'
+       ENDIF
+
+       ! Free pointer
+       ThisSpc => NULL()
+
+    ENDDO
+
+    ! Write end bracket and close file
+    WRITE( Unit, '(a)' ) '}'
+    CLOSE( Unit        )
+
+    !=======================================================================
+    ! Format strings
+    !=======================================================================
+100 FORMAT( 2x,  '"', a,   '" : '       )
+110 FORMAT( 14x, a, ': "', a,      '",' )
+111 FORMAT( 14x, a, ': ',  a,      ','  )
+120 FORMAT( 14x, a, ': ',  f11.4,  ','  )
+121 FORMAT( 14x, a, ': ',  f11.4        )
+130 FORMAT( 14x, a, ': ',  es13.6, ','  )
+
+  END SUBROUTINE SpcData_to_JSON
 !EOC
 END MODULE Species_Database_Mod

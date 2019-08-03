@@ -253,8 +253,6 @@ Calculate SW fluxes?    : F
 Clear-sky flux?         : F
 All-sky flux?           : F
 Radiation Timestep [sec]: 10800
-Species fluxes          : 0 0 0 0 0 0 0 0 0 1 0
- ---[O3,ME,SU,NI,AM,BC,OA,SS,DU,PM,ST]
 ------------------------+------------------------------------------------------
 %%% OUTPUT MENU %%%     : 123456789.123456789.123456789.1--1=ZERO+2=BPCH
 Schedule output for JAN : 3000000000000000000000000000000
@@ -350,6 +348,13 @@ Turn on plane flt diag? : F
 Flight track info file  : Planeflight.dat.YYYYMMDD
 Output file name        : plane.log.YYYYMMDD
 ------------------------+------------------------------------------------------
+%%% OBSPACK MENU %%%    :
+Turn on ObsPack diag?   : F
+Quiet logfile output    : F
+ObsPack input file      : ./obspack_co2_1_OCO2MIP_2018-11-28.YYYYMMDD.nc
+ObsPack output file     : GEOSChem.ObsPack.YYYYMMDD_hhmmz.nc4
+ObsPack output species  : NO CO O3
+------------------------+------------------------------------------------------
 %%% ND48 MENU %%%       :
 Turn on ND48 stations   : F
 Station Timeseries file : stations.YYYYMMDD
@@ -379,7 +384,7 @@ LMIN, LMAX of region    :   1   1
 Turn on ND51 diagnostic : F
 LT avg timeseries file  : ts_satellite.YYYYMMDD.bpch
 Output as HDF5?         : F
-Tracers to include      : 46 154 156
+Tracers to include      : 46 504 506
 GMT Hour for disk write :   0
 Avg Period [LT hours]   :   9  11
 IMIN, IMAX of region    :   1  72

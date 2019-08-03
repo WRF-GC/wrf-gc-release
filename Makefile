@@ -107,12 +107,12 @@ endif
 # Requirements for GIGC Compilation
 # Compiler for ESMF - eg intel, intelgcc, gfortran
 ifndef ESMF_COMPILER
-  $(error ESMF_COMPILER is not defined)
+  $(error ESMF_COMPILER is not defined - use gfortran or intel)
 endif
 
 # MPI type for ESMF
 ifndef ESMF_COMM
-  $(error ESMF_COMM is not defined - only mvapich2 is supported for now)
+  $(error ESMF_COMM is not defined - use mvapich2 or openmpi)
 endif
 
 # Configuration variables for GCHP interop.
@@ -133,8 +133,27 @@ export GC_F_LIB=$(GC_LIB)
 
 export OMPI_FC=$(SFC)
 export OMPI_CC=$(SCC)
-# FIXME: This is going to be problematic...
-export OMPI_CXX=icpc
+
+# Specify compiler-specific options (hplin, 6/23/19)
+ifeq ($(ESMF_COMPILER),intel)
+	export OMPI_CXX=icpc
+	TRACEBACK_OPT := -traceback
+else ifeq($(ESMF_COMPILER),gfortran)
+	export OMPI_CXX=g++
+	TRACEBACK_OPT := -fbacktrace
+endif
+
+# Specify MPI-specific options (hplin, 6/23/19)
+ifeq ($(ESMF_COMM),openmpi)
+	MPI_OPT := $(shell mpif90 --showme:link)
+	MPI_OPT += $(shell mpicxx --showme:link)
+else ifeq ($(ESMF_COMM),mvapich2)
+	MPI_OPT := -lmpich -lmpichf90
+else
+	$(error Unknown MPI communicator ESMF_COMM, valid are openmpi or mvapich2)
+endif
+
+
 export COMPILER=$(SFC)
 export HDF5DIR=$(HDF5PATH)
 
@@ -211,13 +230,13 @@ compile_chem: install_registry install_configs
 	@echo "      \/  \/   |_|  \_\_|          \_____|\_____|_|  |_|_|       "
 	@echo "*****************************************************************"
 	@echo "            THIS IS THE WRF-GC PROJECT FOR WRFV3+                "
-	@echo "                  BASED ON GEOS-CHEM HP v12.1.1                  "
+	@echo "                  BASED ON GEOS-CHEM HP v12.0.0                  "
 	@echo "*****************************************************************"
 	@echo " (c) 2018 Haipeng Lin, Xu Feng, Tzung-May Fu*                    "
 	@echo " Peking University, Atmospheric Chemistry and Climate Group      "
 	@echo "*****************************************************************"
 	@echo "THIS COMMAND WILL PRE-COMPILE GEOS-CHEM IN THE gigc SUBDIRECTORY "
-	cd $(ROOTDIR)/chem/gigc && FC=$(SFC) CC=$(SCC) F77=$(SFC) F90=$(SFC) CXX=icpc $(MAKE) $(J) NC_DIAG=y CHEM=Standard EXTERNAL_GRID=y DEBUG=n TRACEBACK=y MET=geos-fp GRID=4x5 NO_REDUCED=y UCX=yes NO_EXE=y hpc
+	cd $(ROOTDIR)/chem/gigc && FC=$(SFC) CC=$(SCC) F77=$(SFC) F90=$(SFC) CXX=$(OMPI_CXX) $(MAKE) $(J) NC_DIAG=y CHEM=Standard EXTERNAL_GRID=y DEBUG=n TRACEBACK=y MET=geos-fp GRID=4x5 NO_REDUCED=y UCX=yes NO_EXE=y hpc
 
 	@echo "*****************************************************************"
 	@echo " WE WILL NOW UPDATE WRFV3/main EM_REAL COMPILE RULES             "
@@ -225,7 +244,7 @@ compile_chem: install_registry install_configs
 	@echo "        /everybody stand back/ I know regular expressions.       "
 	@echo "       - The original Makefile is at main/Makefile.bak -         "
 	if   grep -q DESMF_ "$(ROOTDIR)/main/Makefile"; then cp $(ROOTDIR)/main/Makefile.bak $(ROOTDIR)/main/Makefile; fi
-	if ! grep -q DMODEL_WRF "$(ROOTDIR)/main/Makefile"; then cp $(ROOTDIR)/main/Makefile $(ROOTDIR)/main/Makefile.bak; sed -i -e "s@-o wrf\.exe .*@& -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -lGIGC -lmpich -lmpichf90 -L$(ROOTDIR)/chem/gigc/lib -lHistory -lGeosCore -lHistory -lKpp -lGeosCore -lIsoropia -lHCOI -lHCOX -lHCO -lGeosUtil -lKpp -lHeaders -lNcUtils -L$(NETCDFPATH) -lnetcdff -lnetcdf -L$(HDF5PATH)/lib -I$(ROOTDIR)/chem/gigc/mod -lnetcdf@" "$(ROOTDIR)/main/Makefile"; sed -i -e "s@-o real\.exe .*@& -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -lGIGC -lmpich -lmpichf90 -L$(ROOTDIR)/chem/gigc/lib -lHistory -lGeosCore -lHistory -lKpp -lGeosCore -lIsoropia -lHCOI -lHCOX -lHCO -lGeosUtil -lKpp -lHeaders -lNcUtils -L$(NETCDFPATH) -lnetcdff -lnetcdf -L$(HDF5PATH)/lib -I$(ROOTDIR)/chem/gigc/mod -lnetcdf@" "$(ROOTDIR)/main/Makefile"; sed -i -e "s@-o nup\.exe .*@& -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -lGIGC -lmpich -lmpichf90 -L$(ROOTDIR)/chem/gigc/lib -lHistory -lGeosCore -lHistory -lKpp -lGeosCore -lIsoropia -lHCOI -lHCOX -lHCO -lGeosUtil -lKpp -lHeaders -lNcUtils -L$(NETCDFPATH) -lnetcdff -lnetcdf -L$(HDF5PATH)/lib -I$(ROOTDIR)/chem/gigc/mod -lnetcdf@" "$(ROOTDIR)/main/Makefile"; sed -i -e "s@-o ndown\.exe .*@& -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -lGIGC -lmpich -lmpichf90 -L$(ROOTDIR)/chem/gigc/lib -lHistory -lGeosCore -lHistory -lKpp -lGeosCore -lIsoropia -lHCOI -lHCOX -lHCO -lGeosUtil -lKpp -lHeaders -lNcUtils -L$(NETCDFPATH) -lnetcdff -lnetcdf -L$(HDF5PATH)/lib -I$(ROOTDIR)/chem/gigc/mod -lnetcdf@" "$(ROOTDIR)/main/Makefile"; sed -i -e "s@-o tc\.exe .*@& -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -lGIGC -lmpich -lmpichf90 -L$(ROOTDIR)/chem/gigc/lib -lHistory -lGeosCore -lHistory -lKpp -lGeosCore -lIsoropia -lHCOI -lHCOX -lHCO -lGeosUtil -lKpp -lHeaders -lNcUtils -L$(NETCDFPATH) -lnetcdff -lnetcdf -L$(HDF5PATH)/lib -I$(ROOTDIR)/chem/gigc/mod -lnetcdf@" "$(ROOTDIR)/main/Makefile"; fi
+	if ! grep -q DMODEL_WRF "$(ROOTDIR)/main/Makefile"; then cp $(ROOTDIR)/main/Makefile $(ROOTDIR)/main/Makefile.bak; sed -i -e "s@-o wrf\.exe .*@& -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -lGIGC $(MPI_OPT) -L$(ROOTDIR)/chem/gigc/lib -lHistory -lGeosCore -lHistory -lKpp -lGeosCore -lIsoropia -lHCOI -lHCOX -lHCO -lGeosUtil -lKpp -lHeaders -lNcUtils -L$(NETCDFPATH) -lnetcdff -lnetcdf -L$(HDF5PATH)/lib -I$(ROOTDIR)/chem/gigc/mod -lnetcdf@" "$(ROOTDIR)/main/Makefile"; sed -i -e "s@-o real\.exe .*@& -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -lGIGC $(MPI_OPT) -L$(ROOTDIR)/chem/gigc/lib -lHistory -lGeosCore -lHistory -lKpp -lGeosCore -lIsoropia -lHCOI -lHCOX -lHCO -lGeosUtil -lKpp -lHeaders -lNcUtils -L$(NETCDFPATH) -lnetcdff -lnetcdf -L$(HDF5PATH)/lib -I$(ROOTDIR)/chem/gigc/mod -lnetcdf@" "$(ROOTDIR)/main/Makefile"; sed -i -e "s@-o nup\.exe .*@& -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -lGIGC $(MPI_OPT) -L$(ROOTDIR)/chem/gigc/lib -lHistory -lGeosCore -lHistory -lKpp -lGeosCore -lIsoropia -lHCOI -lHCOX -lHCO -lGeosUtil -lKpp -lHeaders -lNcUtils -L$(NETCDFPATH) -lnetcdff -lnetcdf -L$(HDF5PATH)/lib -I$(ROOTDIR)/chem/gigc/mod -lnetcdf@" "$(ROOTDIR)/main/Makefile"; sed -i -e "s@-o ndown\.exe .*@& -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -lGIGC $(MPI_OPT) -L$(ROOTDIR)/chem/gigc/lib -lHistory -lGeosCore -lHistory -lKpp -lGeosCore -lIsoropia -lHCOI -lHCOX -lHCO -lGeosUtil -lKpp -lHeaders -lNcUtils -L$(NETCDFPATH) -lnetcdff -lnetcdf -L$(HDF5PATH)/lib -I$(ROOTDIR)/chem/gigc/mod -lnetcdf@" "$(ROOTDIR)/main/Makefile"; sed -i -e "s@-o tc\.exe .*@& -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -lGIGC $(MPI_OPT) -L$(ROOTDIR)/chem/gigc/lib -lHistory -lGeosCore -lHistory -lKpp -lGeosCore -lIsoropia -lHCOI -lHCOX -lHCO -lGeosUtil -lKpp -lHeaders -lNcUtils -L$(NETCDFPATH) -lnetcdff -lnetcdf -L$(HDF5PATH)/lib -I$(ROOTDIR)/chem/gigc/mod -lnetcdf@" "$(ROOTDIR)/main/Makefile"; fi
 
 	@echo "   *********** GEOS-CHEM HAS BEEN INSTALLED IN WRF ***********   "
 	@echo "   Please remember that:"
@@ -245,7 +264,7 @@ compile_chem: install_registry install_configs
 troubleshooting:
 	@echo "*****************************************************************"
 	@echo "              THIS IS THE WRF-GC PROJECT FOR WRFV3               "
-	@echo "                 BASED ON GEOS-CHEM HP v12.1.1                   "
+	@echo "                 BASED ON GEOS-CHEM HP v12.0.0                   "
 	@echo "*****************************************************************"
 	@echo " TROUBLESHOOTING INFORMATION:                                    "
 	@echo "   - CC: $(SCC), FC: $(SFC) (WRF)"
@@ -271,7 +290,7 @@ about:
 	@echo " FOR ERRORS, SUGGESTIONS AND FEEDBACK, CONTACT HAIPENG LIN AT    "
 	@echo "           LINHAIPENG@PKU.EDU.CN | JIMMIE.LIN@GMAIL.COM          "
 	@echo "*****************************************************************"
-	@echo " (c) 2018-2019 Haipeng Lin                                       "
+	@echo " (c) 2018 Haipeng Lin                                            "
 	@echo " Peking University, Atmospheric Chemistry and Climate Group      "
 	@echo "*****************************************************************"
 	@echo "Commands:                                                        "
@@ -335,7 +354,7 @@ gigc_convert_state_mod.o: compile_chem module_input_chem_data.o module_tropopaus
           $(WRF_SRC_ROOT_DIR)/var/build/da_name_space.pl $*.f90 > $*.f90.tmp ; \
           mv $*.f90.tmp $*.f90 ; \
         fi
-	$(FC) -o $@ -c $(FCFLAGS) -traceback $(OMP) $(MODULE_DIRS) -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -I$(ROOTDIR)/chem/gigc/mod $(PROMOTION) $(FCSUFFIX) $*.f90
+	$(FC) -o $@ -c $(FCFLAGS) $(TRACEBACK_OPT) $(OMP) $(MODULE_DIRS) -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -I$(ROOTDIR)/chem/gigc/mod $(PROMOTION) $(FCSUFFIX) $*.f90
 
 chemics_init.o: compile_chem module_input_chem_data.o module_tropopause.o module_upper_bc_driver.o gigc_convert_state_mod.o
 	$(RM) $@
@@ -349,7 +368,7 @@ chemics_init.o: compile_chem module_input_chem_data.o module_tropopause.o module
           $(WRF_SRC_ROOT_DIR)/var/build/da_name_space.pl $*.f90 > $*.f90.tmp ; \
           mv $*.f90.tmp $*.f90 ; \
         fi
-	$(FC) -o $@ -c $(FCFLAGS) -traceback $(OMP) $(MODULE_DIRS) -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -I$(ROOTDIR)/chem/gigc/mod $(PROMOTION) $(FCSUFFIX) $*.f90
+	$(FC) -o $@ -c $(FCFLAGS) $(TRACEBACK_OPT) $(OMP) $(MODULE_DIRS) -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -I$(ROOTDIR)/chem/gigc/mod $(PROMOTION) $(FCSUFFIX) $*.f90
 
 chem_driver.o: compile_chem ../dyn_em/module_convtrans_prep.o module_input_chem_data.o module_chem_utilities.o module_tropopause.o  module_upper_bc_driver.o gigc_convert_state_mod.o
 	$(RM) $@
@@ -363,6 +382,6 @@ chem_driver.o: compile_chem ../dyn_em/module_convtrans_prep.o module_input_chem_
           $(WRF_SRC_ROOT_DIR)/var/build/da_name_space.pl $*.f90 > $*.f90.tmp ; \
           mv $*.f90.tmp $*.f90 ; \
         fi
-	$(FC) -o $@ -c $(FCFLAGS) -traceback $(OMP) $(MODULE_DIRS) -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -I$(ROOTDIR)/chem/gigc/mod $(PROMOTION) $(FCSUFFIX) $*.f90
+	$(FC) -o $@ -c $(FCFLAGS) $(TRACEBACK_OPT) $(OMP) $(MODULE_DIRS) -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -I$(ROOTDIR)/chem/gigc/mod $(PROMOTION) $(FCSUFFIX) $*.f90
 
 # Note that linking is suppressed for chemics & chem_driver, so you have to do this linking in wrf.exe, ndown/nup.exe, ...

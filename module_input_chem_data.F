@@ -29,6 +29,7 @@
 module module_input_chem_data
    use module_io_domain
    use module_domain
+   use module_data_sorgam, ONLY : conmin, rgasuniv, epsilc, grav
    use module_get_file_names, only: eligible_file_name, number_of_eligible_files, unix_ls
 
    implicit none
@@ -590,10 +591,23 @@ contains
       jtf = min(jte, jde - 1)
       ktf = kde - 1
 
+      ! Set boundary transfer method.
+      ! This varies by mechanism and aerosol model, but we use a simplified version
+      ! of the original WRF-Chem code. (hplin, 6/19/19)
       i_bdy_method = 0
-      !! CHEMISTRY DEVELOPERS: YOU WILL LIKELY NEED TO UPDATE THIS TO SET APPROPRIATE
-      !! BOUNDARY CONDITIONS. BELOW IS A MOSTLY STUBBED OUT EXAMPLE MECHANISM FROM
-      !! WRF-CHEM.
+      if (have_bcs_chem) then
+         i_bdy_method = 6
+      endif
+
+      ! Below actual code from module_input_chem_data of original WRF-Chem
+      ! (c) original authors
+
+      ! Below statement is from bdy_chem_value_gcm (chem, chem_b, chem_bt, dt, ic)
+      ! from WRF-Chem -- this is used for i_bdy_method = 6 when have_bcs_chem
+      ! is enabled. (hplin, 6/19/19)
+      !
+      ! chem = max(epsilc, chem_b + chem_bt * dt)
+
       if (jts - jbs .lt. spec_zone) then
       ! y-start boundary
          do j = jts, min(jtf, jbs + spec_zone - 1)
@@ -605,8 +619,12 @@ contains
                   if (v(i, k, j) .lt. 0.) then
                      chem(i, k, j) = chem(i_inner, k, jbs + spec_zone)
                   else
-                     ! See default value above
-                     chem(i, k, j) = chem_bv_def
+                     if(i_bdy_method .eq. 6) then
+                        chem(i, k, j) = max(epsilc, chem_bys(i, k, 1) + chem_btys(i, k, 1) * dt)
+                     else
+                        ! See default value above
+                        chem(i, k, j) = chem_bv_def
+                     endif
                   endif
                enddo
             enddo
@@ -623,7 +641,12 @@ contains
                   if (v(i, k, j + 1) .gt. 0.) then
                      chem(i, k, j) = chem(i_inner, k, jbe - spec_zone)
                   else
-                     chem(i, k, j) = chem_bv_def
+                     if(i_bdy_method .eq. 6) then
+                        chem(i, k, j) = max(epsilc, chem_bye(i, k, 1) + chem_btye(i, k, 1) * dt)
+                     else
+                        ! See default value above
+                        chem(i, k, j) = chem_bv_def
+                     endif
                   endif
                enddo
             enddo
@@ -641,7 +664,12 @@ contains
                   if (u(i, k, j) .lt. 0.) then
                      chem(i, k, j) = chem(ibs + spec_zone, k, j_inner)
                   else
-                     chem(i, k, j) = chem_bv_def
+                     if(i_bdy_method .eq. 6) then
+                        chem(i, k, j) = max(epsilc, chem_bxs(i, k, 1) + chem_btxs(i, k, 1) * dt)
+                     else
+                        ! See default value above
+                        chem(i, k, j) = chem_bv_def
+                     endif
                   endif
                enddo
             enddo
@@ -659,7 +687,12 @@ contains
                   if (u(i + 1, k, j) .gt. 0.) then
                      chem(i, k, j) = chem(ibe - spec_zone, k, j_inner)
                   else
-                     chem(i, k, j) = chem_bv_def
+                     if(i_bdy_method .eq. 6) then
+                        chem(i, k, j) = max(epsilc, chem_bxe(i, k, 1) + chem_btxe(i, k, 1) * dt)
+                     else
+                        ! See default value above
+                        chem(i, k, j) = chem_bv_def
+                     endif
                   endif
                enddo
             enddo

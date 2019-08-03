@@ -35,6 +35,7 @@
       PUBLIC  :: IS_ICE
       PUBLIC  :: IS_NEAR      
       PUBLIC  :: SET_DRY_SURFACE_PRESSURE
+      PUBLIC  :: Set_Met_AgeOfAir
 #if defined( ESMF_ ) || defined( EXTERNAL_GRID )
       PUBLIC  :: GIGC_Cap_Tropopause_Prs
 #endif
@@ -139,6 +140,7 @@
 !  29 Nov 2016 - R. Yantosca - grid_mod.F90 is now gc_grid_mod.F90
 !  24 Aug 2017 - M. Sulprizio- Remove support for GCAP, GEOS-4, GEOS-5 and MERRA
 !  08 Mar 2018 - E. Lundgren - Add GIGC_Cap_Tropopause_Prs from GCHP gchp_util
+!  21 Dec 2018 - M. Sulprizio- Add new routine Set_Met_AgeOfAir
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -892,16 +894,18 @@
 !$OMP+DEFAULT( SHARED )
 !$OMP+PRIVATE( I, J, L, N )
             DO N = 1, State_Chm%nSpecies
-            DO L = 1, LLPAR
-            DO J = 1, JJPAR
-            DO I = 1, IIPAR
+
+               DO L = 1, LLPAR
+               DO J = 1, JJPAR
+               DO I = 1, IIPAR
+
                State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N)
      &                                    * State_Met%DP_DRY_PREV(I,J,L)
      &                                    / State_Met%DELP_DRY(I,J,L) 
-            ENDDO
-            ENDDO
-            ENDDO
-            ENDDO
+               ENDDO
+               ENDDO
+               ENDDO
+               ENDDO
 !$OMP END PARALLEL DO
 
          ELSE
@@ -2024,5 +2028,72 @@
 !$OMP END PARALLEL DO
 
       END SUBROUTINE COSSZA
+!EOC
+!------------------------------------------------------------------------------
+!                  GEOS-Chem Global Chemical Transport Model                  !
+!------------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: set_met_ageofair
+!
+! !DESCRIPTION: Subroutine Set\_Met\_AgeOfAir adds the time step (in seconds)
+!  to every grid box every time step with a total sink at the surface every 
+!  time step to reproduce GMI tracer mechanism.
+!\\
+!\\
+! !INTERFACE:
+!
+      SUBROUTINE Set_Met_AgeOfAir( State_Met )
+!
+! !USES:
+!
+      USE CMN_SIZE_MOD
+      USE State_Met_Mod,      ONLY : MetState
+      USE TIME_MOD,           ONLY : GET_TS_DYN
+!
+! !OUTPUT PARAMETERS: 
+!
+      TYPE(MetState), INTENT(INOUT) :: State_Met
+!
+! !REVISION HISTORY: 
+!  21 Dec 2018 - M. Sulprizio- Initial version
+!EOP
+!------------------------------------------------------------------------------
+!BOC
+!
+! !LOCAL VARIABLES:
+!
+      INTEGER        :: I, J, L
+      REAL(fp), SAVE :: TimeStep
+
+      !=================================================================
+      ! SET_MET_AGEOFAIR begins here!
+      !=================================================================
+
+      ! Get timestep [s]
+      TimeStep = GET_TS_DYN()
+
+!$OMP PARALLEL DO
+!$OMP+DEFAULT( SHARED )
+!$OMP+PRIVATE( I, J, L )
+      DO L=1,LLPAR
+      DO J=1,JJPAR
+      DO I=1,IIPAR
+
+         IF ( L == 1 ) THEN
+            ! Set the surface to a sink
+            State_Met%AgeOfAir(I,J,L) = 0
+         ELSE
+            ! Otherwise add time step [s]
+            State_Met%AgeOfAir(I,J,L) = State_Met%AgeOfAir(I,J,L) + 
+     &                                  TimeStep
+         ENDIF
+
+      ENDDO
+      ENDDO
+      ENDDO
+!$OMP END PARALLEL DO
+
+      END SUBROUTINE Set_Met_AgeOfAir
 !EOC
       END MODULE DAO_MOD
