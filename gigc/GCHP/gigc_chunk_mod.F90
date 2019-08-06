@@ -281,7 +281,7 @@ CONTAINS
         return
       endif
 
-      if(CMN_Alloc .and. GC_Alloc .and. allocated(State_Met%AREA_M2)) then
+      if(CMN_Alloc .and. GC_Alloc .and. associated(State_Met%AREA_M2)) then
         AREA_M2 = State_Met%AREA_M2
       endif
 
