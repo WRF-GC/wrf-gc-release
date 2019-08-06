@@ -1,5 +1,12 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!               __          _______  ______       _____  _____!               \ \        / /  __ \|  ____|     / ____|/ ____|!                \ \  /\  / /| |__) | |__ ______| |  __| |!                 \ \/  \/ / |  _  /|  __|______| | |_ | |!                  \  /\  /  | | \ \| |         | |__| | |____!                   \/  \/   |_|  \_\_|          \_____|\_____|!!----------------------- ALPHA VERSION, v0.9 (20190802) -----------------------!
+!               __          _______  ______       _____  _____                 !
+!               \ \        / /  __ \|  ____|     / ____|/ ____|                !
+!                \ \  /\  / /| |__) | |__ ______| |  __| |                     !
+!                 \ \/  \/ / |  _  /|  __|______| | |_ | |                     !
+!                  \  /\  /  | | \ \| |         | |__| | |____                 !
+!                   \/  \/   |_|  \_\_|          \_____|\_____|                !
+!                                                                              !
+!----------------------- ALPHA VERSION, v0.9 (20190802) -----------------------!
 !
 ! WRF-GC: GEOS-Chem High Performance-powered Chemistry Add-On for WRF Model
 ! Developed by Haipeng Lin <hplin@g.harvard.edu>, Xu Feng <fengx7@pku.edu.cn>
@@ -51,30 +58,44 @@ subroutine chem_driver(grid, config_flags &
    use module_dm
    use module_model_constants
    use module_state_description
+
    use module_chem_utilities
+
    use module_input_chem_data, only: last_chem_time, &
 #if (defined(CHEM_DBG_I) && defined(CHEM_DBG_J) && defined(CHEM_DBG_K))
                                     chem_dbg, &
 #endif
       get_last_gas
+
    use module_upper_bc_driver, only: upper_bc_driver
+
    use module_tropopause, only: tropopause_driver
+
    use GIGC_Chunk_Mod
-   use PRECISION_MOD
+   use PRECISION_MOD ! Variable Precision code (fp) parameter
+
+
    use Input_Opt_Mod, only: OptInput
    use State_Chm_Mod, only: ChmState
    use State_Met_Mod, only: MetState
    use State_Diag_Mod, only: DgnState
+
    use GIGC_Convert_State_Mod
+
    use GIGC_Stateful_Mod
+
    implicit none
+
    logical, external :: wrf_dm_on_monitor
 
    type(domain), target :: grid
 
 # include <dummy_new_decl.inc>
 # define NO_I1_OLD
+
    TYPE(grid_config_rec_type), INTENT(IN) :: config_flags
+
+
 
    integer :: ids, ide, jds, jde, kds, kde, &
               ims, ime, jms, jme, kms, kme, &
@@ -83,10 +104,18 @@ subroutine chem_driver(grid, config_flags &
 
    integer :: GEOS_CHEM_RC
 
-   TYPE(OptInput) :: Input_Opt   TYPE(MetState) :: State_Met   TYPE(ChmState) :: State_Chm   TYPE(DgnState) :: State_Diag
+   TYPE(OptInput) :: Input_Opt      ! Input Options
+   TYPE(MetState) :: State_Met      ! Meteorology state
+   TYPE(ChmState) :: State_Chm      ! Chemistry state
+   TYPE(DgnState) :: State_Diag     ! Diagnostics state
+
    TYPE(GIGC_Chunk_Operators) :: GIGC_Ops
 
-   real(4), allocatable :: lonCtr(:, :)   real(4), allocatable :: latCtr(:, :)   real(4), allocatable :: lonEdge(:, :)   real(4), allocatable :: latEdge(:, :)
+   real(4), allocatable :: lonCtr(:, :)  ! Lon Centers (rad)
+   real(4), allocatable :: latCtr(:, :)  ! Lat Centers (rad)
+   real(4), allocatable :: lonEdge(:, :) ! Lon Edges (rad)
+   real(4), allocatable :: latEdge(:, :) ! Lat Edges (rad)
+
    integer :: IM, JM, LM
 
    integer :: II, JJ
@@ -103,7 +132,8 @@ subroutine chem_driver(grid, config_flags &
 
    TYPE(WRFU_TimeInterval) :: tmpTimeInterval
    real(KIND=8) :: curr_secs
-   real(KIND=8) :: real_time_r8   logical      :: do_chemstep
+   real(KIND=8) :: real_time_r8 ! ext. function in adapt_timestep_em.F
+   logical      :: do_chemstep
 
    integer :: debug_level
    integer :: ij
@@ -124,7 +154,12 @@ subroutine chem_driver(grid, config_flags &
    character*256 :: debug_format
 
    real(KIND=8), dimension(8), save ::        &
-                         WRFGC_Overhead_Time, &                         WRFGC_GC_Time,       &                         WRFGC_Phys_Time,     &                         WRFGC_Diag_Time,     &                         WRF_Total_Time   real(KIND=8), save :: WRF_Time_Last_Call
+                         WRFGC_Overhead_Time, &          ! WRF-GC Coupling Overhead Time, Generic [s]
+                         WRFGC_GC_Time,       &          ! GEOS-Chem Column Code Time [s]
+                         WRFGC_Phys_Time,     &          ! WRF-GC Coupling, Physics/Parameterization [s]
+                         WRFGC_Diag_Time,     &          ! WRF-GC Coupling, Diagnostics [s]
+                         WRF_Total_Time                  ! Total WRF Time (Estimate from MPI) [s]
+   real(KIND=8), save :: WRF_Time_Last_Call
    real(KIND=8)       :: WRFGC_Time_Temp_Start, WRFGC_Time_Temp_End
 
    intrinsic max, min
@@ -225,7 +260,8 @@ subroutine chem_driver(grid, config_flags &
 
    call set_tiles(grid, ids, ide, jds, jde, ips, ipe, jps, jpe)
 
-   chem_minval = epsilc   chem_select: select case(config_flags%chem_opt)
+   chem_minval = epsilc ! chem_minval can be case dependant and set below...
+   chem_select: select case(config_flags%chem_opt)
       case (233)
          call wrf_debug(15, 'GIGC chem_driver: chem_opt = 233. Running GEOS-Chem HP chemistry option.')
       case default
@@ -247,9 +283,6 @@ subroutine chem_driver(grid, config_flags &
       enddo
    enddo
 
-!------------------------------------------------------------------------
-! Main chemistry tile loop
-!------------------------------------------------------------------------
    chem_tile_loop_1: DO ij = 1, grid%num_tiles
 
       its = grid%i_start(ij)
@@ -297,9 +330,6 @@ subroutine chem_driver(grid, config_flags &
       end if
 #endif
 
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!  CHEMISTRY DRIVER/ MECHANISM (do_timestep)
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    if (do_chemstep) then
       if(am_I_Root) then
          call wrf_debug(15, 'Pumpkin chem_driver: THIS IS THE MASTER PROCESS - CALLING CHEMISTRY')
@@ -406,7 +436,33 @@ subroutine chem_driver(grid, config_flags &
       if(.not. FIRST) then
 
          call wrf_debug(15, 'GIGC chem_driver: Before GIGC_Chunk_Run')
-         call GIGC_Chunk_Run( am_I_Root  = am_I_Root,                      &                              IM         = IM,                             &                              JM         = JM,                             &                              LM         = LM,                             &                              ID         = grid%id,                        &                              nymd       = nymd,                           &                              nhms       = nhms,                           &                              year       = WRF_dateY,                      &                              month      = WRF_dateM,                      &                              day        = WRF_dateD,                      &                              dayOfYr    = ijulian,                        &                              hour       = WRF_dateH,                      &                              minute     = WRF_dateI,                      &                              second     = WRF_dateS,                      &                              hElapsed   = WRF_hoursElapsed,               &                              lonCtr     = lonCtr,                         &                              latCtr     = latCtr,                         &                              lonEdge    = lonEdge,                        &                              latEdge    = latEdge,                        &                              Input_Opt  = Input_Opt,                      &                              State_Chm  = State_Chm,                      &                              State_Met  = State_Met,                      &                              State_Diag = State_Diag,                     &                              Operators  = GIGC_Ops,                       &                              IsChemTime = .true.,                         &                              RC         = GEOS_CHEM_RC)         call wrf_debug(15, 'GIGC chem_driver: After GIGC_Chunk_Run')
+         call GIGC_Chunk_Run( am_I_Root  = am_I_Root,                      & ! Is this the root PET?
+                              IM         = IM,                             & ! # of lons on this PET
+                              JM         = JM,                             & ! # of lats on this PET
+                              LM         = LM,                             & ! # of levs on this PET
+                              ID         = grid%id,                        & ! Domain identifier, this PET
+                              nymd       = nymd,                           & ! Current YYYYMMDD date - INTEGER
+                              nhms       = nhms,                           & ! Current hhmmss time - INTEGER
+                              year       = WRF_dateY,                      & ! Current year - INTEGER
+                              month      = WRF_dateM,                      & ! Current month - INTEGER
+                              day        = WRF_dateD,                      & ! Current day - INTEGER
+                              dayOfYr    = ijulian,                        & ! Current day of year - INTEGER (grid%julian)
+                              hour       = WRF_dateH,                      & ! Current hour - INTEGER
+                              minute     = WRF_dateI,                      & ! Current minute - INTEGER
+                              second     = WRF_dateS,                      & ! Current second - INTEGER
+                              hElapsed   = WRF_hoursElapsed,               & ! Runs hours elapsed [r4]
+                              lonCtr     = lonCtr,                         & ! Column Lon Centers [rad]
+                              latCtr     = latCtr,                         & ! Column Lat Centers [rad]
+                              lonEdge    = lonEdge,                        & ! Column Lon Edges [rad]
+                              latEdge    = latEdge,                        & ! Column Lat Edges [rad]
+                              Input_Opt  = Input_Opt,                      & ! Input Options
+                              State_Chm  = State_Chm,                      & ! Chemistry State
+                              State_Met  = State_Met,                      & ! Meteorology State
+                              State_Diag = State_Diag,                     & ! Diagnostics State
+                              Operators  = GIGC_Ops,                       & ! Run operator options
+                              IsChemTime = .true.,                         & ! Is it time for chem?
+                              RC         = GEOS_CHEM_RC)                     ! Success or failure?
+         call wrf_debug(15, 'GIGC chem_driver: After GIGC_Chunk_Run')
 
       endif
 
@@ -447,7 +503,8 @@ subroutine chem_driver(grid, config_flags &
          write(6, debug_format) "=> WRF                        ", WRF_Total_Time(grid%id)
          write(6, debug_format) "===> Total WRF-GC             ", WRFGC_Overhead_Time(grid%id)+WRFGC_GC_Time(grid%id)+WRF_Total_Time(grid%id)
       endif
-   end if
+   end if ! Chemistry time step check
+
    do nv = 1, num_chem
       do j = jts, jte
          do i = its, ite
@@ -456,7 +513,6 @@ subroutine chem_driver(grid, config_flags &
       enddo
    enddo
 
-!-- set upper boundary condition
    if (config_flags%have_bcs_upper) then
       call wrf_debug(15, 'Pumpkin chem_driver: set upper boundary condition')
       call upper_bc_driver(grid%id, grid%dt, current_date_char, &
@@ -468,7 +524,9 @@ subroutine chem_driver(grid, config_flags &
 
    call wrf_debug(15, 'Pumpkin chem_driver: Exiting chem_driver (chem_tile_loop_1)')
 end do chem_tile_loop_1
+
    FIRST = .FALSE.
+
    WRF_Time_Last_Call = MPI_Wtime()
 
 end subroutine chem_driver
