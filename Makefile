@@ -138,7 +138,7 @@ export OMPI_CC=$(SCC)
 ifeq ($(ESMF_COMPILER),intel)
 	export OMPI_CXX=icpc
 	TRACEBACK_OPT := -traceback
-else ifeq($(ESMF_COMPILER),gfortran)
+else ifeq ($(ESMF_COMPILER),gfortran)
 	export OMPI_CXX=g++
 	TRACEBACK_OPT := -fbacktrace
 endif
