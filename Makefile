@@ -167,9 +167,10 @@ clean:
 	rm -f *.o
 	rm -f *.f90
 	rm -f *.mod
-	cd gigc; make HPC=y realclean
+	cd gigc; FC=$(SFC) make HPC=y realclean
 	cd gigc/GCHP; make USE_EXTERNAL_GRID=y MET=geos-fp the_nuclear_option
 	cd gigc/GCHP; make clean
+	rm gigc/GCHP/*.o
 	rm -f ../dyn_em/module_convtrans_prep.f90
 	rm -f ../dyn_em/module_convtrans_prep.o
 	@echo "Cleaning chem may not be enough - check subdirectories."
