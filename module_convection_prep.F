@@ -1,15 +1,52 @@
-module module_convection_prep
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!               __          _______  ______       _____  _____                 !
+!               \ \        / /  __ \|  ____|     / ____|/ ____|                !
+!                \ \  /\  / /| |__) | |__ ______| |  __| |                     !
+!                 \ \/  \/ / |  _  /|  __|______| | |_ | |                     !
+!                  \  /\  /  | | \ \| |         | |__| | |____                 !
+!                   \/  \/   |_|  \_\_|          \_____|\_____|                !
+!                                                                              !
+!----------------------- ALPHA VERSION, v0.9 (20190802) -----------------------!
+!
+! WRF-GC: GEOS-Chem High Performance-powered Chemistry Add-On for WRF Model
+! Developed by Haipeng Lin <hplin@g.harvard.edu>, Xu Feng <fengx7@pku.edu.cn>
+!    January 2018, Peking University, Dept of Atmospheric and Oceanic Sciences
+!    Correspondence to: Tzung-May Fu <fuzm@sustech.edu.cn>
+!
+! ALPHA INFORMATION:
+!    WRF-GC Alpha (version 0.9) is experimental. Please notify the authors of
+!    any bugs, suggestions and feature requests through email or the GitHub
+!    repository.
+!
+! COPYRIGHT STATEMENT:
+!    Permission is hereby granted, free of charge, to any person obtaining a copy
+!   of this software and associated documentation files (the "Software"), to 
+!   use, copy, modify the Software, and to permit persons to whom the Software is
+!   furnished to do so, subject to the following conditions:
+!
+!   - The above copyright notice and this permission notice shall be included in all
+!   copies or substantial portions of the Software.
+! 
+!   - The Software, modified in part or in full may not be redistributed without
+!   express permission from the copyright holder(s).
+! 
+!   Except as contained in this notice or in attribution, the name of the WRF-GC model
+!   shall not be used as an endorsement for distributing modified copies of the
+!   Software without prior written permission from the copyright holder(s).
+! 
+!   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+!   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+!   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+!   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+!   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+!   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+!   SOFTWARE.
+! 
+!  WRF and the GEOS-Chem model, GCHP are (c) their original authors.
+!
+!------------------------------------------------------------------------------- 
 
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!
-! !MODULE: module_convection_prep.F
-!
-! !DESCRIPTION: This module performs the diagnostics of variables needed 
-!               by GEOS-CHEM convection\_mod from WRF cumulus 
-!               parameterization. (xfeng, 11/14/2018) 
-!
-!----------------------------NTIEDEKE SCHEME----------------------------
-!    
+module module_convection_prep
      use module_model_constants, only:rd=>r_d, rv=>r_v, &
    &       cpd=>cp, alv=>xlv, als=>xls, alf=>xlf, t13=>Prandtl, g              
 
@@ -42,63 +79,19 @@ module module_convection_prep
       rtber=tmelt-5.,             &
       rtice=tmelt-23.,            &
       vtmpc1=rv/rd-1.0 )
-!
-!     entrdd: average entrainment & detrainment rate for downdrafts
-!     ------
-!
       parameter(entrdd = 2.0e-4)
-!
-!     cmfcmax:   maximum massflux value allowed for updrafts etc
-!     -------
-!
       parameter(cmfcmax = 1.0)
-!
-!     cmfcmin:   minimum massflux value (for safety)
-!     -------
-!
       parameter(cmfcmin = 1.e-10)
-!
-!     cmfdeps:   fractional massflux for downdrafts at lfs
-!     -------
-!
       parameter(cmfdeps = 0.30)
-
-!     zdnoprc:   deep cloud is thicker than this height (Unit:Pa)
-!
       parameter(zdnoprc = 2.0e4)
-!     -------
-!   
-!     cprcon:    coefficient from cloud water to rain water
-!   
       parameter(cprcon = 1.4e-3)
-!     -------
-!
-!     momtrans: momentum transport method
-!     ( 1 = IFS40r1 method; 2 = new method )
-!
       parameter(momtrans = 2 )
-!     -------
-!
-!     coefficient for pressure gradient intensity
-!     (0.7 - 1.0 is recommended in this vesion of Tiedtke scheme) 
       parameter(pgcoef=0.7)
-!     -------
-!
       logical :: nonequil
-!     nonequil: representing equilibrium and nonequilibrium convection
-!     ( .false. [equilibrium: removing all CAPE]; .true. [nonequilibrium: relaxing CAPE toward CAPE from PBL]. 
-!       Ref. Bechtold et al. 2014 JAS )
-! 
       parameter(nonequil = .true. )
-!
-!--------------------
-!     switches for deep, mid, shallow convections, downdraft, and momentum transport
-!     ------------------
       logical :: lmfpen,lmfmid,lmfscv,lmfdd,lmfdudv
       parameter(lmfpen=.true.,lmfmid=.true.,lmfscv=.true.,lmfdd=.true.,lmfdudv=.true.)
-!--------------------------------------------------------------------------------------------------------------
 contains
-!-----------------------------------------------------------------------
      subroutine cu_ntiedtke(                                    &
                  dt,itimestep,stepcu                            &
                 ,raincv,pratec,qfx,hfx                          &
@@ -110,71 +103,11 @@ contains
                 ,its,ite, jts,jte, kts,kte                      &
                 ,rthcuten,rqvcuten,rqccuten,rqicuten            &
                 ,rucuten, rvcuten                               &
-!                ,f_qv    ,f_qc    ,f_qr    ,f_qi    ,f_qs      &
                 ,pmflxrain, pmflxsnow                           &
                 ,cmfmc, dqrcu, cloud_bot                        &
                 ,dtrainu, dtraind, dtrain, reevapcn             &
                                                                 )
-!-------------------------------------------------------------------
       implicit none
-!-------------------------------------------------------------------
-!-- u3d         3d u-velocity interpolated to theta points (m/s)
-!-- v3d         3d v-velocity interpolated to theta points (m/s)
-!-- th3d        3d potential temperature (k)
-!-- t3d         temperature (k)
-!-- qv3d        3d water vapor mixing ratio (kg/kg)
-!-- qc3d        3d cloud mixing ratio (kg/kg)
-!-- qi3d        3d ice mixing ratio (kg/kg)
-!-- rho3d       3d air density (kg/m^3)
-!-- p8w         3d hydrostatic pressure at full levels (pa)
-!-- pcps        3d hydrostatic pressure at half levels (pa)
-!-- pi3d        3d exner function (dimensionless)
-!-- qvften      3d total advective + PBL moisture tendency (kg kg-1 s-1)
-!-- thften      3d total advective + PBL + radiative temperature tendency (k s-1)
-!-- rthcuten      theta tendency due to 
-!                 cumulus scheme precipitation (k/s)
-!-- rucuten       u wind tendency due to 
-!                 cumulus scheme precipitation (k/s)
-!-- rvcuten       v wind tendency due to 
-!                 cumulus scheme precipitation (k/s)
-!-- rqvcuten      qv tendency due to 
-!                 cumulus scheme precipitation (kg/kg/s)
-!-- rqccuten      qc tendency due to 
-!                 cumulus scheme precipitation (kg/kg/s)
-!-- rqicuten      qi tendency due to 
-!                 cumulus scheme precipitation (kg/kg/s)
-!-- rainc         accumulated total cumulus scheme precipitation (mm)
-!-- raincv        cumulus scheme precipitation (mm)
-!-- pratec        precipitiation rate from cumulus scheme (mm/s)
-!-- pmflxrain     convective rain flux (kg/m^2/s)                       ***fox change*** 
-!-- pmflxsnow     convective snow flux (kg/m^2/s)                       ***fox change***
-!-- cmfmc         mass flux in updrafts (kg/m^2/s)                      ***fox change***
-!-- dqrcu         to determin the cloud base level                      ***fox change***
-!-- dtrain        detrainment flux (kg/m^2/s)                           ***fox change***
-!-- reevapcn      flux difference of precip in downdrafts (kg/m^2/s)    ***fox change***
-!-- dz8w        dz between full levels (m)
-!-- qfx         upward moisture flux at the surface (kg/m^2/s)
-!-- hfx         upward heat flux at the surface (w/m^2) 
-!-- dt          time step (s)
-!-- ids         start index for i in domain
-!-- ide         end index for i in domain
-!-- jds         start index for j in domain
-!-- jde         end index for j in domain
-!-- kds         start index for k in domain
-!-- kde         end index for k in domain
-!-- ims         start index for i in memory
-!-- ime         end index for i in memory
-!-- jms         start index for j in memory
-!-- jme         end index for j in memory
-!-- kms         start index for k in memory
-!-- kme         end index for k in memory
-!-- its         start index for i in tile
-!-- ite         end index for i in tile
-!-- jts         start index for j in tile
-!-- jte         end index for j in tile
-!-- kts         start index for k in tile
-!-- kte         end index for k in tile
-!-------------------------------------------------------------------
       integer, intent(in) ::            ids,ide, jds,jde, kds,kde,      &
                                         ims,ime, jms,jme, kms,kme,      &
                                         its,ite, jts,jte, kts,kte,      &
@@ -203,13 +136,6 @@ contains
                                         dtrainu, dtraind, dtrain
       real,    dimension(ims:ime, kms:kme, jms:jme), intent(inout) ::   &
                                         reevapcn
-                                      
-!***fox change***
-! add output variables pmflxrain, pmflxsnow         [convective rain/snow flux  kg/(m^2*s)]
-! add output variables cmfmc                        [mass flux in updrafts      kg/(m^2*s)]
-! add output variables dqrcu cloud_bot
-! add output variables dtrainu dtraind dtrain       [up/downdrafts detrainment flux kg/(m^2*s)]
-! add output variables reevapcn                     [flux difference of precip in downdrafts kg/(m^2*s)]
 
       logical, dimension(ims:ime,jms:jme), intent(inout) ::             &
                                         cu_act_flag
@@ -234,8 +160,6 @@ contains
                                         qfx,                            &
                                         hfx                            
 
-!--------------------------- optional vars ----------------------------
-
       real, dimension(ims:ime, kms:kme, jms:jme),                       &
                optional, intent(inout) ::                               &
                                         rqccuten,                       &
@@ -244,22 +168,6 @@ contains
                                         rthcuten,                       &
                                         rucuten,                        &
                                         rvcuten
-
-!
-! flags relating to the optional tendency arrays declared above
-! models that carry the optional tendencies will provdide the
-! optional arguments at compile time; these flags all the model
-! to determine at run-time whether a particular tracer is in
-! use or not.
-!
-!     logical, optional ::                                      &
-!                                                   f_qv      &
-!                                                  ,f_qc      &
-!                                                  ,f_qr      &
-!                                                  ,f_qi      &
-!                                                  ,f_qs
-
-!--------------------------- local vars ------------------------------
       real      ::                                      &
                                         delt,                           &
                                         rdelt
@@ -284,9 +192,6 @@ contains
                                         pmfdde_rate1    
       real     , dimension(its:ite, kts:kte)  ::          &
                                         zdmfdp1
-       
-!***fox change***
-! add local variables pmflxr1, pmflxs1, zmfu1, zmfd1, icbot1, pmfude_rate1, pmfdde_rate1, zdmfdp1
 
 
       real     , dimension(its:ite, kts:kte+1) ::         &
@@ -324,16 +229,7 @@ contains
                                         kp,                             &
                                         kx,                             &
                                         kx1
-
-!-------other local variables----
       integer                      :: zz, pp
-!-----------------------------------------------------------------------
-!
-!
-!***  check to see if this is a convection timestep
-!
-
-!-----------------------------------------------------------------------
       do j=jts,jte
          do i=its,ite
             cu_act_flag(i,j)=.true.
@@ -346,28 +242,20 @@ contains
       delt=dt*stepcu
       rdelt=1./delt
 
-!-------------  j loop (outer) --------------------------------------------------
-
    do j=jts,jte
-
-! --------------- compute zi and zl -----------------------------------------
       do i=its,ite
         zi(i,kts)=0.0
       enddo
-!
       do k=kts,kte
         do i=its,ite
           zi(i,k+1)=zi(i,k)+dz8w(i,k,j)
         enddo
       enddo
-!
       do k=kts,kte
         do i=its,ite
           zl(i,k)=0.5*(zi(i,k)+zi(i,k+1))
         enddo
       enddo
-
-! --------------- end compute zi and zl -------------------------------------
       do i=its,ite
         slimsk(i)=int(abs(xland(i,j)-2.))
       enddo
@@ -412,12 +300,10 @@ contains
         enddo
         pp = pp + 1
       enddo
-!
       do i=its,ite
         evap(i)    = qfx(i,j)
         heatflux(i)= hfx(i,j)
       enddo
-!----------------------------------------------------------------------------------------
       call tiecnvn(u1,v1,t1,q1,q2,q3,q1b,t1b,ghtl,ghti,omg,prsl,prsi,evap,heatflux,  &
                   rn,pmflxr1,pmflxs1,zmfu1,zmfd1,icbot1,pmfude_rate1,pmfdde_rate1,zdmfdp1,  &
                   slimsk,im,kx,kx1,delt,dx)
@@ -426,8 +312,6 @@ contains
          raincv(i,j)=rn(i)/stepcu
          pratec(i,j)=rn(i)/(stepcu * dt)
       enddo
-      
-      ! add pmflxr1, pmflxs1
       pp = 0 
       do k=kts,kte+1
       	zz = kte+1-pp
@@ -437,14 +321,9 @@ contains
         enddo
         pp = pp + 1
       enddo
-
-      ! add icbot1
       do i=its,ite
          cloud_bot(i,j)=kte - icbot1(i) + 1
       enddo
-
-
-      ! add zmfu1, zmfd1 
       pp=0
       do k=kts,kte
         zz = kte-pp
@@ -460,8 +339,6 @@ contains
         enddo
         pp = pp + 1
       enddo
-
-      ! add pmfude_rate1, pmfdde_rate1, reevapcn
       pp=0
       do k=kts,kte
         zz = kte-pp
@@ -486,7 +363,6 @@ contains
       enddo
 
       if(present(rqccuten))then
-  !      if ( f_qc ) then
           pp = 0
           do k=kts,kte
             zz = kte-pp
@@ -496,10 +372,8 @@ contains
             pp = pp + 1
           enddo
         endif
-  !    endif
 
       if(present(rqicuten))then
-  !      if ( f_qi ) then
           pp = 0
           do k=kts,kte
             zz = kte-pp
@@ -509,12 +383,9 @@ contains
             pp = pp + 1
           enddo
         endif
-  !   endif
 
 
    enddo
-
-      ! add dqrcu
       do j=jts,jte
          do k=kts,kte
             do i=its,ite
@@ -522,9 +393,6 @@ contains
             enddo
          enddo
       enddo
-
-   
-      ! for GEOS-CHEM DO_CLOUD_CONVECTION MOD
       do j=jts,jte
          do k=kts,kte
             do i=its,ite
@@ -534,8 +402,6 @@ contains
             enddo
           enddo
        enddo
-      
-      ! add dtrain
       do j=jts,jte
          do k=kts,kte
             do i=its,ite
@@ -552,7 +418,6 @@ contains
       enddo
  
    end subroutine cu_ntiedtke
-!-----------------------------------------------------------------------
 
    subroutine ntiedtkeinit(rthcuten,rqvcuten,rqccuten,rqicuten,         &
                      rucuten,rvcuten,rthften,rqvften,                   &
@@ -561,9 +426,7 @@ contains
                      ids, ide, jds, jde, kds, kde,                      &
                      ims, ime, jms, jme, kms, kme,                      &
                      its, ite, jts, jte, kts, kte)
-!--------------------------------------------------------------------
    implicit none
-!--------------------------------------------------------------------
    logical , intent(in)           ::  allowed_to_read,restart
    integer , intent(in)           ::  ids, ide, jds, jde, kds, kde, &
                                       ims, ime, jms, jme, kms, kme, &
@@ -627,19 +490,10 @@ contains
    endif
 
    end subroutine ntiedtkeinit
-
-!-----------------------------------------------------------------
-!          level 1 subroutine 'tiecnvn'
-!-----------------------------------------------------------------
       subroutine tiecnvn(pu,pv,pt,pqv,pqc,pqi,pqvf,ptf,poz,pzz,pomg, &
      &         pap,paph,evap,hfx,zprecc,pmflxr,pmflxs,zmfu,zmfd,icbot, &
      &         pmfude_rate,pmfdde_rate,zdmfdp,lndj,lq,km,km1,dt,dx)
-!-----------------------------------------------------------------
-!  this is the interface between the model and the mass 
-!  flux convection module
-!-----------------------------------------------------------------
       implicit none
-!
       real pu(lq,km),   pv(lq,km),   pt(lq,km),   pqv(lq,km)
       real poz(lq,km),  pomg(lq,km), evap(lq),    zprecc(lq)
       real pzz(lq,km1)
@@ -658,22 +512,13 @@ contains
       real pmfude_rate(lq,km), pmfdde_rate(lq,km)
       real zdmfdp(lq,km)
 
-! ***fox change***
-! add variables pmflxr, pmflxs, zmfu, zmfd, icbot
-! add variables pmfude_rate, pmfdde_rate, zdmfdp
-
       integer icbot(lq),   ictop(lq),     ktype(lq),   lndj(lq)
       logical locum(lq)
-!
       real ztmst,fliq,fice,ztc,zalf,tt
       integer i,j,k,lq,km,km1
       real dt,dx,ztpp1
       real zew,zqs,zcor
-!
       ztmst=dt
-!
-!  masv flux diagnostics.
-!
       do j=1,lq
         zrain(j)=0.0
         locum(j)=.false.
@@ -683,9 +528,6 @@ contains
         phhfl(j)=hfx(j)
         pgeoh(j,km1)=g*pzz(j,km1)
       end do
-!
-!     convert model variables for mflux scheme
-!
       do k=1,km
         do j=1,lq
           pcte(j,k)=0.0
@@ -710,10 +552,6 @@ contains
           ztt(j,k) =ptte(j,k)
         end do
       end do
-!
-!-----------------------------------------------------------------------
-!*    2.     call 'cumastrn'(master-routine for cumulus parameterization)
-!
       call cumastrn        &
      &    (lq,       km,       km1,      km-1,    ztp1, &
      &     zqp1,     pum1,     pvm1,     pverv,   zqsat,&
@@ -724,9 +562,6 @@ contains
      &     ktype,    icbot,    ictop,    ztu,     zqu,  &
      &     zlu,      zlude,    zmfu,     zmfd,    zrain,&
      &     pcte,     phhfl,    lndj,     pgeoh,   dx)
-!
-!     to include the cloud water and cloud ice detrained from convection
-!
       do k=1,km
       do j=1,lq
       if(pcte(j,k).gt.0.) then
@@ -737,7 +572,6 @@ contains
       endif
       end do
       end do
-!
       do k=1,km
         do j=1,lq
           pt(j,k)=  ztp1(j,k)+(ptte(j,k)-ztt(j,k))*ztmst
@@ -758,14 +592,8 @@ contains
           end do
         end do
       endif
-!
       return
       end subroutine tiecnvn
-!--------------------------------------------------------------
-!
-!             level 2 subroutines
-!--------------------------------------------------------------
-!           subroutine cumastrn
       subroutine cumastrn  &
      &    (klon,     klev,     klevp1,   klevm1,   pten, &
      &     pqen,     puen,     pven,     pverv,    pqsen,&
@@ -777,66 +605,6 @@ contains
      &     plu,      plude,    pmfu,     pmfd,     prain,&
      &     pcte,     phhfl,    lndj,     zgeoh,   dx)
       implicit none
-!***fox change***
-! add output variables pmflxr, pmflxs, pmfude_rate, pmfdde_rate, zdmfdp
-
-!***cumastrn*  master routine for cumulus massflux-scheme
-!     m.tiedtke      e.c.m.w.f.      1986/1987/1989
-!     modifications
-!     y.wang         i.p.r.c         2001
-!     c.zhang                        2012
-!***purpose
-!   -------
-!          this routine computes the physical tendencies of the
-!     prognostic variables t,q,u and v due to convective processes.
-!     processes considered are: convective fluxes, formation of
-!     precipitation, evaporation of falling rain below cloud base,
-!     saturated cumulus downdrafts.
-!***method
-!   ------
-!     parameterization is done using a massflux-scheme.
-!        (1) define constants and parameters
-!        (2) specify values (t,q,qs...) at half levels and
-!            initialize updraft- and downdraft-values in 'cuinin'
-!        (3) calculate cloud base in 'cutypen', calculate cloud types in cutypen,
-!            and specify cloud base massflux
-!        (4) do cloud ascent in 'cuascn' in absence of downdrafts
-!        (5) do downdraft calculations:
-!              (a) determine values at lfs in 'cudlfsn'
-!              (b) determine moist descent in 'cuddrafn'
-!              (c) recalculate cloud base massflux considering the
-!                  effect of cu-downdrafts
-!        (6) do final adjusments to convective fluxes in 'cuflxn',
-!            do evaporation in subcloud layer
-!        (7) calculate increments of t and q in 'cudtdqn'
-!        (8) calculate increments of u and v in 'cududvn'
-!***externals.
-!   ----------
-!       cuinin:  initializes values at vertical grid used in cu-parametr.
-!       cutypen: cloud bypes, 1: deep cumulus 2: shallow cumulus
-!       cuascn:  cloud ascent for entraining plume
-!       cudlfsn: determines values at lfs for downdrafts
-!       cuddrafn:does moist descent for cumulus downdrafts
-!       cuflxn:  final adjustments to convective fluxes (also in pbl)
-!       cudqdtn: updates tendencies for t and q
-!       cududvn: updates tendencies for u and v
-!***switches.
-!   --------
-!          lmfmid=.t.   midlevel convection is switched on
-!          lmfdd=.t.    cumulus downdrafts switched on
-!          lmfdudv=.t.  cumulus friction switched on
-!***
-!     model parameters (defined in subroutine cuparam)
-!     ------------------------------------------------
-!     entrdd     entrainment rate for cumulus downdrafts
-!     cmfcmax    maximum massflux value allowed for
-!     cmfcmin    minimum massflux value (for safety)
-!     cmfdeps    fractional massflux for downdrafts at lfs
-!     cprcon     coefficient for conversion from cloud water to rain
-!***reference.
-!   ----------
-!          paper on massflux scheme (tiedtke,1989)
-!-----------------------------------------------------------------
       integer  klev,klon,klevp1,klevm1
       real     pten(klon,klev),        pqen(klon,klev),& 
      &         puen(klon,klev),        pven(klon,klev),&
@@ -885,8 +653,6 @@ contains
      &         ktype(klon),            lndj(klon)
       logical  ldcum(klon)
       logical  loddraf(klon),          llo1,   llo2(klon)
-
-!  local varaiables
       real     zcons,zcons2,zqumqe,zdqmin,zdh,zmfmax
       real     zalfaw,zalv,zqalv,zc5ldcp,zc4les,zhsat,zgam,zzz,zhhat
       real     zpbmpt,zro,zdz,zdp,zeps,zfac,wspeed
@@ -895,15 +661,8 @@ contains
       real     ztmst,ztau,zerate,zderate,zmfa
       real     zmfs(klon),pmean(klev),zlon
       real     zduten,zdvten,ztdis,pgf_u,pgf_v
-!-------------------------------------------
-!     1.    specify constants and parameters
-!-------------------------------------------
       zcons=1./(g*ztmst)
       zcons2=3./(g*ztmst)
-
-!--------------------------------------------------------------
-!*    2.    initialize values at vertical grid points in 'cuini'
-!--------------------------------------------------------------
       call cuinin &
      &    (klon,     klev,     klevp1,   klevm1,   pten, &
      &     pqen,     pqsen,    puen,     pven,     pverv,&
@@ -913,22 +672,12 @@ contains
      &     pmfu,     pmfd,     zmfus,    zmfds,    zmfuq,&
      &     zmfdq,    zdmfup,   zdmfdp,   zdpmel,   plu,  &
      &     plude,    ilab)
-
-!----------------------------------
-!*    3.0   cloud base calculations
-!----------------------------------
-!*         (a) determine cloud base values in 'cutypen',
-!              and the cumulus type 1 or 2
-!          -------------------------------------------
        call cutypen &
      &     ( klon,     klev,     klevp1,   klevm1,     pqen,&
      &      ztenh,    zqenh,     zqsenh,    zgeoh,     paph,&
      &      phhfl,    pqhfl,       pgeo,    pqsen,      pap,&
      &       pten,     lndj,        ptu,      pqu,     ilab,&
      &      ldcum,    kcbot,     ictop0,    ktype,    wbase,    plu,   kdpl)
-
-!*         (b) assign the first guess mass flux at cloud base
-!              ------------------------------------------
        do jl=1,klon
          zdhpbl(jl)=0.0
          upbl(jl) = 0.0
@@ -971,11 +720,6 @@ contains
            zmfub(jl) = 0.
         end if
       end do
-!------------------------------------------------------
-!*    4.0   determine cloud ascent for entraining plume
-!------------------------------------------------------
-!*    (a) do ascent in 'cuasc'in absence of downdrafts
-!----------------------------------------------------------
       call cuascn &
      &    (klon,     klev,     klevp1,   klevm1,   ztenh,&
      &     zqenh,    puen,     pven,     pten,     pqen,&
@@ -986,10 +730,6 @@ contains
      &     zmfus,    zmfuq,    zmful,    plude,    zdmfup,&
      &     kcbot,    kctop,    ictop0,   icum,     ztmst,&
      &     zqsenh,   zlglac,   lndj,     wup,      wbase,   kdpl,  pmfude_rate )
-
-!*     (b) check cloud depth and change entrainment rate accordingly
-!          calculate precipitation rate (for downdraft calculation)
-!------------------------------------------------------------------
       do jl=1,klon
         if ( ldcum(jl) ) then
           ikb = kcbot(jl)
@@ -1017,13 +757,7 @@ contains
         zdpmel(jl,jk) = 0.
       end do
       end do
-
-!-----------------------------------------
-!*    6.0   cumulus downdraft calculations
-!-----------------------------------------
       if(lmfdd) then
-!*      (a) determine lfs in 'cudlfsn'
-!--------------------------------------
         call cudlfsn    &
      &    (klon,     klev,&
      &     kcbot,    kctop,    lndj,   ldcum,   &
@@ -1034,23 +768,13 @@ contains
      &     ztd,      zqd,      zud,      zvd,               &
      &     pmfd,     zmfds,    zmfdq,    zdmfdp,             &
      &     idtop,    loddraf)
-!*     (b)  determine downdraft t,q and fluxes in 'cuddrafn'
-!------------------------------------------------------------
         call cuddrafn                                         &
      &   ( klon,     klev,     loddraf,                      &
      &     ztenh,    zqenh,    puen,     pven,                 &
      &     pgeo,     zgeoh,    paph,     zrfl,                  &
      &     ztd,      zqd,      zud,      zvd,      pmfu,         &
      &     pmfd,     zmfds,    zmfdq,    zdmfdp,   pmfdde_rate      )
-!-----------------------------------------------------------
       end if
-!
-!-----------------------------------------------------------------------
-!* 6.0          closure and clean work
-! ------
-!-- 6.1 recalculate cloud base massflux from a cape closure
-!       for deep convection (ktype=1) 
-!
       do jl=1,klon
       if(ldcum(jl) .and. ktype(jl) .eq. 1) then
         ikb = kcbot(jl)
@@ -1072,7 +796,6 @@ contains
         end if
       end if    
       end do
-!
       do jk = 1 , klev
       do jl = 1 , klon
         llo1 = ldcum(jl) .and. ktype(jl) .eq. 1
@@ -1118,10 +841,6 @@ contains
            zmfub1(jl)=min(zmfub1(jl),zmfmax)
        end if
       end do
-!
-!*  6.2   recalculate convective fluxes due to effect of
-!         downdrafts on boundary layer moist static energy budget (ktype=2)
-!--------------------------------------------------------
        do jl=1,klon
          if(ldcum(jl) .and. ktype(jl) .eq. 2) then
            ikb=kcbot(jl)
@@ -1134,7 +853,6 @@ contains
      &            zeps*zqd(jl,ikb)-(1.-zeps)*zqenh(jl,ikb)
            zdqmin=max(0.01*zqenh(jl,ikb),cmfcmin)
            zmfmax=(paph(jl,ikb)-paph(jl,ikb-1))*zcons2
-!  using moist static engergy closure instead of moisture closure
            zdh=cpd*(ptu(jl,ikb)-zeps*ztd(jl,ikb)- &
      &       (1.-zeps)*ztenh(jl,ikb))+alv*zqumqe
            zdh=g*max(zdh,1.e5*zdqmin)
@@ -1145,17 +863,11 @@ contains
            end if
            zmfub1(jl) = min(zmfub1(jl),zmfmax)
          end if
-
-!*  6.3   mid-level convection - nothing special
-!---------------------------------------------------------
          if(ldcum(jl) .and. ktype(jl) .eq. 3 ) then
             zmfub1(jl) = zmfub(jl)
          end if
 
        end do
-
-!*  6.4   scaling the downdraft mass flux
-!---------------------------------------------------------
        do jk=1,klev
        do jl=1,klon
         if( ldcum(jl) ) then
@@ -1168,9 +880,6 @@ contains
         end if
        end do
        end do
-
-!*  6.5   scaling the updraft mass flux
-! --------------------------------------------------------
     do jl = 1,klon
       if ( ldcum(jl) ) zmfs(jl) = zmfub1(jl)/max(cmfcmin,zmfub(jl))
     end do
@@ -1202,9 +911,6 @@ contains
         end if
       end do
     end do
-
-!*    6.6  if ktype = 2, kcbot=kctop is not allowed
-! ---------------------------------------------------
     do jl = 1,klon
       if ( ktype(jl) == 2 .and. &
            kcbot(jl) == kctop(jl) .and. kcbot(jl) >= klev-1 ) then
@@ -1223,9 +929,6 @@ contains
         end if
       end do
     end if
-
-!*   6.7  set downdraft mass fluxes to zero above cloud top
-!----------------------------------------------------
     do jl = 1,klon
       if ( loddraf(jl) .and. idtop(jl) <= kctop(jl) ) then
         idtop(jl) = kctop(jl) + 1
@@ -1246,9 +949,6 @@ contains
         end if
       end do
     end do
-!----------------------------------------------------------
-!*    7.0      determine final convective fluxes in 'cuflx'
-!----------------------------------------------------------
        call cuflxn                                        &                  
      &  (  klon,     klev,     ztmst                       &                                       
      &  ,  pten,     pqen,     pqsen,    ztenh,   zqenh     &                  
@@ -1259,8 +959,6 @@ contains
      &  ,  zmfuq,    zmfdq,    zmful,    plude                   &              
      &  ,  zdmfup,   zdmfdp,   zdpmel,   zlglac                   &             
      &  ,  prain,    pmfdde_rate, pmflxr, pmflxs )     
-
-! some adjustments needed
     do jl=1,klon
       zmfs(jl) = 1.
       zmfuub(jl)=0.
@@ -1309,8 +1007,6 @@ contains
         end if
       end do
     end do
-
-! avoid negative humidities at ddraught top
     do jl = 1,klon
       if ( loddraf(jl) ) then
         jk = idtop(jl)
@@ -1320,9 +1016,6 @@ contains
         end if
       end if
     end do
-
-! avoid negative humidities near cloud top because gradient of precip flux
-! and detrainment / liquid water flux are too large
     do jk = 2 , klev
       do jl = 1, klon
         if ( ldcum(jl) .and. jk >= kctop(jl)-1 .and. jk < kcbot(jl) ) then
@@ -1345,17 +1038,10 @@ contains
       prsfc(jl) = pmflxr(jl,klev+1)
       pssfc(jl) = pmflxs(jl,klev+1)
     end do
-
-!----------------------------------------------------------------
-!*    8.0      update tendencies for t and q in subroutine cudtdq
-!----------------------------------------------------------------
       call cudtdqn(klon,klev,itopm2,kctop,idtop,ldcum,loddraf, &
                  ztmst,paph,zgeoh,pgeo,pten,ztenh,pqen,zqenh,pqsen,     &
                  zlglac,plude,pmfu,pmfd,zmfus,zmfds,zmfuq,zmfdq,zmful,   &
                  zdmfup,zdmfdp,zdpmel,ptte,pqte,pcte)
-!----------------------------------------------------------------
-!*    9.0      update tendencies for u and u in subroutine cududv
-!----------------------------------------------------------------
       if(lmfdudv) then
       do jk = klev-1 , 2 , -1
         ik = jk + 1
@@ -1420,9 +1106,6 @@ contains
         end do
       end do
       end if
-!   --------------------------------------------------
-!   rescale massfluxes for stability in Momentum
-!------------------------------------------------------------------------
       zmfs(:) = 1.
       do jk = 2 , klev
         do jl = 1, klon
@@ -1444,8 +1127,6 @@ contains
           end if
         end do
       end do
-!*  9.1          update u and v in subroutine cududvn
-!-------------------------------------------------------------------
      do jk = 1 , klev
         do jl = 1, klon
           ztenu(jl,jk) = pvom(jl,jk)
@@ -1456,8 +1137,6 @@ contains
       call cududvn(klon,klev,itopm2,ktype,kcbot,kctop, &
                   ldcum,ztmst,paph,puen,pven,zmfuus,zmfdus,zuu,  &
                   zud,zvu,zvd,pvom,pvol)
-
-!  calculate KE dissipation
       do jl = 1, klon
         zsum12(jl) = 0.
         zsum22(jl) = 0.
@@ -1486,11 +1165,6 @@ contains
         end do
 
       end if
-
-!----------------------------------------------------------------------
-!*   10.           IN CASE THAT EITHER DEEP OR SHALLOW IS SWITCHED OFF
-! NEED TO SET SOME VARIABLES A POSTERIORI TO ZERO
-! ---------------------------------------------------
     if ( .not. lmfscv .or. .not. lmfpen ) then
       do jk = 2 , klev
         do jl = 1, klon
@@ -1513,9 +1187,6 @@ contains
 
       return
       end subroutine cumastrn
-!------------------------------------------------------------------------
-!    level 3  subroutine cuinin
-!------------------------------------------------------------------------
      subroutine cuinin &
      &    (klon,     klev,     klevp1,   klevm1,   pten,&
      &     pqen,     pqsen,    puen,     pven,     pverv,&
@@ -1526,22 +1197,6 @@ contains
      &     pmfdq,    pdmfup,   pdmfdp,   pdpmel,   plu,&
      &     plude,    klab)
       implicit none
-!      m.tiedtke         e.c.m.w.f.     12/89
-!***purpose
-!   -------
-!          this routine interpolates large-scale fields of t,q etc.
-!          to half levels (i.e. grid for massflux scheme),
-!          and initializes values for updrafts and downdrafts
-!***interface
-!   ---------
-!          this routine is called from *cumastr*.
-!***method.
-!  --------
-!          for extrapolation to half levels see tiedtke(1989)
-!***externals
-!   ---------
-!          *cuadjtq* to specify qs at half levels
-! ----------------------------------------------------------------
       integer  klon,klev,klevp1,klevm1
       real     pten(klon,klev),        pqen(klon,klev),&
      &         puen(klon,klev),        pven(klon,klev),&
@@ -1562,15 +1217,9 @@ contains
      &         pdpmel(klon,klev)
       integer  klab(klon,klev),        klwmin(klon)
       logical  loflag(klon)
-!  local variables
       integer  jl,jk
       integer  icall,ik
       real     zzs
-!------------------------------------------------------------
-!*    1.       specify large scale parameters at half levels
-!*             adjust temperature fields if staticly unstable
-!*             find level of maximum vertical velocity
-! -----------------------------------------------------------
       do jk=2,klev
       do jl=1,klon
         ptenh(jl,jk)=(max(cpd*pten(jl,jk-1)+pgeo(jl,jk-1), &
@@ -1618,9 +1267,6 @@ contains
         end if
       end do
       end do
-!-----------------------------------------------------------
-!*    2.0      initialize values for updrafts and downdrafts
-!-----------------------------------------------------------
       do jk=1,klev
       ik=jk-1
       if(jk.eq.1) ik=1
@@ -1639,59 +1285,13 @@ contains
       end do
       return
       end subroutine cuinin
-
-!---------------------------------------------------------
-!  level 3 souroutines
-!--------------------------------------------------------
       subroutine cutypen & 
      &   (  klon,    klev,     klevp1,   klevm1,     pqen,&
      &     ptenh,   pqenh,     pqsenh,    pgeoh,     paph,& 
      &       hfx,     qfx,       pgeo,    pqsen,      pap,&
      &      pten,    lndj,       cutu,     cuqu,    culab,&
      &     ldcum,   cubot,      cutop,    ktype,    wbase,    culu,   kdpl  )
-!      zhang & wang      iprc           2011-2013
-!***purpose.
-!   --------
-!          to produce first guess updraught for cu-parameterizations
-!          calculates condensation level, and sets updraught base variables and
-!          first guess cloud type
-!***interface
-!   ---------
-!          this routine is called from *cumastr*.
-!          input are environm. values of t,q,p,phi at half levels.
-!          it returns cloud types as follows;
-!                 ktype=1 for deep cumulus
-!                 ktype=2 for shallow cumulus
-!***method.
-!  --------
-!          based on a simplified updraught equation
-!            partial(hup)/partial(z)=eta(h - hup)
-!            eta is the entrainment rate for test parcel
-!            h stands for dry static energy or the total water specific humidity
-!            references: christian jakob, 2003: a new subcloud model for
-!            mass-flux convection schemes
-!                        influence on triggering, updraft properties, and model
-!                        climate, mon.wea.rev.
-!                        131, 2765-2778
-!            and
-!                        ifs documentation - cy36r1,cy38r1 
-!***input variables:
-!       ptenh [ztenh] - environment temperature on half levels. (cuini)
-!       pqenh [zqenh] - env. specific humidity on half levels. (cuini)
-!       pgeoh [zgeoh] - geopotential on half levels, (mssflx)
-!       paph - pressure of half levels. (mssflx)
-!       rho  - density of the lowest model level
-!       qfx  - net upward moisture flux at the surface (kg/m^2/s)
-!       hfx  - net upward heat flux at the surface (w/m^2)
-!***variables output by cutype:
-!       ktype - convection type - 1: penetrative  (cumastr)
-!                                 2: stratocumulus (cumastr)
-!                                 3: mid-level  (cuasc)
-!       information for updraft parcel (ptu,pqu,plu,kcbot,klab,kdpl...)
-! ----------------------------------------------------------------
-!-------------------------------------------------------------------
       implicit none
-!-------------------------------------------------------------------
       integer  klon, klev, klevp1, klevm1
       real     ptenh(klon,klev),       pqenh(klon,klev),& 
      &         pqsen(klon,klev),       pqsenh(klon,klev),&
@@ -1707,15 +1307,11 @@ contains
       real     zph(klon)
       integer  lndj(klon)
       logical  loflag(klon), deepflag(klon), resetflag(klon)
-
-! output variables
       real     cutu(klon,klev), cuqu(klon,klev), culu(klon,klev)
       integer  culab(klon,klev)
       real     wbase(klon)
       integer  ktype(klon),cubot(klon),cutop(klon),kdpl(klon)
       logical  ldcum(klon)
-
-! local variables
       real     zqold(klon)
       real     rho, part1, part2, root, conw, deltt, deltq
       real     eta(klon),dz(klon),coef(klon)
@@ -1737,7 +1333,6 @@ contains
       integer  zcbase(klon), itoppacel(klon)
       integer  jl,jk,ik,icall,levels
       logical  needreset, lldcum(klon)
-!--------------------------------------------------------------
       do jl=1,klon
         kcbot(jl)=klev
         kctop(jl)=klev
@@ -1746,12 +1341,6 @@ contains
         wbase(jl)=0.
         ldcum(jl)=.false.
       end do
-
-!-----------------------------------------------------------
-! let's do test,and check the shallow convection first
-! the first level is klev
-! define deltat and deltaq
-!-----------------------------------------------------------
       do jk=1,klev
       do jl=1,klon
           plu(jl,jk)=culu(jl,jk)  ! parcel liquid water
@@ -1773,11 +1362,7 @@ contains
          lldcum(jl) = .false.
          loflag(jl) = .true.
       end do
-
-! check the levels from lowest level to second top level
       do jk=klevm1,2,-1
-
-! define the variables at the first level      
       if(jk .eq. klevm1) then
       do jl=1,klon
         rho=pap(jl,klev)/ &
@@ -1812,8 +1397,6 @@ contains
          endif
       enddo
       if(is.eq.0) exit
-
-! the next levels, we use the variables at the first level as initial values
       do jl=1,klon
       if(loflag(jl)) then
         eta(jl) = 0.8/(pgeo(jl,jk)*zrg)+2.e-4
@@ -1829,7 +1412,6 @@ contains
         zph(jl)=paph(jl,jk)
       end if
       end do
-! check if the parcel is saturated
       ik=jk
       icall=1
       call cuadjtqn(klon,klev,ik,zph,ptu,pqu,loflag,icall)
@@ -1841,7 +1423,6 @@ contains
                       (1.-foealfa(ptu(jl,jk+1))))
           plu(jl,jk) = min(plu(jl,jk),5.e-3)
           dh(jl,jk) =  pgeoh(jl,jk) + cpd*(ptu(jl,jk)+ralfdcp*zlglac)
-! compute the updraft speed
           vptu(jl,jk) = ptu(jl,jk)*(1.+vtmpc1*pqu(jl,jk)-plu(jl,jk))+&
                         ralfdcp*zlglac
           vten(jl,jk) = ptenh(jl,jk)*(1.+vtmpc1*pqenh(jl,jk))
@@ -1851,8 +1432,6 @@ contains
           atop2 = 2.0*dz(jl)*abuoy(jl,jk)
           abot =  1.0 + 2.*coef(jl)
           kup(jl,jk)  = (atop1*kup(jl,jk+1) + atop2) / abot
-
-! let's find the exact cloud base
          if ( plu(jl,jk) > 0. .and. klab(jl,jk+1) == 1 ) then
               ik = jk + 1
               zqsu = foeewm(ptu(jl,ik))/paph(jl,ik)
@@ -1870,7 +1449,6 @@ contains
               zdtdp = rd*ptu(jl,ik)/(cpd*paph(jl,ik))
               zdp = zdq/(zdqsdt*zdtdp)
               zcbase(jl) = paph(jl,ik) + zdp
-! chose nearest half level as cloud base (jk or jk+1)
               zpdifftop = zcbase(jl) - paph(jl,jk)
               zpdiffbot = paph(jl,jk+1) - zcbase(jl)
               if ( zpdifftop > zpdiffbot .and. kup(jl,jk+1) > 0. ) then
@@ -1936,14 +1514,6 @@ contains
            end if
        end do
       end do
-      
-!-----------------------------------------------------------
-! next, let's check the deep convection
-! the first level is klevm1-1
-! define deltat and deltaq
-!----------------------------------------------------------
-! we check the parcel starting level by level
-! assume the mix-layer is 60hPa
       deltt = 0.2
       deltq = 1.0e-4
       do jl=1,klon
@@ -1981,8 +1551,6 @@ contains
            resetflag(jl)= .false.
            loflag(jl)   = (.not. deepflag(jl)) .and. (levels.ge.itoppacel(jl))
         end do
-
-! start the inner loop to search the deep convection points
       do jk=levels,2,-1
         is=0
         do jl=1,klon
@@ -1991,8 +1559,6 @@ contains
          endif
         enddo
         if(is.eq.0) exit
-
-! define the variables at the departure level 
         if(jk .eq. levels) then
           do jl=1,klon
           if(loflag(jl)) then
@@ -2031,11 +1597,8 @@ contains
           end if
           end do
         end if
-
-! the next levels, we use the variables at the first level as initial values
         do jl=1,klon
            if(loflag(jl)) then
-! define the fscale
              fscale = min(1.,(pqsen(jl,jk)/pqsen(jl,levels))**3)
              eta(jl) = 1.75e-3*fscale
              dz(jl)  = (pgeoh(jl,jk)-pgeoh(jl,jk+1))*zrg
@@ -2050,7 +1613,6 @@ contains
              zph(jl)=paph(jl,jk)
            end if
         end do
-! check if the parcel is saturated
         ik=jk
         icall=1
         call cuadjtqn(klon,klev,ik,zph,ptu,pqu,loflag,icall)
@@ -2063,7 +1625,6 @@ contains
                       (1.-foealfa(ptu(jl,jk+1))))
           plu(jl,jk) = 0.5*plu(jl,jk)
           dh(jl,jk) =  pgeoh(jl,jk) + cpd*(ptu(jl,jk)+ralfdcp*zlglac)
-! compute the updraft speed
           vptu(jl,jk) = ptu(jl,jk)*(1.+vtmpc1*pqu(jl,jk)-plu(jl,jk))+&
                         ralfdcp*zlglac
           vten(jl,jk) = ptenh(jl,jk)*(1.+vtmpc1*pqenh(jl,jk))
@@ -2073,7 +1634,6 @@ contains
           atop2 = 2.0*dz(jl)*abuoy(jl,jk)
           abot =  1.0 + 2.*coef(jl)
           kup(jl,jk)  = (atop1*kup(jl,jk+1) + atop2) / abot
-! let's find the exact cloud base
           if ( plu(jl,jk) > 0. .and. klab(jl,jk+1) == 1 ) then
               ik = jk + 1
               zqsu = foeewm(ptu(jl,ik))/paph(jl,ik)
@@ -2091,7 +1651,6 @@ contains
               zdtdp = rd*ptu(jl,ik)/(cpd*paph(jl,ik))
               zdp = zdq/(zdqsdt*zdtdp)
               zcbase(jl) = paph(jl,ik) + zdp
-! chose nearest half level as cloud base (jk or jk+1)
               zpdifftop = zcbase(jl) - paph(jl,jk)
               zpdiffbot = paph(jl,jk+1) - zcbase(jl)
               if ( zpdifftop > zpdiffbot .and. kup(jl,jk+1) > 0. ) then
@@ -2171,10 +1730,6 @@ contains
 
       return
       end subroutine cutypen
-
-!-----------------------------------------------------------------
-!    level 3 subroutines 'cuascn'
-!-----------------------------------------------------------------
       subroutine cuascn &
      &    (klon,     klev,     klevp1,   klevm1,   ptenh,&
      &     pqenh,    puen,     pven,     pten,     pqen,&
@@ -2186,75 +1741,6 @@ contains
      &     kcbot,    kctop,    kctop0,   kcum,     ztmst,&
      &     pqsenh,   plglac,   lndj,     wup,      wbase,   kdpl, pmfude_rate)
       implicit none
-!     this routine does the calculations for cloud ascents
-!     for cumulus parameterization
-!     m.tiedtke         e.c.m.w.f.     7/86 modif.  12/89
-!     y.wang            iprc           11/01 modif.
-!     c.zhang           iprc           05/12 modif.
-!***purpose.
-!   --------
-!          to produce cloud ascents for cu-parametrization
-!          (vertical profiles of t,q,l,u and v and corresponding
-!           fluxes as well as precipitation rates)
-!***interface
-!   ---------
-!          this routine is called from *cumastr*.
-!***method.
-!  --------
-!          lift surface air dry-adiabatically to cloud base
-!          and then calculate moist ascent for
-!          entraining/detraining plume.
-!          entrainment and detrainment rates differ for
-!          shallow and deep cumulus convection.
-!          in case there is no penetrative or shallow convection
-!          check for possibility of mid level convection
-!          (cloud base values calculated in *cubasmc*)
-!***externals
-!   ---------
-!          *cuadjtqn* adjust t and q due to condensation in ascent
-!          *cuentrn*  calculate entrainment/detrainment rates
-!          *cubasmcn* calculate cloud base values for midlevel convection
-!***reference
-!   ---------
-!          (tiedtke,1989)
-!***input variables:
-!       ptenh [ztenh] - environ temperature on half levels. (cuini)
-!       pqenh [zqenh] - env. specific humidity on half levels. (cuini)
-!       puen - environment wind u-component. (mssflx)
-!       pven - environment wind v-component. (mssflx)
-!       pten - environment temperature. (mssflx)
-!       pqen - environment specific humidity. (mssflx)
-!       pqsen - environment saturation specific humidity. (mssflx)
-!       pgeo - geopotential. (mssflx)
-!       pgeoh [zgeoh] - geopotential on half levels, (mssflx)
-!       pap - pressure in pa.  (mssflx)
-!       paph - pressure of half levels. (mssflx)
-!       pqte - moisture convergence (delta q/delta t). (mssflx)
-!       pverv - large scale vertical velocity (omega). (mssflx)
-!       klwmin [ilwmin] - level of minimum omega. (cuini)
-!       klab [ilab] - level label - 1: sub-cloud layer.
-!                                   2: condensation level (cloud base)
-!       pmfub [zmfub] - updraft mass flux at cloud base. (cumastr)
-!***variables modified by cuasc:
-!       ldcum - logical denoting profiles. (cubase)
-!       ktype - convection type - 1: penetrative  (cumastr)
-!                                 2: stratocumulus (cumastr)
-!                                 3: mid-level  (cuasc)
-!       ptu - cloud temperature.
-!       pqu - cloud specific humidity.
-!       plu - cloud liquid water (moisture condensed out)
-!       puu [zuu] - cloud momentum u-component.
-!       pvu [zvu] - cloud momentum v-component.
-!       pmfu - updraft mass flux.
-!       pmfus [zmfus] - updraft flux of dry static energy. (cubasmc)
-!       pmfuq [zmfuq] - updraft flux of specific humidity.
-!       pmful [zmful] - updraft flux of cloud liquid water.
-!       plude - liquid water returned to environment by detrainment.
-!       pdmfup [zmfup] -
-!       kcbot - cloud base level. (cubase)
-!       kctop - cloud top level
-!       kctop0 [ictop0] - estimate of cloud top. (cumastr)
-!       kcum [icum] - flag to control the call
 
       integer  klev,klon,klevp1,klevm1
       real     ptenh(klon,klev),       pqenh(klon,klev), &
@@ -2293,7 +1779,6 @@ contains
       integer  kdpl(klon)
       real     zoentr(klon),           zdpmean(klon)
       real     pdmfen(klon,klev),      pmfude_rate(klon,klev)
-! local variables
       integer  jl,jk
       integer  ikb,icum,itopm2,ik,icall,is,kcum,jlm,jll
       integer  jlx(klon)
@@ -2305,9 +1790,6 @@ contains
       real     zrnew,zz,zdmfeu,zdmfdu,dp
       real     zfac,zbuoc,zdkbuo,zdken,zvv,zarg,zchange,zxe,zxs,zdshrd
       real     atop1,atop2,abot
-!--------------------------------
-!*    1.       specify parameters
-!--------------------------------
       zcons2=3./(g*ztmst)
       zfacbuo = 0.5/(1.+0.5)
       zprcdgw = cprcon*zrg
@@ -2315,9 +1797,6 @@ contains
       z_cwifrac = 0.5
       z_cprc2 = 0.5
       z_cwdrag = (3.0/8.0)*0.506/0.2
-!---------------------------------
-!     2.        set default values
-!---------------------------------
       llo3 = .false.
       do jl=1,klon
         zluold(jl)=0.
@@ -2331,8 +1810,6 @@ contains
           pqu(jl,klev) = 0.
         end if
       end do
-
- ! initialize variout quantities     
       do jk=1,klev
       do jl=1,klon
           if(jk.ne.kcbot(jl)) plu(jl,jk)=0.
@@ -2356,9 +1833,6 @@ contains
       do jl = 1,klon
         if ( ktype(jl) == 3 ) ldcum(jl) = .false.
       end do
-!------------------------------------------------
-!     3.0      initialize values at cloud base level
-!------------------------------------------------
       do jl=1,klon
         kctop(jl)=kcbot(jl)
         if(ldcum(jl)) then
@@ -2370,18 +1844,7 @@ contains
           pmful(jl,ikb) = pmfub(jl)*plu(jl,ikb)
         end if
       end do
-!
-!-----------------------------------------------------------------
-!     4.       do ascent: subcloud layer (klab=1) ,clouds (klab=2)
-!              by doing first dry-adiabatic ascent and then
-!              by adjusting t,q and l accordingly in *cuadjtqn*,
-!              then check for buoyancy and set flags accordingly
-!-----------------------------------------------------------------
-!
       do jk=klevm1,3,-1
-!             specify cloud base values for midlevel convection
-!             in *cubasmc* in case there is not already convection
-! ---------------------------------------------------------------------
       ik=jk
       call cubasmcn&
      &    (klon,     klev,     klevm1,   ik,      pten,&
@@ -2419,17 +1882,10 @@ contains
       end do
 
       if(is.gt.0) llo3 = .true.
-!
-!*     specify entrainment rates in *cuentr*
-! -------------------------------------
       ik=jk
       call cuentrn(klon,klev,ik,kcbot,ldcum,llo3, &
                   pgeoh,pmfu,zdmfen,zdmfde)
-!
-!      do adiabatic ascent for entraining/detraining plume
       if(llo3) then
-! -------------------------------------------------------
-!
         do jl = 1,klon
           zqold(jl) = 0.
         end do
@@ -2481,7 +1937,6 @@ contains
                           (1./max(cmfcmin,pmfu(jl,jk)))
           zluold(jl) = plu(jl,jk)
         end do
-! reset to environmental values if below departure level
         do jl = 1,klon
           if ( jk > kdpl(jl) ) then
             ptu(jl,jk) = ptenh(jl,jk)
@@ -2490,16 +1945,11 @@ contains
             zluold(jl) = plu(jl,jk)
           end if
         end do
-!*             do corrections for moist ascent
-!*             by adjusting t,q and l in *cuadjtq*
-!------------------------------------------------
       ik=jk
       icall=1
-!
       if ( jlm > 0 ) then
         call cuadjtqn(klon,klev,ik,zph,ptu,pqu,loflag,icall)
       end if
-! compute the upfraft speed in cloud layer
         do jll = 1 , jlm
           jl = jlx(jll)
           if ( pqu(jl,jk) /= zqold(jl) ) then
@@ -2518,7 +1968,6 @@ contains
               zlrain(jl,jk+1))
             zbe = ptenh(jl,jk)*(1.+vtmpc1*pqenh(jl,jk))
             zbuo(jl,jk) = zbc - zbe
-! set flags for the case of midlevel convection
             if ( ktype(jl) == 3 .and. klab(jl,jk+1) == 1 ) then
               if ( zbuo(jl,jk) > -0.5 ) then
                 ldcum(jl) = .true.
@@ -2541,7 +1990,6 @@ contains
                 (ptenh(jl,jk)*(1.+vtmpc1*pqenh(jl,jk)))+zbuo(jl,jk+1) / &
                 (ptenh(jl,jk+1)*(1.+vtmpc1*pqenh(jl,jk+1))))*0.5
               zdkbuo = (pgeoh(jl,jk)-pgeoh(jl,jk+1))*zfacbuo*zbuoc
-! mixing and "pressure" gradient term in upper troposphere
               if ( zdmfen(jl) > 0. ) then
                 zdken = min(1.,(1.+z_cwdrag)*zdmfen(jl) / &
                         max(cmfcmin,pmfu(jl,jk+1)))
@@ -2568,7 +2016,6 @@ contains
               else
                 zoentr(jl) = 0.
               end if
-! erase values if below departure level
               if ( jk > kdpl(jl) ) then
                 pmfu(jl,jk) = pmfu(jl,jk+1)
                 kup(jl,jk) = 0.5
@@ -2583,7 +2030,6 @@ contains
                 zdmfde(jl) = pmfu(jl,jk+1)
                 plude(jl,jk) = plu(jl,jk+1)*zdmfde(jl)
               end if
-! save detrainment rates for updraught
               if ( pmfu(jl,jk+1) > 0. ) pmfude_rate(jl,jk) = zdmfde(jl)
             end if
           else if ( ktype(jl) == 2 .and. pqu(jl,jk) == zqold(jl) ) then
@@ -2598,9 +2044,6 @@ contains
 
         do jl = 1,klon
           if ( llo1(jl) ) then
-! conversions only proceeds if plu is greater than a threshold liquid water
-! content of 0.3 g/kg over water and 0.5 g/kg over land to prevent precipitation
-! generation from small water contents.
             if ( lndj(jl).eq.1 ) then
               zdshrd = 5.e-4
             else
@@ -2610,7 +2053,6 @@ contains
             if ( plu(jl,jk) > zdshrd )then
               zwu = min(15.0,sqrt(2.*max(0.1,kup(jl,jk+1))))
               zprcon = zprcdgw/(0.75*zwu)
-! PARAMETERS FOR BERGERON-FINDEISEN PROCESS (T < -5C)
               zdt = min(rtber-rtice,max(rtber-ptu(jl,jk),0.))
               zcbf = 1. + z_cprc2*sqrt(zdt)
               zzco = zprcon*zcbf
@@ -2660,9 +2102,6 @@ contains
         end do
       end if
     end do
-!----------------------------------------------------------------------
-! 5.       final calculations
-! ------------------
       do jl = 1,klon
        if ( kctop(jl) == -1 ) ldcum(jl) = .false.
         kcbot(jl) = max(kcbot(jl),kctop(jl))
@@ -2674,9 +2113,6 @@ contains
 
       return
       end subroutine cuascn
-!---------------------------------------------------------
-!  level 3 souroutines  
-!--------------------------------------------------------
       subroutine cudlfsn   &                                                      
      &    (klon,     klev,  &                       
      &     kcbot,    kctop,    lndj,   ldcum,   &                               
@@ -2687,89 +2123,6 @@ contains
      &     ptd,      pqd,      pud,      pvd,            &                        
      &     pmfd,     pmfds,    pmfdq,    pdmfdp,          &                       
      &     kdtop,    lddraf)                                                     
-                                                                                 
-!          this routine calculates level of free sinking for                     
-!          cumulus downdrafts and specifies t,q,u and v values                   
-                                                                                 
-!          m.tiedtke         e.c.m.w.f.    12/86 modif. 12/89                    
-                                                                                 
-!          purpose.                                                              
-!          --------                                                              
-!          to produce lfs-values for cumulus downdrafts                          
-!          for massflux cumulus parameterization                                 
-                                                                                 
-!          interface                                                             
-!          ---------                                                             
-!          this routine is called from *cumastr*.                                
-!          input are environmental values of t,q,u,v,p,phi                       
-!          and updraft values t,q,u and v and also                               
-!          cloud base massflux and cu-precipitation rate.                        
-!          it returns t,q,u and v values and massflux at lfs.                    
-                                                                                 
-!          method.                                                               
-                                                                                 
-!          check for negative buoyancy of air of equal parts of                  
-!          moist environmental air and cloud air.                                
-                                                                                 
-!     parameter     description                                   units          
-!     ---------     -----------                                   -----          
-!     input parameters (integer):                                                
-                                                                                 
-!    *klon*         number of grid points per packet                             
-!    *klev*         number of levels                                             
-!    *kcbot*        cloud base level                                             
-!    *kctop*        cloud top level                                              
-                                                                                 
-!    input parameters (logical):                                                 
-                                                                                 
-!    *lndj*       land sea mask (1 for land)                              
-!    *ldcum*        flag: .true. for convective points                           
-                                                                                 
-!    input parameters (real):                                                    
-                                                                                 
-!    *ptenh*        env. temperature (t+1) on half levels          k             
-!    *pqenh*        env. spec. humidity (t+1) on half levels     kg/kg           
-!    *puen*         provisional environment u-velocity (t+1)      m/s            
-!    *pven*         provisional environment v-velocity (t+1)      m/s            
-!    *pten*         provisional environment temperature (t+1)       k            
-!    *pqsen*        environment spec. saturation humidity (t+1)   kg/kg          
-!    *pgeo*         geopotential                                  m2/s2          
-!    *pgeoh*        geopotential on half levels                  m2/s2           
-!    *paph*         provisional pressure on half levels           pa             
-!    *ptu*          temperature in updrafts                        k             
-!    *pqu*          spec. humidity in updrafts                   kg/kg           
-!    *plu*          liquid water content in updrafts             kg/kg           
-!    *puu*          u-velocity in updrafts                        m/s            
-!    *pvu*          v-velocity in updrafts                        m/s            
-!    *pmfub*        massflux in updrafts at cloud base           kg/(m2*s)       
-                                                                                 
-!    updated parameters (real):                                                  
-                                                                                 
-!    *prfl*         precipitation rate                           kg/(m2*s)       
-                                                                                 
-!    output parameters (real):                                                   
-                                                                                 
-!    *ptd*          temperature in downdrafts                      k             
-!    *pqd*          spec. humidity in downdrafts                 kg/kg           
-!    *pud*          u-velocity in downdrafts                      m/s            
-!    *pvd*          v-velocity in downdrafts                      m/s            
-!    *pmfd*         massflux in downdrafts                       kg/(m2*s)       
-!    *pmfds*        flux of dry static energy in downdrafts       j/(m2*s)       
-!    *pmfdq*        flux of spec. humidity in downdrafts         kg/(m2*s)       
-!    *pdmfdp*       flux difference of precip. in downdrafts     kg/(m2*s)       
-                                                                                 
-!    output parameters (integer):                                                
-                                                                                 
-!    *kdtop*        top level of downdrafts                                      
-                                                                                 
-!    output parameters (logical):                                                
-                                                                                 
-!    *lddraf*       .true. if downdrafts exist                                   
-                                                                                 
-!          externals                                                             
-!          ---------                                                             
-!          *cuadjtq* for calculating wet bulb t and q at lfs                     
-!----------------------------------------------------------------------          
       implicit none                                                       
                    
       integer  klev,klon                                                            
@@ -2797,42 +2150,15 @@ contains
      &         zcond(klon),            zph(klon),         &                       
      &         zhsmin(klon)                                                      
       logical  llo2(klon)                                                        
-! local variables
       integer  jl,jk
       integer  is,ik,icall,ike
       real     zhsk,zttest,zqtest,zbuo,zmftop
-                                                                                   
-!----------------------------------------------------------------------          
-                                                                                 
-!     1.           set default values for downdrafts                             
-!                  ---------------------------------                             
       do jl=1,klon                                                          
         lddraf(jl)=.false.                                                       
         kdtop(jl)=klev+1      
         ikhsmin(jl)=klev+1
         zhsmin(jl)=1.e8                                                  
       enddo                                                                      
-!----------------------------------------------------------------------          
-                                                                                 
-!     2.           determine level of free sinking:                              
-!                  downdrafts shall start at model level of minimum              
-!                  of saturation moist static energy or below                    
-!                  respectively                                                  
-                                                                                 
-!                  for every point and proceed as follows:                       
-                                                                                 
-!                    (1) determine level of minimum of hs                        
-!                    (2) determine wet bulb environmental t and q                
-!                    (3) do mixing with cumulus cloud air                        
-!                    (4) check for negative buoyancy                             
-!                    (5) if buoyancy>0 repeat (2) to (4) for next                
-!                        level below                                             
-                                                                                 
-!                  the assumption is that air of downdrafts is mixture           
-!                  of 50% cloud air + 50% environmental air at wet bulb          
-!                  temperature (i.e. which became saturated due to               
-!                  evaporation of rain and cloud water)                          
-!                  ----------------------------------------------------          
       do jk=3,klev-2
          do jl=1,klon
            zhsk=cpd*pten(jl,jk)+pgeo(jl,jk) +  &
@@ -2847,10 +2173,6 @@ contains
 
       ike=klev-3                                                                 
       do jk=3,ike                                                                
-                                                                                 
-!     2.1          calculate wet-bulb temperature and moisture                   
-!                  for environmental air in *cuadjtq*                            
-!                  -------------------------------------------                   
         is=0                                                                     
         do jl=1,klon                                                        
           ztenwb(jl,jk)=ptenh(jl,jk)                                             
@@ -2868,11 +2190,6 @@ contains
         icall=2                                                                  
         call cuadjtqn                                           &                  
      &   ( klon, klev, ik, zph, ztenwb, zqenwb, llo2, icall)                        
-                                                                                 
-!     2.2          do mixing of cumulus and environmental air                    
-!                  and check for negative buoyancy.                              
-!                  then set values for downdraft at lfs.                         
-!                  ----------------------------------------                      
         do jl=1,klon                                                        
           if(llo2(jl)) then                                                      
             zttest=0.5*(ptu(jl,jk)+ztenwb(jl,jk))                                
@@ -2899,84 +2216,12 @@ contains
                                                                                  
       return                                                                     
       end subroutine cudlfsn  
-
-!---------------------------------------------------------
-!  level 3 souroutines  
-!---------------------------------------------------------
-!       subroutine cuddrafn
-!---------------------------------------------------------
        subroutine cuddrafn                                 &                
      &   ( klon,     klev,    lddraf                      &                                   
      &   , ptenh,    pqenh,    puen,     pven             &                
      &   , pgeo,     pgeoh,    paph,     prfl             &                
      &   , ptd,      pqd,      pud,      pvd,      pmfu   &                
      &   , pmfd,     pmfds,    pmfdq,    pdmfdp,   pmfdde_rate     )                          
-                                                                          
-!          this routine calculates cumulus downdraft descent              
-                                                                          
-!          m.tiedtke         e.c.m.w.f.    12/86 modif. 12/89             
-                                                                          
-!          purpose.                                                       
-!          --------                                                       
-!          to produce the vertical profiles for cumulus downdrafts        
-!          (i.e. t,q,u and v and fluxes)                                  
-                                                                          
-!          interface                                                      
-!          ---------                                                      
-                                                                          
-!          this routine is called from *cumastr*.                         
-!          input is t,q,p,phi,u,v at half levels.                         
-!          it returns fluxes of s,q and evaporation rate                  
-!          and u,v at levels where downdraft occurs                       
-                                                                          
-!          method.                                                        
-!          --------                                                       
-!          calculate moist descent for entraining/detraining plume by     
-!          a) moving air dry-adiabatically to next level below and        
-!          b) correcting for evaporation to obtain saturated state.       
-                                                                          
-!     parameter     description                                   units   
-!     ---------     -----------                                   -----   
-!     input parameters (integer):                                         
-                                                                          
-!    *klon*         number of grid points per packet                      
-!    *klev*         number of levels                                      
-                                                                          
-!    input parameters (logical):                                          
-                                                                          
-!    *lddraf*       .true. if downdrafts exist                            
-                                                                          
-!    input parameters (real):                                             
-                                                                          
-!    *ptenh*        env. temperature (t+1) on half levels          k      
-!    *pqenh*        env. spec. humidity (t+1) on half levels     kg/kg    
-!    *puen*         provisional environment u-velocity (t+1)      m/s     
-!    *pven*         provisional environment v-velocity (t+1)      m/s     
-!    *pgeo*         geopotential                                  m2/s2   
-!    *pgeoh*        geopotential on half levels                  m2/s2    
-!    *paph*         provisional pressure on half levels           pa      
-!    *pmfu*         massflux updrafts                           kg/(m2*s) 
-                                                                          
-!    updated parameters (real):                                           
-                                                                          
-!    *prfl*         precipitation rate                           kg/(m2*s)
-                                                                          
-!    output parameters (real):                                            
-                                                                          
-!    *ptd*          temperature in downdrafts                      k      
-!    *pqd*          spec. humidity in downdrafts                 kg/kg    
-!    *pud*          u-velocity in downdrafts                      m/s     
-!    *pvd*          v-velocity in downdrafts                      m/s     
-!    *pmfd*         massflux in downdrafts                       kg/(m2*s)
-!    *pmfds*        flux of dry static energy in downdrafts       j/(m2*s)
-!    *pmfdq*        flux of spec. humidity in downdrafts         kg/(m2*s)
-!    *pdmfdp*       flux difference of precip. in downdrafts     kg/(m2*s)
-                                                                          
-!          externals                                                      
-!          ---------                                                      
-!          *cuadjtq* for adjusting t and q due to evaporation in          
-!          saturated descent                                              
-!----------------------------------------------------------------------   
       implicit none
       
       integer  klev,klon                                                             
@@ -2999,23 +2244,10 @@ contains
       real     zph(klon)                         
       logical  llo2(klon)                                   
       logical  llo1
-! local variables
       integer  jl,jk
       integer  is,ik,icall,ike, itopde(klon)
       real     zentr,zdz,zzentr,zseen,zqeen,zsdde,zqdde,zdmfdp
       real     zmfdsk,zmfdqk,zbuo,zrain,zbuoyz,zmfduk,zmfdvk
-                                                                
-!----------------------------------------------------------------------   
-!     1.           calculate moist descent for cumulus downdraft by       
-!                     (a) calculating entrainment/detrainment rates,      
-!                         including organized entrainment dependent on    
-!                         negative buoyancy and assuming                  
-!                         linear decrease of massflux in pbl              
-!                     (b) doing moist descent - evaporative cooling       
-!                         and moistening is calculated in *cuadjtq*       
-!                     (c) checking for negative buoyancy and              
-!                         specifying final t,q,u,v and downward fluxes    
-!                    -------------------------------------------------    
       do jl=1,klon                                                   
         zoentr(jl)=0.                                                     
         zbuoy(jl)=0.                                                      
@@ -3114,8 +2346,6 @@ contains
             zdmfdp=-pmfd(jl,jk)*zcond(jl)                                 
             pdmfdp(jl,jk-1)=zdmfdp                                        
             prfl(jl)=prfl(jl)+zdmfdp                                      
-                                                                          
-! compute organized entrainment for use at next level                     
             zbuoyz=zbuo/ptenh(jl,jk)                                      
             zbuoyz=min(zbuoyz,0.0)                                        
             zdz=-(pgeo(jl,jk-1)-pgeo(jl,jk))
@@ -3129,9 +2359,6 @@ contains
                                                                           
       return                                                              
       end subroutine cuddrafn
-!---------------------------------------------------------
-!  level 3 souroutines  
-!--------------------------------------------------------
        subroutine cuflxn         &                                                 
      &  (  klon,     klev,     ztmst &                                                             
      &  ,  pten,     pqen,     pqsen,    ptenh,    pqenh   &                    
@@ -3142,81 +2369,6 @@ contains
      &  ,  pmfuq,    pmfdq,    pmful,    plude             &                    
      &  ,  pdmfup,   pdmfdp,   pdpmel,   plglac            &                    
      &  ,  prain,    pmfdde_rate, pmflxr, pmflxs )                                         
-                                                                               
-!          m.tiedtke         e.c.m.w.f.     7/86 modif. 12/89                  
-                                                                               
-!          purpose                                                             
-!          -------                                                             
-                                                                               
-!          this routine does the final calculation of convective               
-!          fluxes in the cloud layer and in the subcloud layer                 
-                                                                               
-!          interface                                                           
-!          ---------                                                           
-!          this routine is called from *cumastr*.                              
-                                                                               
-                                                                               
-!     parameter     description                                   units        
-!     ---------     -----------                                   -----        
-!     input parameters (integer):                                              
-                                                                               
-!    *klon*         number of grid points per packet                           
-!    *klev*         number of levels                                           
-!    *kcbot*        cloud base level                                           
-!    *kctop*        cloud top level                                            
-!    *kdtop*        top level of downdrafts                                    
-                                                                               
-!    input parameters (logical):                                               
-                                                                               
-!    *lndj*       land sea mask (1 for land)                            
-!    *ldcum*        flag: .true. for convective points                         
-                                                                               
-!    input parameters (real):                                                  
-                                                                               
-!    *ptsphy*       time step for the physics                       s          
-!    *pten*         provisional environment temperature (t+1)       k          
-!    *pqen*         provisional environment spec. humidity (t+1)  kg/kg        
-!    *pqsen*        environment spec. saturation humidity (t+1)   kg/kg        
-!    *ptenh*        env. temperature (t+1) on half levels           k          
-!    *pqenh*        env. spec. humidity (t+1) on half levels      kg/kg        
-!    *paph*         provisional pressure on half levels            pa          
-!    *pap*          provisional pressure on full levels            pa          
-!    *pgeoh*        geopotential on half levels                   m2/s2        
-                                                                               
-!    updated parameters (integer):                                             
-                                                                               
-!    *ktype*        set to zero if ldcum=.false.                               
-                                                                               
-!    updated parameters (logical):                                             
-                                                                               
-!    *lddraf*       set to .false. if ldcum=.false. or kdtop<kctop             
-                                                                               
-!    updated parameters (real):                                                
-                                                                               
-!    *pmfu*         massflux in updrafts                          kg/(m2*s)    
-!    *pmfd*         massflux in downdrafts                        kg/(m2*s)    
-!    *pmfus*        flux of dry static energy in updrafts          j/(m2*s)    
-!    *pmfds*        flux of dry static energy in downdrafts        j/(m2*s)    
-!    *pmfuq*        flux of spec. humidity in updrafts            kg/(m2*s)    
-!    *pmfdq*        flux of spec. humidity in downdrafts          kg/(m2*s)    
-!    *pmful*        flux of liquid water in updrafts              kg/(m2*s)    
-!    *plude*        detrained liquid water                        kg/(m3*s)    
-!    *pdmfup*       flux difference of precip. in updrafts        kg/(m2*s)    
-!    *pdmfdp*       flux difference of precip. in downdrafts      kg/(m2*s)    
-                                                                               
-!    output parameters (real):                                                 
-                                                                               
-!    *pdpmel*       change in precip.-fluxes due to melting       kg/(m2*s)    
-!    *plglac*       flux of frozen cloud water in updrafts        kg/(m2*s)    
-!    *pmflxr*       convective rain flux                          kg/(m2*s)    
-!    *pmflxs*       convective snow flux                          kg/(m2*s)    
-!    *prain*        total precip. produced in conv. updrafts      kg/(m2*s)    
-!                   (no evaporation in downdrafts)                             
-                                                                               
-!          externals                                                           
-!          ---------                                                           
-!          none                                                                
-!----------------------------------------------------------------------        
       implicit none                                                     
 
       integer  klev,klon,ktopm2                                                                         
@@ -3239,7 +2391,6 @@ contains
       logical  lddraf(klon),                                &
      &         ldcum(klon)  
       integer  lndj(klon)
-! local variables
       integer  jl,jk
       integer  is,ik,icall,ike,ikb
       real     ztmst,ztaumel,zcons1a,zcons1,zcons2,zcucov,zcpecons
@@ -3248,17 +2399,12 @@ contains
       real     rhevap(klon)
       integer  idbas(klon)
       logical  llddraf
-!--------------------------------------------------------------------          
-!*             specify constants  
 
       ztaumel=18000.
       zcons1a=cpd/(alf*g*ztaumel)
       zcons2=3./(g*ztmst)
       zcucov=0.05
       zcpecons=5.44e-4/g
-
-!*    1.0          determine final convective fluxes                           
-!                  ---------------------------------                           
       do jl=1,klon
         prain(jl)=0.
         if(.not.ldcum(jl).or.kdtop(jl).lt.kctop(jl)) lddraf(jl)=.false.
@@ -3363,10 +2509,6 @@ contains
            end if
         enddo
       enddo
-!*    2.            calculate rain/snow fall rates                             
-!*                  calculate melting of snow                                  
-!*                  calculate evaporation of precip                            
-!                   -------------------------------                            
 
         do jk=ktopm2,klev
         do jl=1,klon
@@ -3380,9 +2522,6 @@ contains
               pqsen(jl,jk)=foeewm(pten(jl,jk)-zsnmlt/zfac)/pap(jl,jk)
             endif
             zalfaw=foealfa(pten(jl,jk))
-          !
-          ! No liquid precipitation above melting level
-          !
             if ( pten(jl,jk) < tmelt .and. zalfaw > 0. ) then
               plglac(jl,jk) = plglac(jl,jk)+zalfaw*(pdmfup(jl,jk)+pdmfdp(jl,jk))
               zalfaw = 0.
@@ -3455,9 +2594,6 @@ contains
                                       
       return
       end subroutine cuflxn 
-!---------------------------------------------------------
-!  level 3 souroutines  
-!--------------------------------------------------------
      subroutine cudtdqn(klon,klev,ktopm2,kctop,kdtop,ldcum, &
                      lddraf,ztmst,paph,pgeoh,pgeo,pten,ptenh,pqen,  &
                      pqenh,pqsen,plglac,plude,pmfu,pmfd,pmfus,pmfds, &
@@ -3479,13 +2615,9 @@ contains
              pdpmel(klon,klev), pdmfdp(klon,klev)
     real     ptent(klon,klev),  ptenq(klon,klev)
     real     pcte(klon,klev)
-
-! local variables
     integer  jk , ik , jl
     real     zalv , zzp
     real     zdtdt(klon,klev) , zdqdt(klon,klev) , zdp(klon,klev)
-    !*    1.0          SETUP AND INITIALIZATIONS
-    ! -------------------------
     do jk = 1 , klev
       do jl = 1, klon
         if ( ldcum(jl) ) then
@@ -3493,9 +2625,6 @@ contains
         end if
       end do
     end do
-    !-----------------------------------------------------------------------
-    !*    2.0          COMPUTE TENDENCIES
-    ! ------------------
     do jk = ktopm2 , klev
       if ( jk < klev ) then
         do jl = 1,klon
@@ -3523,9 +2652,6 @@ contains
         end do
       end if
     end do
-  !---------------------------------------------------------------
-  !*  3.0          UPDATE TENDENCIES
-  !   -----------------
     do jk = ktopm2 , klev
      do jl = 1, klon
        if ( ldcum(jl) ) then
@@ -3538,9 +2664,6 @@ contains
 
     return
   end subroutine cudtdqn
-!---------------------------------------------------------
-!  level 3 souroutines  
-!--------------------------------------------------------
     subroutine cududvn(klon,klev,ktopm2,ktype,kcbot,kctop,ldcum,  &
                     ztmst,paph,puen,pven,pmfu,pmfd,puu,pud,pvu,pvd,ptenu, &
                     ptenv)
@@ -3555,8 +2678,6 @@ contains
              puu(klon,klev),   pud(klon,klev),&
              pvu(klon,klev),   pvd(klon,klev)
     real     ptenu(klon,klev), ptenv(klon,klev)
-
-!local variables
     real     zuen(klon,klev) , zven(klon,klev) , zmfuu(klon,klev), &
              zmfdu(klon,klev), zmfuv(klon,klev), zmfdv(klon,klev)
 
@@ -3564,7 +2685,6 @@ contains
     real     zzp, zdtdt
    
     real     zdudt(klon,klev), zdvdt(klon,klev), zdp(klon,klev)
-!
     do jk = 1 , klev
       do jl = 1, klon
         if ( ldcum(jl) ) then
@@ -3574,9 +2694,6 @@ contains
         end if
       end do
     end do
-!----------------------------------------------------------------------
-!*    1.0          CALCULATE FLUXES AND UPDATE U AND V TENDENCIES
-! ----------------------------------------------
     do jk = ktopm2 , klev
       ik = jk - 1
       do jl = 1,klon
@@ -3588,7 +2705,6 @@ contains
         end if
       end do
     end do
-    ! linear fluxes below cloud
       do jk = ktopm2 , klev
         do jl = 1, klon
           if ( ldcum(jl) .and. jk > kcbot(jl) ) then
@@ -3602,9 +2718,6 @@ contains
           end if
         end do
       end do
-!----------------------------------------------------------------------
-!*    2.0          COMPUTE TENDENCIES
-! ------------------
     do jk = ktopm2 , klev
       if ( jk < klev ) then
         ik = jk + 1
@@ -3625,9 +2738,6 @@ contains
         end do
       end if
     end do
-!---------------------------------------------------------------------
-!*  3.0        UPDATE TENDENCIES
-!   -----------------
     do jk = ktopm2 , klev
       do jl = 1, klon
         if ( ldcum(jl) ) then
@@ -3636,54 +2746,10 @@ contains
         end if
       end do
     end do
-!----------------------------------------------------------------------
     return
     end subroutine cududvn
-!---------------------------------------------------------
-!  level 3 souroutines  
-!--------------------------------------------------------
       subroutine cuadjtqn                 &                                           
      &    (klon, klev, kk, psp, pt, pq, ldflag,  kcall)                           
-!          m.tiedtke         e.c.m.w.f.     12/89     
-!          purpose.                                                                 
-!          --------                                                                 
-!          to produce t,q and l values for cloud ascent                             
-                                                                                    
-!          interface                                                                
-!          ---------                                                                
-!          this routine is called from subroutines:                                 
-!              *cond*     (t and q at condensation level)                           
-!              *cubase*   (t and q at condensation level)                           
-!              *cuasc*    (t and q at cloud levels)                                 
-!              *cuini*    (environmental t and qs values at half levels)            
-!          input are unadjusted t and q values,                                     
-!          it returns adjusted values of t and q                                    
-                                                                                    
-!     parameter     description                                   units             
-!     ---------     -----------                                   -----             
-!     input parameters (integer):                                                   
-                                                                                    
-!    *klon*         number of grid points per packet                                
-!    *klev*         number of levels                                                
-!    *kk*           level                                                           
-!    *kcall*        defines calculation as                                          
-!                      kcall=0  env. t and qs in*cuini*                             
-!                      kcall=1  condensation in updrafts  (e.g. cubase, cuasc)      
-!                      kcall=2  evaporation in downdrafts (e.g. cudlfs,cuddraf)     
-!     input parameters (real):                                                      
-                                                                                    
-!    *psp*          pressure                                        pa              
-                                                                                    
-!     updated parameters (real):                                                    
-                                                                                    
-!    *pt*           temperature                                     k               
-!    *pq*           specific humidity                             kg/kg             
-!          externals                                                                
-!          ---------                                                                
-!          for condensation calculations.                                           
-!          the tables are initialised in *suphec*.                                  
-                                                                                    
-!----------------------------------------------------------------------             
                                                                                     
       implicit none   
                  
@@ -3691,17 +2757,10 @@ contains
       real     pt(klon,klev),          pq(klon,klev),  &                             
      &         psp(klon)                                                            
       logical  ldflag(klon)                                                         
-! local variables
       integer  jl,jk
       integer  isum,kcall,kk
       real     zqmax,zqsat,zcor,zqp,zcond,zcond1,zl,zi,zf
-!----------------------------------------------------------------------             
-!     1.           define constants                                                 
-!                  ----------------                                                 
       zqmax=0.5  
-                                                                                    
-!     2.           calculate condensation and adjust t and q accordingly            
-!                  -----------------------------------------------------            
                                                                                     
       if ( kcall == 1 ) then
       do jl = 1,klon
@@ -3781,9 +2840,6 @@ contains
 
       return
       end subroutine cuadjtqn
-!---------------------------------------------------------
-!  level 4 souroutines  
-!--------------------------------------------------------
       subroutine cubasmcn &
      &    (klon,     klev,     klevm1,  kk,     pten,&
      &     pqen,     pqsen,    puen,    pven,   pverv,&
@@ -3792,24 +2848,6 @@ contains
      &     pqu,      plu,      puu,     pvu,    pmfus,&
      &     pmfuq,    pmful,    pdmfup)
       implicit none
-!      m.tiedtke         e.c.m.w.f.     12/89
-!      c.zhang           iprc           05/2012
-!***purpose.
-!   --------
-!          this routine calculates cloud base values
-!          for midlevel convection
-!***interface
-!   ---------
-!          this routine is called from *cuasc*.
-!          input are environmental values t,q etc
-!          it returns cloudbase values for midlevel convection
-!***method.
-!   -------
-!          s. tiedtke (1989)
-!***externals
-!   ---------
-!          none
-! ----------------------------------------------------------------
       real     pten(klon,klev),        pqen(klon,klev),&
      &         puen(klon,klev),        pven(klon,klev),&
      &         pqsen(klon,klev),       pverv(klon,klev),&
@@ -3824,12 +2862,8 @@ contains
       integer  ktype(klon),            kcbot(klon),&
      &         klab(klon,klev)
       logical  ldcum(klon)
-! local variabels
       integer  jl,kk,klev,klon,klevp1,klevm1
       real     zzzmb
-!--------------------------------------------------------
-!*    1.      calculate entrainment and detrainment rates
-! -------------------------------------------------------
          do jl=1,klon
           if(.not.ldcum(jl) .and. klab(jl,kk+1).eq.0) then
             if(lmfmid .and. pqen(jl,kk) .gt. 0.80*pqsen(jl,kk).and. &
@@ -3856,9 +2890,6 @@ contains
         end do
       return
       end subroutine cubasmcn
-!---------------------------------------------------------
-!  level 4 souroutines  
-!---------------------------------------------------------
       subroutine cuentrn(klon,klev,kk,kcbot,ldcum,ldwork, &
                     pgeoh,pmfu,pdmfen,pdmfde)
        implicit none
@@ -3874,18 +2905,12 @@ contains
        integer  jl
        real  zdz , zmf
        real  zentr(klon)
-    !
-    !* 1. CALCULATE ENTRAINMENT AND DETRAINMENT RATES
-    ! -------------------------------------------
     if ( ldwork ) then
       do jl = 1,klon
         pdmfen(jl) = 0.
         pdmfde(jl) = 0.
         zentr(jl) = 0.
       end do
-      !
-      !*  1.1 SPECIFY ENTRAINMENT RATES
-      !   -------------------------
       do jl = 1, klon
         if ( ldcum(jl) ) then
           zdz = (pgeoh(jl,kk)-pgeoh(jl,kk+1))*zrg
@@ -3899,18 +2924,7 @@ contains
       end do
     end if
     end subroutine cuentrn
-!--------------------------------------------------------
-! external functions
-!------------------------------------------------------
       real function foealfa(tt)
-!     foealfa is calculated to distinguish the three cases:
-!
-!                       foealfa=1            water phase
-!                       foealfa=0            ice phase
-!                       0 < foealfa < 1      mixed phase
-!
-!               input : tt = temperature
-!
         implicit none
         real tt
          foealfa = min(1.,((max(rtice,min(rtwat,tt))-rtice) &
@@ -3950,6 +2964,5 @@ contains
      &        (1.-foealfa(tt))*ralsdcp
       return
       end function  foeldcpm
-!--------------------------END NTIEDTKE SCHEMEM--------------------------
 
 end module module_convection_prep
