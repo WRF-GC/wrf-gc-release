@@ -665,7 +665,7 @@ contains
                      chem(i, k, j) = chem(ibs + spec_zone, k, j_inner)
                   else
                      if(i_bdy_method .eq. 6) then
-                        chem(i, k, j) = max(epsilc, chem_bxs(i, k, 1) + chem_btxs(i, k, 1) * dt)
+                        chem(i, k, j) = max(epsilc, chem_bxs(j, k, 1) + chem_btxs(j, k, 1) * dt)
                      else
                         ! See default value above
                         chem(i, k, j) = chem_bv_def
@@ -688,7 +688,7 @@ contains
                      chem(i, k, j) = chem(ibe - spec_zone, k, j_inner)
                   else
                      if(i_bdy_method .eq. 6) then
-                        chem(i, k, j) = max(epsilc, chem_bxe(i, k, 1) + chem_btxe(i, k, 1) * dt)
+                        chem(i, k, j) = max(epsilc, chem_bxe(j, k, 1) + chem_btxe(j, k, 1) * dt)
                      else
                         ! See default value above
                         chem(i, k, j) = chem_bv_def
