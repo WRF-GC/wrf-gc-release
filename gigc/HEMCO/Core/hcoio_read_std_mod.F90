@@ -71,6 +71,10 @@ MODULE HCOIO_read_std_mod
   ! Parameter used for difference testing of floating points
   REAL(dp), PRIVATE, PARAMETER :: EPSILON = 1.0e-5_dp
 
+#if defined( MODEL_CESM ) || defined( MODEL_WRF )
+  REAL(hp), PRIVATE            :: GC_72_EDGE_SIGMA(73) = (/1.000000E+00, 9.849998E-01, 9.699136E-01, 9.548285E-01, 9.397434E-01, 9.246593E-01, 9.095741E-01, 8.944900E-01, 8.794069E-01, 8.643237E-01, 8.492406E-01, 8.341584E-01, 8.190762E-01, 7.989697E-01, 7.738347E-01, 7.487007E-01, 7.235727E-01, 6.984446E-01, 6.733175E-01, 6.356319E-01, 5.979571E-01, 5.602823E-01, 5.226252E-01, 4.849751E-01, 4.473417E-01, 4.097261E-01, 3.721392E-01, 3.345719E-01, 2.851488E-01, 2.420390E-01, 2.055208E-01, 1.746163E-01, 1.484264E-01, 1.261653E-01, 1.072420E-01, 9.115815E-02, 7.748532E-02, 6.573205E-02, 5.565063E-02, 4.702097E-02, 3.964964E-02, 3.336788E-02, 2.799704E-02, 2.341969E-02, 1.953319E-02, 1.624180E-02, 1.346459E-02, 1.112953E-02, 9.171478E-03, 7.520355E-03, 6.135702E-03, 4.981002E-03, 4.023686E-03, 3.233161E-03, 2.585739E-03, 2.057735E-03, 1.629410E-03, 1.283987E-03, 1.005675E-03, 7.846040E-04, 6.089317E-04, 4.697755E-04, 3.602270E-04, 2.753516E-04, 2.082408E-04, 1.569208E-04, 1.184308E-04, 8.783617E-05, 6.513694E-05, 4.737232E-05, 3.256847E-05, 1.973847E-05, 9.869233E-06/)
+#endif
+
 CONTAINS
 !EOC
 #if !defined(ESMF_)
@@ -1164,15 +1168,21 @@ CONTAINS
     !-----------------------------------------------------------------
 
     UseMESSy = .FALSE.
-    IF ( nlev > 1 .AND. .NOT. IsModelLevel ) THEN 
+    IF ( nlev > 1 .AND. .NOT. IsModelLevel ) THEN
        UseMESSy = .TRUE.
     ENDIF
-    IF ( HCO_IsIndexData(Lct%Dct%Dta%OrigUnit) .AND. UseMESSy ) THEN
-       MSG = 'Cannot do MESSy regridding for index data: ' // &
-             TRIM(srcFile)
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
-       RETURN
+
+#if defined( MODEL_CESM ) || defined( MODEL_WRF )
+    ! If in WRF or the CESM environment, the vertical grid is arbitrary.
+    ! MESSy regridding ALWAYS has to be used.
+    IF ( nlev > 1 ) THEN
+      UseMESSy = .TRUE.
+      IF ( HCO_IsVerb(HcoState%Config%Err,2) ) THEN
+        WRITE(MSG,*) '  ==> WRF/CESM: Always forcing MESSy regridding for number of verticals', nlev, IsModelLevel
+        CALL HCO_MSG(HcoState%Config%Err,MSG)
+      ENDIF
     ENDIF
+#endif
 
     !-----------------------------------------------------------------
     ! Use MESSy regridding
@@ -1183,7 +1193,8 @@ CONTAINS
           CALL HCO_MSG(HcoState%Config%Err,MSG)
        ENDIF
 
-       ! If we do MESSy regridding, we can only do one time step 
+#if !defined( MODEL_CESM ) && !defined( MODEL_WRF )
+       ! If we do MESSy regridding, we can only do one time step
        ! at a time at the moment!
        IF ( tidx1 /= tidx2 ) THEN
           MSG = 'Cannot do MESSy regridding for more than one time step; ' &
@@ -1191,6 +1202,44 @@ CONTAINS
           CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
           RETURN
        ENDIF
+       ! Note: This seems to be a soft restriction - removing this
+       ! does not conflict with MESSy regridding. Need to check (hplin, 5/30/20)
+       ! This has to be used for WRF-GC and HEMCO_CESM so ifdefd out
+#endif
+#if defined( MODEL_WRF ) || defined( MODEL_CESM )
+       !--------------------------------------------------------------
+       ! Eventually get sigma levels
+       ! For files that have hardcoded GEOS-Chem "index"-based levels,
+       ! translate these levels back into a sigma representation
+       ! of the GEOS-Chem levels (sigma = p/ps on INTERFACE)
+       !
+       ! There are caveats with this. This is essentially a copy of the
+       ! hardcoded hPa lists from
+       ! http://wiki.seas.harvard.edu/geos-chem/index.php/GEOS-Chem_vertical_grids
+       ! hard-coded by hand, and we only assume that the data is either
+       ! 47-levels or 72-levels.
+       !
+       ! Parse the 72 list using regex like so: ^ ?\d{1,2} then remove the lines
+       ! Then you have the 73 edges.
+       !
+       ! psfc = PEDGE(0) = 1013.250 hPa
+       !
+       ! Ported from the original WRF-GC implementation (hplin, 5/27/20)
+       !--------------------------------------------------------------
+       IF ( nlev > 1 .AND. IsModelLevel ) THEN
+          IF ( HCO_IsVerb(HcoState%Config%Err,2) ) THEN
+            WRITE(MSG,*) '  ==> WRF/CESM: Writing in fixed sigma coordinates for GEOS-Chem levels', nlon, nlat
+            CALL HCO_MSG(HcoState%Config%Err,MSG)
+          ENDIF
+          ALLOCATE(SigEdge(nlon, nlat, nlev))
+          DO I = 1, nlon
+             DO J = 1, nlat
+               ! Fill with pre-defined, hard coded sigma levels computed.
+               SigEdge(I, J, :) = GC_72_EDGE_SIGMA(1:nlev)
+             ENDDO
+           ENDDO
+       ENDIF
+#endif
 
        !--------------------------------------------------------------
        ! Eventually get sigma levels
@@ -1244,6 +1293,11 @@ CONTAINS
           ENDIF
 
        ENDIF ! nlev>1
+
+#if defined( MODEL_WRF ) || defined( MODEL_CESM )
+       ! Input data is "never" on model levels because model levels can change! (hplin, 5/29/20)
+       IsModelLevel = .false.
+#endif
 
        ! Now do the regridding
        CALL HCO_MESSY_REGRID ( am_I_Root, HcoState,     NcArr,   &
