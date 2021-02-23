@@ -232,10 +232,10 @@ contains
    ! Get the index of the last gas species depending on mechanism. req. by chem/chem_driver
 
    ! Finished, note that gas registry is:
-   ! no,o3,pan,co,alk4,isoprene,hno3,h2o2,acet,mek,ald2,rcho,mvk,macr,ppn,c3h8,hcho,c2h6,n2o5,hno4,ch3ooh,so2,nh3,no2,no3,benzene,toluene,xylenes,limon,mgly,hcooh,n2o,ch4,hcl,ch3cl,ch3ccl3,cl,clo,hocl,clno2,cl2,co2,po2,olnn,olnd,eto2,hc5,mco3,ho2,oh,o,o1d,h2,npmn,r4n2,prpe,br2,br,bro,hobr,hbr,brno2,brno3,chbr3,ch2br2,ch3br,mpn,isopnd,isopnb,moba,propnn,hac,glyc,mvkn,macrn,map,hno2,mtpa,eoh,glyx,acta,hpald,dhdn,ethln,iepoxa,iepoxb,iepoxd,isn1,ripa,ripb,ripd,imae,lvoc,lvocoa,monits,monitu,honit,ipmn,hc187,ocs,brcl,ccl4,cfc113,cfc114,cfc115,hcfc123,hcfc141b,hcfc142b,cfc11,cfc12,hcfc22,h1211,h1301,h2402,clno3,cloo,oclo,cl2o2,h2o,monx,lbro2h,lbro2n,lisopoh,lisopno3,ltro2h,ltro2n,lxro2h,lxro2n,pyac,pox,lox,pco,lco,pso4,dhdc,pmnn,tro2,bro2,n,xro2,imao3,etp,ra3p,rb3p,rp,pp,prpn,pip,r4p,dhpcarp,hpc52o2,vrp,atooh,iap,dhmob,isnp,maop,mrp,inpn,mobaoo,diboo,h,macrno2,roh,isnohoo,isnoob,gaoo,ch3choo,mvkoo,iepoxoo,a3o2,mglyoo,prn1,mgloo,isopnbo2,man2,isnooa,ch2oo,maopo2,isopndo2,b3o2,ato2,r4n1,rco3,limo2,ko2,vro2,hc5oo,macroo,nmao3,pio2,ino2,rio2,r4o2,mro2,moh,n2,o2,rcooh
-
+   ! a3o2,acet,acta,ald2,alk4,ato2,atooh,b3o2,benzene,br,br2,brcl,brno2,brno3,bro,bro2,brsala,brsalc,c2h6,c3h8,c4hvp1,c4hvp2,ccl4,cfc11,cfc113,cfc114,cfc115,cfc12,ch2br2,ch2cl2,ch2i2,ch2ibr,ch2icl,ch2o,ch2oo,ch3br,ch3ccl3,ch3choo,ch3cl,ch3i,ch4,chbr3,chcl3,cl,cl2,cl2o2,clno2,clno3,clo,cloo,co,co2,eoh,ethln,etno3,eto2,etp,glyc,glyx,h,h1211,h1301,h2,h2402,h2o,h2o2,hac,hbr,hc5a,hcfc123,hcfc141b,hcfc142b,hcfc22,hcl,hcooh,hi,hmhp,hmml,hno2,hno3,hno4,ho2,hobr,hocl,hoi,honit,hpald1,hpald1oo,hpald2,hpald2oo,hpald3,hpald4,hpethnl,i,i2,i2o2,i2o3,i2o4,ibr,iche,ichoo,icl,icn,icnoo,icpdh,idc,idchp,idhdp,idhnboo,idhndoo1,idhndoo2,idhpe,idn,idnoo,iepoxa,iepoxaoo,iepoxb,iepoxboo,iepoxd,ihn1,ihn2,ihn3,ihn4,ihoo1,ihoo4,ihpnboo,ihpndoo,ihpoo1,ihpoo2,ihpoo3,ina,ino,ino2b,ino2d,inpb,inpd,io,iono,iono2,iprno3,isopnoo1,isopnoo2,isoprene,itcn,ithn,ko2,lbro2h,lbro2n,lch4,lco,limo2,limon,lisopno3,lisopoh,lox,ltro2h,ltro2n,lvoc,lvocoa,lxro2h,lxro2n,macr,macr1oo,macr1ooh,macrno2,map,mco3,mcrdh,mcrenol,mcrhn,mcrhnb,mcrhp,mcrohoo,mek,meno3,mgly,mo2,moh,monits,monitu,mp,mpan,mpn,mtpa,mtpo,mvk,mvkdh,mvkhc,mvkhcb,mvkhp,mvkn,mvkohoo,mvkpc,n,n2,n2o,n2o5,nh3,no,no2,no3,nprno3,o,o1d,o2,o3,oclo,ocs,oh,oio,olnd,olnn,othro2,pan,pco,pfe,ph2o2,pio2,pip,po2,pox,pp,ppn,prn1,propnn,prpe,prpn,pso4,pyac,r4n1,r4n2,r4o2,r4p,ra3p,rb3p,rcho,rco3,rcooh,ripa,ripb,ripc,ripd,roh,rp,so2,so4h1,so4h2,toluene,tro2,xro2,xylenes
+   ! 
    ! The non-gas registry is:
-   ! dms,so4,msa,nh4,so4s,nit,nits,bcpi,ocpi,bcpo,ocpo,dst1,dst2,dst3,dst4,sala,salc,soap,soas,soaie,soame,soagx,soamg,isn1og,isn1oa,ionita,monita,indiol
+   ! aeri,bcpi,bcpo,dms,dst1,dst2,dst3,dst4,indiol,ionita,isala,isalc,monita,msa,nh4,nit,nits,ocpi,ocpo,sala,salc,so4,so4s,soagx,soaie,soap,soas
 
    integer function get_last_gas(chem_opt)
       implicit none
@@ -246,8 +246,8 @@ contains
          get_last_gas = 0
       case (1)
          get_last_gas = p_ho2
-      case (233) ! GCHP
-         get_last_gas = p_rcooh
+      case (233) ! GEOS-Chem
+         get_last_gas = p_xylenes
 
       case default
          call wrf_error_fatal("Pumpkin module_input_chem_data::get_last_gas: could not decipher chem_opt value")

@@ -37,6 +37,7 @@ COLLECTIONS: 'SpeciesConc',
              'DryDep',
              'JValues',
              'JValuesLocalNoon',
+             'KppDiags',
              'LevelEdgeDiags',      
              'ProdLoss',
              'StateChm',     
@@ -292,6 +293,20 @@ COLLECTIONS: 'SpeciesConc',
   JValuesLocalNoon.duration:  120000,
   JValuesLocalNoon.mode:      'time-averaged'
   JValuesLocalNoon.fields:    'JNoon_?PHO?                   ', 'GIGCchem',
+::
+#==============================================================================
+# %%%%% THE KppDiags COLLECTION %%%%%
+#
+# Diagnostics from the KPP solver.
+#
+# Available for full-chemistry simulations (all variations)
+#==============================================================================
+  KppDiags.template:      '%y4%m2%d2_%h2%n2z.nc4',
+  KppDiags.format:        'CFIO',
+  KppDiags.frequency:     010000
+  KppDiags.duration:      010000
+  KppDiags.mode:          'time-averaged'
+  KppDiags.fields:        'KppError                  ', 'GIGCchem',
 ::
 #==============================================================================
 # %%%%% THE LevelEdgeDiags COLLECTION %%%%%

@@ -6,17 +6,15 @@
 !                  \  /\  /  | | \ \| |         | |__| | |____                 !
 !                   \/  \/   |_|  \_\_|          \_____|\_____|                !
 !                                                                              !
-!----------------------- ALPHA VERSION, v0.9 (20190802) -----------------------!
+!-------------------     v2.0 RELEASE VERSION (20210223)    -------------------!
 !
 ! WRF-GC: GEOS-Chem High Performance-powered Chemistry Add-On for WRF Model
 ! Developed by Haipeng Lin <hplin@g.harvard.edu>, Xu Feng <fengx7@pku.edu.cn>
-!    January 2018, Peking University, Dept of Atmospheric and Oceanic Sciences
+!    February 2021, SUSTech, Atmospheric Chemistry and Climate Group
 !    Correspondence to: Tzung-May Fu <fuzm@sustech.edu.cn>
 !
-! ALPHA INFORMATION:
-!    WRF-GC Alpha (version 0.9) is experimental. Please notify the authors of
-!    any bugs, suggestions and feature requests through email or the GitHub
-!    repository.
+! VERSION INFORMATION:
+!    Please visit http://wrf.geos-chem.org for information.
 !
 ! COPYRIGHT STATEMENT:
 !    Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -79,14 +77,17 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, chemdt, st
       use module_cam_support, only: gas_pcnst_modal_aero, gas_pcnst_modal_aero_pos
       use module_tropopause, only: tropopause_init
       use module_input_chem_data, only: get_last_gas, last_chem_time, setup_gasprofile_maps
+      use module_mixactivate_wrappers, only: wrfgc_mixactivate_init
+      use module_diag_aero_size_info, only: diag_aero_wrfgc_aercld_ptrs
       use GIGC_Chunk_Mod
       use HCO_TYPES_MOD, only: ConfigObj
       use Input_Opt_Mod, only: OptInput
       use State_Chm_Mod, only: ChmState
       use State_Met_Mod, only: MetState
       use State_Diag_Mod, only: DgnState
-      use GIGC_Convert_State_Mod, only: GIGC_Set_WRF, GIGC_IdxSetup
-      use GIGC_Stateful_Mod, only: GIGC_State_Get_Status
+      use State_Grid_Mod
+      use WRFGC_Convert_State_Mod, only: WRFGC_Set_WRF, WRFGC_IdxSetup
+      use GC_Stateful_Mod, only: GIGC_States, Global_Input_Opt, Global_HcoConfig, Global_DiagList
 
       implicit none
       logical, external :: wrf_dm_on_monitor
@@ -144,14 +145,6 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, chemdt, st
       type(WRFU_TimeInterval) :: tmpTimeInterval
       integer :: i, j, k, l, numgas, n, kk, nv, gigc_ptr
       integer :: GEOS_CHEM_RC
-      logical :: IsInit
-
-      type(OptInput)       :: Input_Opt      ! Input Options (same for all domains)
-      type(MetState)       :: State_Met      ! Meteorology state
-      type(ChmState)       :: State_Chm      ! Chemistry state
-      type(DgnState)       :: State_Diag     ! Diagnostics State
-      type(ConfigObj), pointer :: HcoConfig
-
 
       real(4), allocatable :: lonCtr(:, :)  ! Lon Centers (rad)
       real(4), allocatable :: latCtr(:, :)  ! Lat Centers (rad)
@@ -164,10 +157,14 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, chemdt, st
       real                 :: epsilc
       logical              :: Am_I_Root
       integer              :: WRF_DM_MyProc, WRF_DM_NProc, WRF_DM_Comm
+      integer              :: debug_level
       call get_ijk_from_grid(grid, &
                              ids, ide, jds, jde, kds, kde, &
                              ims, ime, jms, jme, kms, kme, &
                              its, ite, jts, jte, kts, kte)
+
+      call nl_get_debug_level(1, debug_level)
+      call set_wrf_debug_level(debug_level)
       ite = min(ite, ide - 1)
       jte = min(jte, jde - 1)
       IM = ite - its + 1
@@ -183,16 +180,33 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, chemdt, st
       call wrf_get_nproc(WRF_DM_NProc)
       call wrf_get_myproc(WRF_DM_MyProc)
       call wrf_get_dm_communicator(WRF_DM_Comm)
-      Input_Opt%HPC     = .true.
-      Input_Opt%RootCPU = Am_I_Root
-      Input_Opt%myCPU   = WRF_DM_MyProc
-      Input_Opt%NPES    = WRF_DM_NProc
-      Input_Opt%MPICOMM = WRF_DM_Comm
+      Global_Input_Opt%isMPI   = .true.
+      Global_Input_Opt%amIRoot = Am_I_Root
+      Global_Input_Opt%thisCPU = WRF_DM_MyProc
+      Global_Input_Opt%numCPUs = WRF_DM_NProc
+      Global_Input_Opt%MPIComm = WRF_DM_Comm
 
-      Input_Opt%LPRT    = .true. ! Print debug information? (LD70)
-      call GIGC_State_Get_Status(Am_I_Root, grid%id, IsInit)
-      if(IsInit) then
-        call wrf_message("GIGC chemics_init: Domain already initialized, skipping.")
+      if(debug_level .ge. 2) then
+        Global_Input_Opt%LPRT    = .true. ! Print debug information? (LD70)
+      endif
+
+      if(Global_Input_Opt%KppStop .eq. .true.) then
+        if(grid%id .ge. 2) then
+          Global_Input_Opt%KppStop = .false.
+        endif
+      endif
+      if(Global_Input_Opt%KppStop .eq. .false.) then
+        write(6,*) "*** WRF-GC WARNING ***"
+        write(6,*) "YOU ARE RUNNING WRF-GC IN MULTI-DOMAIN NESTED MODE, WHICH DISABLES"
+        write(6,*) "CRITICAL INTEGRITY FAILSAFES WITHIN GEOS-CHEM KPP INTEGRATOR."
+        write(6,*) "Your results may NOT be scientifically valid until you verify the run"
+        write(6,*) "has completed without KPP errors. Refer to the log and State_Diag%KppError"
+      endif
+      if(grid%id .gt. 8 .or. grid%id .lt. 1) then
+        call wrf_error_fatal("WRFGC chemics_init: Cannot run with domains < 1 or > 8. This is an arbitrary code limitation.")
+      endif
+      if(GIGC_States(grid%id)%Init .eq. .true.) then
+        write(6, *) "WRFGC chemics_init: Domain", grid%id, "already initialized, skipping."
         return
       endif
       allocate(lonCtr (IM,   JM))
@@ -222,28 +236,22 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, chemdt, st
       nymdE = config_flags%end_year * 10000 + config_flags%end_month * 100 + config_flags%end_day
       nhmsE = config_flags%end_hour * 10000 + config_flags%end_minute * 100 + config_flags%end_second
 
-
-#ifdef CHEM_DBG_I
-      call print_chem_species_index(config_flags%chem_opt)
-#endif
-
       write(message_txt, *) "   This is domain ", grid%id
       call wrf_message("*****************************************************************")
-      call wrf_message("  __          _______  ______       _____  _____ _    _ _____    ")
-      call wrf_message("  \ \        / /  __ \|  ____|     / ____|/ ____| |  | |  __ \   ")
-      call wrf_message("   \ \  /\  / /| |__) | |__ ______| |  __| |    | |__| | |__) |  ")
-      call wrf_message("    \ \/  \/ / |  _  /|  __|______| | |_ | |    |  __  |  ___/   ")
-      call wrf_message("     \  /\  /  | | \ \| |         | |__| | |____| |  | | |       ")
-      call wrf_message("      \/  \/   |_|  \_\_|          \_____|\_____|_|  |_|_|       ")
+      call wrf_message("        __          _______  ______       _____  _____           ")
+      call wrf_message("        \ \        / /  __ \|  ____|     / ____|/ ____|          ")
+      call wrf_message("         \ \  /\  / /| |__) | |__ ______| |  __| |               ")
+      call wrf_message("          \ \/  \/ / |  _  /|  __|______| | |_ | |               ")
+      call wrf_message("           \  /\  /  | | \ \| |         | |__| | |____           ")
+      call wrf_message("            \/  \/   |_|  \_\_|          \_____|\_____|          ")
       call wrf_message("*****************************************************************")
-      call wrf_message("         WRF-GC MODEL, VERSION 1811.11 - WRF BINDINGS            ")
-      call wrf_message(" For errors, suggestions & feedback email linhaipeng@pku.edu.cn  ")
+      call wrf_message("           WRF-GC MODEL, BUILD 2005.22 - WRF BINDINGS            ")
+      call wrf_message("                 WRF-GC RELEASE 2.0     20210223                 ")
+      call wrf_message(" For errors, suggestions & feedback email hplin@seas.harvard.edu ")
       call wrf_message("*****************************************************************")
       call wrf_message(message_txt)
 
-
       numgas = get_last_gas(config_flags%chem_opt)
-
       IF (config_flags%chem_opt == 0 .AND. config_flags%aer_ra_feedback .NE. 0) THEN
          call wrf_error_fatal("chemics_init: If no chemistry, aer_ra_feedback must be 0")
       ENDIF
@@ -261,11 +269,88 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, chemdt, st
          ENDIF
       ENDIF
 
+      if(.NOT. config_flags%restart) then
+       do j=jts,jte
+          do k=kts,kte
+             do i=its,ite
+                tauaer1(i,k,j) = 0.
+                tauaer2(i,k,j) = 0.
+                tauaer3(i,k,j) = 0.
+                tauaer4(i,k,j) = 0.
+                gaer1(i,k,j) = 0.
+                gaer2(i,k,j) = 0.
+                gaer3(i,k,j) = 0.
+                gaer4(i,k,j) = 0.
+                waer1(i,k,j) = 0.
+                waer2(i,k,j) = 0.
+                waer3(i,k,j) = 0.
+                waer4(i,k,j) = 0.
+                l2aer(i,k,j,1) = 0.
+                l2aer(i,k,j,2) = 0.
+                l2aer(i,k,j,3) = 0.
+                l2aer(i,k,j,4) = 0.
+                l3aer(i,k,j,1) = 0.
+                l3aer(i,k,j,2) = 0.
+                l3aer(i,k,j,3) = 0.
+                l3aer(i,k,j,4) = 0.
+                l4aer(i,k,j,1) = 0.
+                l4aer(i,k,j,2) = 0.
+                l4aer(i,k,j,3) = 0.
+                l4aer(i,k,j,4) = 0.
+                l5aer(i,k,j,1) = 0.
+                l5aer(i,k,j,2) = 0.
+                l5aer(i,k,j,3) = 0.
+                l5aer(i,k,j,4) = 0.
+                l6aer(i,k,j,1) = 0.
+                l6aer(i,k,j,2) = 0.
+                l6aer(i,k,j,3) = 0.
+                l6aer(i,k,j,4) = 0.
+                l7aer(i,k,j,1) = 0.
+                l7aer(i,k,j,2) = 0.
+                l7aer(i,k,j,3) = 0.
+                l7aer(i,k,j,4) = 0.
+                extaerlw1(i,k,j) = 0.
+                extaerlw2(i,k,j) = 0.
+                extaerlw3(i,k,j) = 0.
+                extaerlw4(i,k,j) = 0.
+                extaerlw5(i,k,j) = 0.
+                extaerlw6(i,k,j) = 0.
+                extaerlw7(i,k,j) = 0.
+                extaerlw8(i,k,j) = 0.
+                extaerlw9(i,k,j) = 0.
+                extaerlw10(i,k,j) = 0.
+                extaerlw11(i,k,j) = 0.
+                extaerlw12(i,k,j) = 0.
+                extaerlw13(i,k,j) = 0.
+                extaerlw14(i,k,j) = 0.
+                extaerlw15(i,k,j) = 0.
+                extaerlw16(i,k,j) = 0.
+                tauaerlw1(i,k,j) = 0.
+                tauaerlw2(i,k,j) = 0.
+                tauaerlw3(i,k,j) = 0.
+                tauaerlw4(i,k,j) = 0.
+                tauaerlw5(i,k,j) = 0.
+                tauaerlw6(i,k,j) = 0.
+                tauaerlw7(i,k,j) = 0.
+                tauaerlw8(i,k,j) = 0.
+                tauaerlw9(i,k,j) = 0.
+                tauaerlw10(i,k,j) = 0.
+                tauaerlw11(i,k,j) = 0.
+                tauaerlw12(i,k,j) = 0.
+                tauaerlw13(i,k,j) = 0.
+                tauaerlw14(i,k,j) = 0.
+                tauaerlw15(i,k,j) = 0.
+                tauaerlw16(i,k,j) = 0.
+             end do
+          end do
+       end do
+      end if
+
       if (config_flags%have_bcs_upper) then
          call wrf_error_fatal("Pumpkin chemics_init: have_bcs_upper = .true. is not supported by this Chemistry abstraction layer.")
       endif
       if(config_flags%chem_opt == 0) then
-        CALL wrf_debug(15, 'Pumpkin chemics_init: **** NO CHEMISTRY IS USED IN THIS WRF RUN ****')
+        CALL wrf_debug(1, 'Pumpkin chemics_init: **** NO CHEMISTRY IS USED IN THIS WRF RUN ****')
         return
       endif
       num_vert_mix = 0
@@ -299,69 +384,91 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, chemdt, st
          if (size(is_aerosol) /= num_chem) &
             call wrf_error_fatal("The number of chemistry species has changed between nests. Use same chem_opt for all domains.")
       end if
+      call diag_aero_wrfgc_aercld_ptrs(num_chem, is_aerosol, config_flags)
       kte = kte - 1
 
       write(message_txt, *) "Pumpkin chemics_init: its, ite, jts, jte, kts, kte: ", its, " ", ite, " ", jts, " ", jte, " ", kts, " ", kte, "domain", grid%id
-      call wrf_debug(15, message_txt)
+      call wrf_debug(1, message_txt)
 
       write(message_txt, *) "Pumpkin chemics_init: ims, ime, jms, jme, kms, kme: ", ims, " ", ime, " ", jms, " ", jme, " ", kms, " ", kme, "domain", grid%id
-      call wrf_debug(15, message_txt)
+      call wrf_debug(1, message_txt)
      
       write(message_txt, *) "Pumpkin chemics_init: ids, ide, jds, jde, kds, kde: ", ids, " ", ide, " ", jds, " ", jde, " ", kds, " ", kde, "domain", grid%id
-      call wrf_debug(15, message_txt)
-      call GIGC_Chunk_Init(am_I_Root = Am_I_Root,           & ! Are we on the root PET?   
-                           I_LO      = 1,                   & ! Min lon index on this PET
-                           J_LO      = 1,                   & ! Min lat index on this PET
-                           I_HI      = ite-its+1,           & ! Max lon index on this PET - for IIPAR
-                           J_HI      = jte-jts+1,           & ! Max lat index on this PET - for JJPAR
-                           IM        = ite-its+1,           & ! # lons   on this PET
-                           JM        = jte-jts+1,           & ! # lats   on this PET
-                           LM        = kte-kts+1,           & ! # levels on this PET - do not pass top level (see deduction above)
-                           ID        = grid%id,             & ! Domain identifier, this PET
-                           IM_WORLD  = ite-its+1,           & ! # lons   in global grid
-                           JM_WORLD  = jte-jts+1,           & ! # lats   in global grid
-                           LM_WORLD  = kte-kts+1,           & ! # levels in global grid - do not pass top level (see deduction above)
-                           nymdB     = nymdB,               & ! YYYYMMDD @ start of run
-                           nhmsB     = nhmsB,               & ! hhmmss   @ start of run
-                           nymdE     = nymdE,               & ! YYYYMMDD @ end of run
-                           nhmsE     = nhmsE,               & ! hhmmss   @ end of run
-                           tsChem    = chemdt*60.,          & ! Chemical timestep [s], REAL
-                           tsDyn     = chemdt*60.,          & ! Dynamic  timestep [s], REAL
-                           lonCtr    = lonCtr,              & ! Lon centers [radians]
-                           latCtr    = latCtr,              & ! Lat centers [radians]
-                           lonEdge   = lonEdge,             & ! Lon edges [radians]
-                           latEdge   = latEdge,             & ! Lat edges [radians]
-                           myPET     = WRF_DM_MyProc,       & ! Local PET
-                           Input_Opt = Input_Opt,           & ! Input Options obj
-                           State_Chm = State_Chm,           & ! Chemistry State obj
-                           State_Diag= State_Diag,          & ! Diagnostics State obj
-                           State_Met = State_Met,           & ! Meteorology State obj
-                           HcoConfig = HcoConfig,           & ! HEMCO Configuration Object
-                           RC        = GEOS_CHEM_RC,        & ! GC Status Code (Success?)
-                           MPI_COMM  = WRF_DM_Comm)           ! MPI Communicator
+      call wrf_debug(1, message_txt)
+      if(debug_level .ge. 2) then
+        write(6,*) "Pumpkin chemics_init, old indices: its, ite, jts, jte, kts, kte", oldits, oldite, oldjts, oldjte, oldkts, oldkte
+        write(6,*) "Pumpkin chemics_init, old indices: ids, ide, jds, jde, kds, kde", oldids, oldide, oldjds, oldjde, oldkds, oldkde
+        write(6,*) "Pumpkin chemics_init, old indices: ims, ime, jms, jme, kms, kme", oldims, oldime, oldjms, oldjme, oldkms, oldkme
+      endif
+      call Init_State_Grid(Global_Input_Opt, GIGC_States(grid%id)%State_Grid, GEOS_CHEM_RC)
+
+      GIGC_States(grid%id)%State_Grid%ID          = grid%id       ! ID of this grid
+      GIGC_States(grid%id)%State_Grid%NX          = ite-its+1     ! # lons   on this PET
+      GIGC_States(grid%id)%State_Grid%NY          = jte-jts+1     ! # lats   on this PET
+      GIGC_States(grid%id)%State_Grid%NZ          = kte-kts+1     ! # levels on this PET
+      GIGC_States(grid%id)%State_Grid%GlobalNX    = ite-its+1     ! # lons   in global grid
+      GIGC_States(grid%id)%State_Grid%GlobalNY    = jte-jts+1     ! # lats   in global grid
+      GIGC_States(grid%id)%State_Grid%NativeNZ    = kte-kts+1     ! # levels in global grid
+      GIGC_States(grid%id)%State_Grid%XMinOffset  = 1             ! X offset from global grid
+      GIGC_States(grid%id)%State_Grid%XMaxOffset  = GIGC_States(grid%id)%State_Grid%NX ! X offset from global grid
+      GIGC_States(grid%id)%State_Grid%YMinOffset  = 1             ! Y offset from global grid
+      GIGC_States(grid%id)%State_Grid%YMaxOffset  = GIGC_States(grid%id)%State_Grid%NY ! Y offset from global grid
+      GIGC_States(grid%id)%State_Grid%MaxTropLev  = GIGC_States(grid%id)%State_Grid%NZ ! # trop. levels below
+      GIGC_States(grid%id)%State_Grid%MaxStratLev = GIGC_States(grid%id)%State_Grid%NZ ! # strat. levels below
+      CALL GIGC_Chunk_Init( nymdB     = nymdB,                           & ! YYYYMMDD @ start of run
+                            nhmsB     = nhmsB,                           & ! hhmmss   @ start of run
+                            nymdE     = nymdE,                           & ! YYYYMMDD @ end of run
+                            nhmsE     = nhmsE,                           & ! hhmmss   @ end of run
+                            tsChem    = chemdt*60.,                      & ! Chemical timestep [s]
+                            tsDyn     = chemdt*60.,                      & ! Dynamic  timestep [s]
+                            lonCtr    = lonCtr,                          & ! Lon centers [radians]
+                            latCtr    = latCtr,                          & ! Lat centers [radians]
+                            lonEdge   = lonEdge,                         & ! Lon edges [radians]
+                            latEdge   = latEdge,                         & ! Lat edges [radians]
+                            Input_Opt = Global_Input_Opt,                & ! Input Options obj
+                            State_Chm = GIGC_States(grid%id)%State_Chm,  & ! Chemistry State obj
+                            State_Diag= GIGC_States(grid%id)%State_Diag, & ! Diagnostics State obj
+                            State_Grid= GIGC_States(grid%id)%State_Grid, & ! Grid State obj
+                            State_Met = GIGC_States(grid%id)%State_Met,  & ! Meteorology State obj
+                            HcoConfig = Global_HcoConfig,                & ! HEMCO Configuration Object
+                            RC        = GEOS_CHEM_RC,                    & ! GC Status Code (Success?)
+                            MPI_COMM  = WRF_DM_Comm,                     & ! MPI Communicator
+                            ID        = grid%id)                           ! Domain identifier, this PET
 
       write(message_txt, *) "GIGC chemics_init: Return from GIGC_Chunk_Init return code ", GEOS_CHEM_RC
       call wrf_debug(1, message_txt)
 
       write(message_txt, *) "GIGC chemics_init: GIGC_Chunk_Init completed for ID #", grid%id
       call wrf_debug(1, message_txt)
+      Global_Input_Opt%isMPI   = .true.
+      Global_Input_Opt%amIRoot = Am_I_Root
+      Global_Input_Opt%thisCPU = WRF_DM_MyProc
+      Global_Input_Opt%numCPUs = WRF_DM_NProc
+      Global_Input_Opt%MPIComm = WRF_DM_Comm
+
+      if(debug_level .ge. 2) then
+        Global_Input_Opt%LPRT    = .true. ! Print debug information? (LD70)
+      endif
       write(6, *) "GIGC chemics_init: Following information regarding Input_Opt% (for all doms)"
       write(6, *) "After domain", grid%id
-      write(6, *) "HPC: ", Input_Opt%HPC
-      write(6, *) "LPRT: ", Input_Opt%LPRT
-      write(6, *) "DoConv: ", Input_Opt%LCONV
-      write(6, *) "DoDryDep: ", Input_Opt%LDRYD
-      write(6, *) "DoEmis: ", Input_Opt%LEMIS
-      write(6, *) "DoChem: ", Input_Opt%LCHEM
-      write(6, *) "DoTurb: ", Input_Opt%LTURB
-      write(6, *) "DoWetDep: ", Input_Opt%LWETD
-      call GIGC_IdxSetup(Am_I_Root)
-      if(.not. config_flags%have_bcs_chem) then
-        call GIGC_Set_WRF(Am_I_Root, config_flags, grid, num_chem, chem, num_scalar, scalar, 1, moist_dummy, & 
-                          its, ite, jts, jte, &
-                          ide, jde, &
-                          kts, kte, &
-                          Input_Opt, State_Met, State_Chm, State_Diag)
+      write(6, *) "HPC: ", Global_Input_Opt%isMPI
+      write(6, *) "LPRT: ", Global_Input_Opt%LPRT
+      write(6, *) "DoConv: ", Global_Input_Opt%LCONV
+      write(6, *) "DoDryDep: ", Global_Input_Opt%LDRYD
+      write(6, *) "DoEmis: ", Global_Input_Opt%LEMIS
+      write(6, *) "DoChem: ", Global_Input_Opt%LCHEM
+      write(6, *) "DoTurb: ", Global_Input_Opt%LTURB
+      write(6, *) "DoWetDep: ", Global_Input_Opt%LWETD
+      call WRFGC_IdxSetup(Am_I_Root)
+      if(config_flags%have_bcs_chem .eq. .false.) then
+        call WRFGC_Set_WRF(Am_I_Root, config_flags, grid, num_chem, chem, num_scalar, scalar, 1, moist_dummy, & 
+                           its, ite, jts, jte, &
+                           ide, jde, &
+                           kts, kte, &
+                           Global_Input_Opt, &
+                           GIGC_States(grid%id)%State_Met, &
+                           GIGC_States(grid%id)%State_Chm, &
+                           GIGC_States(grid%id)%State_Diag)
       endif
       do nv = 1, num_chem
          do j = jts, jte
@@ -370,6 +477,13 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, chemdt, st
             enddo
          enddo
       enddo
+      if ( (.not.config_flags%restart) .and. (config_flags%progn > 0) ) then
+         call wrfgc_mixactivate_init(                   &
+          config_flags, chem, scalar,                 &
+         chem_in_opt,                                &
+         ims, ime, jms, jme, kms, kme,               &
+         its, ite, jts, jte, kts, kte)
+      endif
       if (config_flags%restart) then
          call wrf_debug(15, "Setting last_chem_time from restart file")
          call WRFU_TimeSet(last_chem_time(id), &
@@ -389,20 +503,8 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, chemdt, st
                             ims, ime, jms,jme, kms,kme,      &
                             its, ite, jts,jte, kts,kte       )
       gas_pcnst_modal_aero_pos = max(1, gas_pcnst_modal_aero) ! BSINGH - Fix for non-MAM simulations
+      deallocate(lonCtr )
+      deallocate(latCtr )
+      deallocate(lonEdge)
+      deallocate(latEdge)
 END SUBROUTINE chem_init
-
-#ifdef CHEM_DBG_I
-   subroutine print_chem_species_index(chem_opt)
-      use module_state_description
-      implicit none
-
-      integer, intent(in) :: chem_opt
-
-      print *, 'Index numbers for chemistry species:'
-      select case (chem_opt)
-      case (233)
-         print *, p_no, "no"
-         print *, p_o3, "o3"
-      end select
-   end subroutine print_chem_species_index
-#endif
