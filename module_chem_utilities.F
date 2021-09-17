@@ -664,7 +664,7 @@ contains
            do j = jts, jte
            do i = its, ite
               klo = max( level(i, j)-1, 1.0)
-              khi = min( klo+1, jte-1)
+              khi = min( klo+1, kte-1)
               if( klo .eq. khi) then
                   call wrf_message("Trapping levels are weird and they should not be equal")
               endif
