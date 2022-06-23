@@ -3,11 +3,13 @@
 This repository (`wrf-gc`) holds the `chem` directory for the WRF-GC model, which contains all the custom code necessary to run WRF-GC under a WRF installation
 and a built-in version of GEOS-Chem (currently `12.8.2` official version)
 
+**[Read the new WRF-GC documentation at wrfgc.readthedocs.io](https://wrfgc.readthedocs.io)**
+
 **This version of WRF-GC is version:** `2.0.1-release` (2021/09/17)
 
-(c) 2017-2021 Haipeng Lin <hplin@seas.harvard.edu>, Xu Feng <fengx7@pku.edu.cn>, Tzung-May Fu <fuzm@sustech.edu.cn>
+(c) 2017-2022 Haipeng Lin <hplin@seas.harvard.edu>, Xu Feng <fengx7@pku.edu.cn>, Tzung-May Fu <fuzm@sustech.edu.cn>
 
-(c) 2017-2021 Atmospheric Chemistry & Climate Group, SUSTech
+(c) 2017-2022 Atmospheric Chemistry & Climate Group, SUSTech
 
 GEOS-Chem, GEOS-Chem High Performance, HEMCO, ESMF/MAPL Frameworks are (c) their original authors.
 
