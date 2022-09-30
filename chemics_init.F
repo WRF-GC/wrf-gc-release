@@ -245,8 +245,8 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, chemdt, st
       call wrf_message("           \  /\  /  | | \ \| |         | |__| | |____           ")
       call wrf_message("            \/  \/   |_|  \_\_|          \_____|\_____|          ")
       call wrf_message("*****************************************************************")
-      call wrf_message("           WRF-GC MODEL, BUILD 2005.22 - WRF BINDINGS            ")
-      call wrf_message("                 WRF-GC RELEASE 2.0     20210223                 ")
+      call wrf_message("           WRF-GC MODEL, BUILD 2209.3X - WRF BINDINGS            ")
+      call wrf_message("                 WRF-GC RELEASE 2.02    20220930                 ")
       call wrf_message(" For errors, suggestions & feedback email hplin@seas.harvard.edu ")
       call wrf_message("*****************************************************************")
       call wrf_message(message_txt)
@@ -460,7 +460,7 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, chemdt, st
       write(6, *) "DoTurb: ", Global_Input_Opt%LTURB
       write(6, *) "DoWetDep: ", Global_Input_Opt%LWETD
       call WRFGC_IdxSetup(Am_I_Root)
-      if(config_flags%have_bcs_chem .eq. .false.) then
+      if(config_flags%chem_in_opt .eq. 0) then
         call WRFGC_Set_WRF(Am_I_Root, config_flags, grid, num_chem, chem, num_scalar, scalar, 1, moist_dummy, & 
                            its, ite, jts, jte, &
                            ide, jde, &

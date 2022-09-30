@@ -1024,7 +1024,7 @@ contains
         enddo ! Loop over k
 
         call wrf_debug(100, "WRFGC_Convert_State_Mod after 3-D State_Met% Conversion")
-        if(config_flags%have_bcs_chem .and. FIRST(grid%id)) then
+        if(config_flags%chem_in_opt .eq. 1 .and. FIRST(grid%id)) then
             call wrf_debug(1, "WRFGC_Convert_State_Mod updating chemistry concentrations in GEOS-Chem from WRF IC values")
             do k = kts, kte
             do j = jts, jte
