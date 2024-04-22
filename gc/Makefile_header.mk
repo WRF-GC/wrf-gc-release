@@ -282,45 +282,17 @@ endif
 # Test if the CHEM value is set
 IS_CHEM_SET          :=0
 
-# %%%%%  CHEM=Standard (aka benchmark) %%%%%
+# %%%%%  CHEM=fullchem (aka benchmark) %%%%%
 REGEXP               :=(^[Ss][Tt][Aa][Nn][Dd][Aa][Rr][Dd])
 ifeq ($(shell [[ "$(CHEM)" =~ $(REGEXP) ]] && echo true),true)
-  KPP_CHEM           :=Standard
-  IS_CHEM_SET        :=1
-endif
-
-# %%%%% Test if CHEM=SOA (same as Tropchem as of v11-02a) %%%%%
-REGEXP               :=(^[Ss][Oo][Aa])
-ifeq ($(shell [[ "$(CHEM)" =~ $(REGEXP) ]] && echo true),true)
-  KPP_CHEM           :=Tropchem
-  IS_CHEM_SET        :=1
-endif
-
-# %%%%% Test if CHEM=SOA_SVPOA %%%%%
-REGEXP               :=(^[Ss][Oo][Aa]_[Ss][Vv][Pp][Oo][Aa])
-ifeq ($(shell [[ "$(CHEM)" =~ $(REGEXP) ]] && echo true),true)
-  KPP_CHEM           :=SOA_SVPOA
-  IS_CHEM_SET        :=1
-endif
-
-# %%%%% Test if CHEM=Tropchem %%%%%
-REGEXP               :=(^[Tt][Rr][Oo][Pp][Cc][Hh][Ee][Mm])
-ifeq ($(shell [[ "$(CHEM)" =~ $(REGEXP) ]] && echo true),true)
-  KPP_CHEM           :=Tropchem
-  IS_CHEM_SET        :=1
-endif
-
-# %%%%% Test if CHEM=NOx_Ox_HC_Aer_Br (former name for Tropchem) %%%%%
-REGEXP               :=(^[Nn][Oo][Xx]_[Oo][Xx]_[Hh][Cc]_[Aa][Ee][Rr]_[Bb][Rr])
-ifeq ($(shell [[ "$(CHEM)" =~ $(REGEXP) ]] && echo true),true)
-  KPP_CHEM           :=Tropchem
+  KPP_CHEM           :=fullchem
   IS_CHEM_SET        :=1
 endif
 
 # %%%%% Test if CHEM=Custom %%%%%
 REGEXP               :=(^[Cc][Uu][Ss][Tt][Oo][Mm])
 ifeq ($(shell [[ "$(CHEM)" =~ $(REGEXP) ]] && echo true),true)
-  KPP_CHEM           :=Custom
+  KPP_CHEM           :=custom
   IS_CHEM_SET        :=1
 endif
 
@@ -332,7 +304,7 @@ endif
 # code to be compiled. (mps, 4/22/16)
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ifeq ($(IS_CHEM_SET),0)
-  KPP_CHEM           :=Standard
+  KPP_CHEM           :=fullchem
   IS_CHEM_SET        :=1
 endif
 

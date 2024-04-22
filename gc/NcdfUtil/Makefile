@@ -74,7 +74,9 @@ ncdf_mod.o
 # But compile all of these files.  The modules charpak_mod.F and julday_mod.F
 # are needed to build ncdf_mod.F90, but don't need to be added into library
 # libNcUtils.a.  These modules already get packaged into libGeosUtil.a.
-OBJECTS  :=charpak_mod.o julday_mod.o $(OBJlib)
+#
+# similarly, precision_mod is needed for julday_mod but it is a duplicate (hplin, 4/20/22)
+OBJECTS  :=precision_mod.o charpak_mod.o julday_mod.o $(OBJlib)
 
 # List of module files.  Convert to lowercase, then prefix directory name.
 MODULES  :=$(OBJECTS:.o=.mod)
@@ -110,9 +112,12 @@ LIBRARY  :=libNcUtils.a
 ###                                                                         ###
 ###############################################################################
 
+precision_mod.o          : precision_mod.F90
+
 charpak_mod.o            : charpak_mod.F90
 
-julday_mod.o             : julday_mod.F
+julday_mod.o             : julday_mod.F90               \
+                           precision_mod.o
 
 m_do_err_out.o           : m_do_err_out.F90
 
@@ -147,7 +152,7 @@ m_netcdf_io_write.o      : m_netcdf_io_write.F90        \
 
 ncdf_mod.o               : ncdf_mod.F90                 \
                            charpak_mod.F90              \
-                           julday_mod.F                 \
+                           julday_mod.F90               \
                            m_netcdf_io_checks.o         \
                            m_netcdf_io_close.o          \
                            m_netcdf_io_create.o	        \

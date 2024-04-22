@@ -120,6 +120,8 @@ debug:
 
 charpak_mod.o          : charpak_mod.F90
 
+qfyaml_mod.o           : qfyaml_mod.F90
+
 CMN_DIAG_mod.o         : CMN_DIAG_mod.F90         \
                          CMN_SIZE_mod.o           \
                          CMN_FJX_MOD.o            \
@@ -151,12 +153,18 @@ commsoil_mod.o         : commsoil_mod.F90         \
 diaglist_mod.o         : diaglist_mod.F90         \
                          charpak_mod.o            \
                          inquireMod.o             \
-                         registry_mod.o
+                         registry_mod.o           \
+                         qfyaml_mod.o
 
 dictionary_m.o         : dictionary_m.F90
 
 errcode_mod.o          : errcode_mod.F90          \
                          charpak_mod.o
+
+taggeddiaglist_mod.o   : taggeddiaglist_mod.F90   \
+                         diaglist_mod.o           \
+                         errcode_mod.o            \
+                         precision_mod.o
 
 input_opt_mod.o        : input_opt_mod.F90        \
                          errcode_mod.o            \
@@ -189,7 +197,8 @@ state_diag_mod.o       : state_diag_mod.F90       \
                          input_opt_mod.o          \
                          registry_mod.o           \
                          state_chm_mod.o          \
-                         state_grid_mod.o
+                         state_grid_mod.o         \
+                         taggeddiaglist_mod.o
 
 state_grid_mod.o       : state_grid_mod.F90       \
                          errcode_mod.o            \
@@ -223,6 +232,9 @@ registry_mod.o         : registry_mod.F90         \
 registry_params_mod.o  : registry_params_mod.F90 \
                          precision_mod.o
 
+roundoff_mod.o         : roundoff_mod.F90 \
+                         precision_mod.o
+
 species_mod.o          : species_mod.F90          \
                          charpak_mod.o            \
                          input_opt_mod.o          \
@@ -233,6 +245,9 @@ species_database_mod.o : species_database_mod.F90 \
                          errcode_mod.o            \
                          input_opt_mod.o          \
                          precision_mod.o          \
-                         species_mod.o
+                         species_mod.o            \
+                         qfyaml_mod.o             \
+                         roundoff_mod.o           \
+                         qfyaml_mod.o
 
 #EOC

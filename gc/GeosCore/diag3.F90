@@ -23,8 +23,6 @@ SUBROUTINE DIAG3( Input_Opt, State_Chm, State_Grid, State_Met, RC )
   USE CMN_SIZE_MOD,   ONLY : NDSTBIN
   USE DEPO_MERCURY_MOD                   ! For offline Hg simulation
   USE DIAG_MOD                           ! For diagnostic arrays
-  USE DIAG03_MOD                         ! For Hg diagnostic
-  USE DIAG53_MOD                         ! For POPs diag
   USE DRYDEP_MOD                         ! For dry deposition
   USE ErrCode_Mod
   USE ERROR_MOD,      ONLY : ERROR_STOP
@@ -32,7 +30,7 @@ SUBROUTINE DIAG3( Input_Opt, State_Chm, State_Grid, State_Met, RC )
   USE HCO_TYPES_MOD, ONLY : DiagnCont
   USE HCO_DIAGN_MOD
   USE HCO_ERROR_MOD
-  USE HCO_INTERFACE_MOD
+  USE HCO_State_GC_Mod, ONLY : HcoState
   USE Input_Opt_Mod,  ONLY : OptInput
   USE TIME_MOD
   USE PhysConstants,  ONLY : AVO         ! Avogadro's #
@@ -102,7 +100,7 @@ SUBROUTINE DIAG3( Input_Opt, State_Chm, State_Grid, State_Met, RC )
 
   ! For binary punch file, version 2.0
   CHARACTER (LEN=40) :: CATEGORY
-  REAL(f4)           :: ARRAY(State_Grid%NX,State_Grid%NY,State_Grid%NX+1)
+  REAL(f4)           :: ARRAY(State_Grid%NX,State_Grid%NY,State_Grid%NZ+1)
   REAL(f4)           :: LONRES, LATRES
   INTEGER            :: IFIRST, JFIRST, LFIRST
   INTEGER            :: HALFPOLAR
@@ -316,13 +314,6 @@ SUBROUTINE DIAG3( Input_Opt, State_Chm, State_Grid, State_Met, RC )
      CALL ERROR_STOP ( 'HcoState not defined!', LOC )
   ENDIF
 
-  !****************************************************************************
-  !  ND03: Diagnostics from Hg0/Hg2/HgP offline simulation (eck, bmy, 1/20/05)
-  !****************************************************************************
-  IF ( ND03 > 0 ) THEN
-     CALL WRITE_DIAG03( Input_Opt, State_Chm, State_Grid, RC )
-  ENDIF
-
 #ifdef TOMAS
 
   !****************************************************************************
@@ -393,7 +384,7 @@ SUBROUTINE DIAG3( Input_Opt, State_Chm, State_Grid, State_Met, RC )
 
         ENDIF
 
-        ! To output only the species asked in input.geos
+        ! To output only the species asked in geoschem_config.yml
         ! (ccc, 5/15/09)
         MM  = 1
         MMB = 0
@@ -435,7 +426,7 @@ SUBROUTINE DIAG3( Input_Opt, State_Chm, State_Grid, State_Met, RC )
      DO N = 1, M
 
         NN  = State_Chm%Map_DryDep(N)
-        ! To output only the species asked in input.geos
+        ! To output only the species asked in geoschem_config.yml
         ! (ccc, 5/15/09)
         MM  = 1
         MMB = 0
@@ -464,7 +455,7 @@ SUBROUTINE DIAG3( Input_Opt, State_Chm, State_Grid, State_Met, RC )
   !  --------------------------------------------------------------------------
   !  (1)  DUST     : Soil dust (4 different classes) : kg         : 1
   !****************************************************************************
-  IF ( ND06 > 0 .and. Input_Opt%LDUST .and. Input_Opt%LEMIS ) THEN
+  IF ( ND06 > 0 .and. Input_Opt%LDUST .and. Input_Opt%DoEmissions ) THEN
 
      ! Category & unit string
      UNIT     = 'kg'
@@ -908,118 +899,6 @@ SUBROUTINE DIAG3( Input_Opt, State_Chm, State_Grid, State_Met, RC )
                     UNIT,      DIAGb,     DIAGe,    RESERVED,   &
                     State_Grid%NX, State_Grid%NY, LD61, IFIRST, &
                     JFIRST,    LFIRST,    ARRAY(:,:,1:LD61)  )
-     ENDDO
-  ENDIF
-#endif
-
-#ifdef RRTMG
-
-  !****************************************************************************
-  !  ND72: RRTMG radiation fields
-  !
-  !   # : Field  : Description                      : Units    : Scale
-  !   factor
-  !  -----------------------------------------------------------------------
-  !  (1 ) ALLTOASW  : All-sky TOA SW (Total)        : W/m2     : SCALERAD
-  !  (2 ) ALLSRFSW  : All-sky Surface SW (Total)    : W/m2     : SCALERAD
-  !  (3 ) ALLTOALW  : All-sky TOA LW (Total)        : W/m2     : SCALERAD
-  !  (4 ) ALLSRFLW  : All-sky Surface LW (Total)    : W/m2     : SCALERAD
-  !  (5 ) CLRTOASW  : Clear-sky TOA SW (Total)      : W/m2     : SCALERAD
-  !  (6 ) CLRSRFSW  : Clear-sky Surface SW (Total)  : W/m2     : SCALERAD
-  !  (7 ) CLRTOALW  : Clear-sky TOA LW (Total)      : W/m2     : SCALERAD
-  !  (8 ) CLRSRFLW  : Clear-sky Surface LW (Total)  : W/m2     : SCALERAD
-  !****************************************************************************
-  IF ( Input_Opt%LRAD .and. ND72 > 0 ) THEN
-     CATEGORY = 'RADMAP-$'
-     IF ( Input_Opt%amIRoot ) &
-          WRITE(6,*) 'Input_Opt%NWVSELECT',Input_Opt%NWVSELECT
-
-     ! ND72 is updated every rad timestep
-     SCALEX = SCALERAD
-
-     ! Number of output species plus baseline
-     IF ( Input_Opt%LUCX ) THEN
-        NSPECOUT=Input_Opt%NSPECRADMENU+1
-     ELSE
-        NSPECOUT=Input_Opt%NSPECRADMENU
-     ENDIF
-
-     DO M = 1, TMAX(72)
-        N  = TINDEX(72,M)
-
-        IF ( N > PD72R ) CYCLE
-        !only output clear-sky and all-sky if they are switched on
-        !or if we're doing the optics
-        !but only output 2nd and 3rd sets of optics if they're
-        !requested by user in input.geos.rad
-        IF (((N.LE.4 ).AND.(Input_Opt%LSKYRAD(2).EQV..TRUE.)).OR. &
-            ((N.GT.4 ).AND.(N.LE.8).AND. &
-                          (Input_Opt%LSKYRAD(1).EQV..TRUE.)).OR. &
-            ((N.GT.8 ).AND.(N.LE.11)).OR. &                  !1st set of optics
-            ((N.GT.11).AND.(N.LE.14).AND. &
-                           (Input_Opt%NWVSELECT.GT.1)).OR. &   !2nd set
-            ((N.GT.14).AND.(N.LE.17).AND. &
-                           (Input_Opt%NWVSELECT.GT.2))) THEN !3rd set
-
-           ! Select proper unit string (cf list above)
-           IF (N.LE.8) THEN
-              UNIT = 'W/m2'
-           ELSE
-              !AOD, SSA, ASYM
-              UNIT = 'UNITLESS'
-           ENDIF
-
-           ! each case is for different output type, within each
-           ! of those are the values for each species in the RAD input
-           ! menu. Only output species that are switched on for each
-           ! output type selected in the ND72 menu
-           DO IS=1,NSPECOUT
-              NN=(N-1)*NSPECOUT+IS
-
-              !if output is a flux...
-              IF (N.LE.8) THEN
-                 !always output the baseline flux
-                 IF (IS.EQ.1) THEN
-                    ARRAY(:,:,1) = AD72(:,:,NN) / SCALEX
-                    CALL BPCH2( IU_BPCH,   MODELNAME, LONRES,   LATRES,   &
-                                HALFPOLAR, CENTER180, CATEGORY, NN,       &
-                                UNIT,      DIAGb,     DIAGe,    RESERVED, &
-                                State_Grid%NX, State_Grid%NY, 1, IFIRST,  &
-                                JFIRST,    LFIRST,    ARRAY(:,:,1) )
-                 !for other outputs check species has been selected
-                 ELSE IF (IS.GE.2) THEN
-                    IF (Input_Opt%LSPECRADMENU(IS-1).EQ.1) THEN
-                       DO I=1,State_Grid%NX
-                       DO J=1,State_Grid%NY
-                          !store as difference in flux from baseline
-                          ARRAY(I,J,1) = (AD72(I,J,(N-1)*NSPECOUT+1) - &
-                                          AD72(I,J,NN))/SCALEX
-                       ENDDO
-                       ENDDO
-
-                       CALL BPCH2( IU_BPCH,   MODELNAME, LONRES,   LATRES,   &
-                                   HALFPOLAR, CENTER180, CATEGORY, NN,       &
-                                   UNIT,      DIAGb,     DIAGe,    RESERVED, &
-                                   State_Grid%NX, State_Grid%NY, 1, IFIRST,  &
-                                   JFIRST,    LFIRST,    ARRAY(:,:,1) )
-                    ENDIF
-                 ENDIF
-                 ! N > 8 so we are outputting optics
-                 ! but only for turned on species and only for aerosols
-                 ! i.e. skip IS=2 and IS=3
-              ELSE IF (IS.GE.4) THEN
-                 IF (Input_Opt%LSPECRADMENU(IS-1).EQ.1) THEN
-                    !output optics
-                    ARRAY(:,:,1) = AD72(:,:,NN) / SCALEX
-                    CALL BPCH2( IU_BPCH,   MODELNAME, LONRES,   LATRES,   &
-                                HALFPOLAR, CENTER180, CATEGORY, NN,       &
-                                UNIT,      DIAGb,     DIAGe,    RESERVED, &
-                                State_Grid%NX, State_Grid%NY, 1, IFIRST,  &
-                                JFIRST,    LFIRST,    ARRAY(:,:,1) )
-                 ENDIF
-              ENDIF !flux vs optics check
-           ENDDO
-        ENDIF !all-sky, clear-sky check
      ENDDO
   ENDIF
 #endif

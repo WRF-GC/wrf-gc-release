@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -25,7 +25,7 @@ MODULE HCO_Interp_Mod
 !
   USE HCO_Types_Mod
   USE HCO_Error_Mod
-  USE HCO_State_Mod,       ONLY : Hco_State
+  USE HCO_State_Mod, ONLY : Hco_State
 
   IMPLICIT NONE
   PRIVATE
@@ -44,7 +44,7 @@ MODULE HCO_Interp_Mod
 !
 ! !REVISION HISTORY:
 !  30 Dec 2014 - C. Keller - Initialization
-!  03 Feb 2015 - C. Keller   - Added REGRID_MAPA2A (from hcoio_dataread_mod.F90).
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -97,10 +97,31 @@ MODULE HCO_Interp_Mod
                     0.066000_hp,   0.047585_hp,   0.032700_hp, &
                     0.020000_hp,   0.010000_hp /)
 
+  ! AP parameter of native 102-layer GISS grid
+  REAL(hp), TARGET :: E102_EDGE_NATIVE(103) = (/                                            &
+                0.0000000,   2.7871507,   5.5743014,   8.3614521,  11.1486028, 13.9357536,  &
+               16.7229043,  19.5100550,  22.2972057,  25.0843564,  27.8715071, 30.6586578,  &
+               33.4458085,  36.2329593,  39.0201100,  41.8087123,  44.6089278, 47.4534183,  &
+               50.4082336,  53.5662786,  57.0095710,  60.7533531,  64.7323011, 68.8549615,  &
+               73.0567364,  77.2969797,  81.5364973,  85.7346430,  89.8565776, 93.8754457,  &
+               97.7709243, 101.5277712, 105.1350991, 108.5878272, 111.8859556, 115.0302100, &
+              118.0249453, 120.8854039, 123.6326345, 126.2811535, 128.8360417, 131.2987506, &
+              133.6736353, 135.9708571, 138.2013035, 140.3700552, 142.4814670, 144.5457005, &
+              146.5692881, 148.5464231, 150.4712991, 152.3497225, 154.1875000, 144.5468750, &
+              135.1875000, 126.0781250, 117.1914062, 108.5859375, 100.3671875, 92.5898438,  &
+               85.2265625,  78.2226562,  71.5546875,  65.2226562,  59.2226562, 53.5546875,  &
+               48.2226562,  43.2226562,  38.5546875,  34.2226562,  30.2226562, 26.5507812,  &
+               23.1875000,  20.0781250,  17.1896562,  14.5684375,  12.2865742, 10.3573086,  &
+                8.7353750,   7.3664922,   6.2100156,   5.2343633,   4.4119297, 3.7186797,   &
+                3.1341479,   2.6404328,   2.2207877,   1.8587369,   1.5477125, 1.2782115,   &
+                1.0427319,   0.8367716,   0.6514691,   0.4772511,   0.3168814, 0.1785988,   &
+                0.1000000,   0.0560000,   0.0320000,   0.0180000,   0.0100000, 0.0050000,   &
+                0.0020000 /)
+
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -122,7 +143,7 @@ CONTAINS
 !
 ! !USES:
 !
-    USE REGRID_A2A_Mod,     ONLY : MAP_A2A
+    USE HCO_REGRID_A2A_Mod, ONLY : MAP_A2A
     USE HCO_FileData_Mod,   ONLY : FileData_ArrCheck
     USE HCO_UNIT_MOD,       ONLY : HCO_IsIndexData
 !
@@ -140,7 +161,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  03 Feb 2015 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -367,7 +388,10 @@ CONTAINS
        ! Eventually inflate/collapse levels onto simulation levels.
        IF ( Lct%Dct%Dta%SpaceDim == 3 ) THEN
           CALL ModelLev_Interpolate( HcoState, REGR_4D, Lct, RC )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+          IF ( RC /= HCO_SUCCESS ) THEN
+              CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+              RETURN
+          ENDIF
        ENDIF
 
        ! For index based data, map fractions back to corresponding value.
@@ -392,13 +416,13 @@ CONTAINS
 
           ! REGR_4D are the remapped fractions.
           DO T  = 1, NTIME
-          DO L  = 1, NLEV
+          DO L  = 1, HcoState%NZ
           DO J  = 1, HcoState%NY
           DO I2 = 1, HcoState%NX
              IF ( REGFRACS(I2,J,L,T) > MAXFRACS(I2,J,L,T) ) THEN
                 MAXFRACS(I2,J,L,T) = REGR_4D(I2,J,L,T)
                 INDECES (I2,J,L,T) = IVAL
-             ENDIf
+             ENDIF
           ENDDO
           ENDDO
           ENDDO
@@ -447,7 +471,7 @@ CONTAINS
   END SUBROUTINE REGRID_MAPA2A
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -477,8 +501,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  29 Sep 2015 - C. Keller   - Initial version
-!  22 May 2017 - R. Yantosca - Bug fix: Add MERRA2 to the #elif statement
-
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -521,12 +544,32 @@ CONTAINS
             nlev <= 47       ) THEN
           IsModelLev = .TRUE.
        ENDIF
+
+    ! Full GISS 102-layer grid
+    ELSEIF ( nz == 102 ) THEN
+       IF ( nlev <= 103 ) THEN
+          IsModelLev = .TRUE.
+       ENDIF
+
+    ! Full GISS 40-layer grid
+    ELSEIF ( nz == 40 ) THEN
+       IF ( nlev <= 41 ) THEN
+          IsModelLev = .TRUE.
+       ENDIF
+
+    ! Reduced GISS 74-layer grid
+    ELSEIF ( nz == 74 ) THEN
+       IF ( nlev == 102 .OR. &
+            nlev == 103 .OR. &
+            nlev <= 74       ) THEN
+                    IsModelLev = .TRUE.
+       ENDIF
     ENDIF
 
   END SUBROUTINE ModelLev_Check
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -595,10 +638,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  30 Dec 2014 - C. Keller   - Initial version
-!  24 Feb 2015 - R. Yantosca - Now exit if vertical interpolation isn't needed
-!  12 Aug 2015 - R. Yantosca - Vertically remap MERRA2 as we do for GEOS-FP
-!  24 Sep 2015 - C. Keller   - Added interpolation on edges.
-!  06 Dec 2015 - C. Keller   - Pass # of GEOS-5 levels to be mapped onto GEOS-4
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -612,16 +652,19 @@ CONTAINS
     INTEGER                 :: G5T4
     LOGICAL                 :: verb, infl, clps
     LOGICAL                 :: DONE
-    CHARACTER(LEN=255)      :: MSG
+    CHARACTER(LEN=255)      :: MSG, LOC
 
     !=================================================================
     ! ModelLev_Interpolate begins here
     !=================================================================
+    LOC = 'ModelLev_Interpolate (HCO_INTERP_MOD.F90)'
 
     ! Enter
-    CALL HCO_ENTER (HcoState%Config%Err,&
-                   'ModelLev_Interpolate (hco_interp_mod.F90)' , RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER (HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Check for verbose mode
     verb = HCO_IsVerb(HcoState%Config%Err,  3 )
@@ -643,13 +686,13 @@ CONTAINS
     IF ( SIZE(REGR_4D,1) /= nx ) THEN
        WRITE(MSG,*) 'x dimension mismatch ', TRIM(Lct%Dct%cName), &
           ': ', nx, SIZE(REGR_4D,1)
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+       CALL HCO_ERROR( MSG, RC )
        RETURN
     ENDIF
     IF ( SIZE(REGR_4D,2) /= ny ) THEN
        WRITE(MSG,*) 'y dimension mismatch ', TRIM(Lct%Dct%cName), &
           ': ', ny, SIZE(REGR_4D,2)
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+       CALL HCO_ERROR( MSG, RC )
        RETURN
     ENDIF
 
@@ -668,7 +711,10 @@ CONTAINS
     IF ( ( nlev == nz ) .OR. ( nlev == nz+1 ) ) THEN
 
        CALL FileData_ArrCheck( HcoState%Config, Lct%Dct%Dta, nx, ny, nlev, nt, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        DO T = 1, nt
           Lct%Dct%Dta%V3(T)%Val(:,:,:) = REGR_4D(:,:,:,T)
@@ -772,7 +818,7 @@ CONTAINS
           ELSEIF ( nlev > 47 ) THEN
              MSG = 'Can only remap from native onto reduced GEOS-5 if '// &
                    'input data has exactly 72 or 73 levels: '//TRIM(Lct%Dct%cName)
-             CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+             CALL HCO_ERROR( MSG, RC )
              RETURN
           ELSE
              nout = nlev
@@ -825,6 +871,78 @@ CONTAINS
 
           ! Done!
           DONE = .TRUE.
+
+       !----------------------------------------------------------------
+       ! Reduced GISS levels
+       !----------------------------------------------------------------
+       ELSEIF ( nz == 74 ) THEN
+
+          ! Determine number of output levels. If input data is on the
+          ! native grid, we collapse them onto the reduced GISS grid.
+          ! In all other cases, we assume the input data is already on
+          ! the reduced levels and mappings occurs 1:1.
+          IF ( nlev == 102 ) THEN
+             nout = nz
+             NL   = 60
+          ELSEIF ( nlev == 103 ) THEN
+             nz   = nz + 1
+             nout = nz
+             NL   = 61
+          ELSE
+             nout = nlev
+             NL   = nout
+          ENDIF
+
+          ! Make sure output array is allocated
+          CALL FileData_ArrCheck( HcoState%Config, Lct%Dct%Dta, nx, ny, nout, nt, RC )
+
+          ! Do for every time slice
+          DO T = 1, nt
+
+             ! Levels that are passed level-by-level.
+             DO L = 1, NL
+                Lct%Dct%Dta%V3(T)%Val(:,:,L) = REGR_4D(:,:,L,T)
+             ENDDO !L
+
+             ! If needed, collapse from native GEOS-5 onto reduced GEOS-5
+             IF ( nlev == 102 .OR. nlev == 103 ) THEN
+
+                ! Add one level offset if these are edges
+                IF ( nlev == 103 ) THEN
+                   OS = 1
+                ELSE
+                   OS = 0
+                ENDIF
+
+                ! Collapse two levels (e.g. levels 61-62 into level 61):
+                CALL COLLAPSE( Lct, REGR_4D, 61+OS, 61+OS, 2, T, 22 )
+                CALL COLLAPSE( Lct, REGR_4D, 62+OS, 63+OS, 2, T, 22 )
+                CALL COLLAPSE( Lct, REGR_4D, 63+OS, 65+OS, 2, T, 22 )
+                CALL COLLAPSE( Lct, REGR_4D, 64+OS, 67+OS, 2, T, 22 )
+                CALL COLLAPSE( Lct, REGR_4D, 65+OS, 69+OS, 2, T, 22 )
+                CALL COLLAPSE( Lct, REGR_4D, 66+OS, 71+OS, 2, T, 22 )
+                CALL COLLAPSE( Lct, REGR_4D, 67+OS, 73+OS, 2, T, 22 )
+                ! Collapse four levels:
+                CALL COLLAPSE( Lct, REGR_4D, 68+OS, 75+OS, 4, T, 22 )
+                CALL COLLAPSE( Lct, REGR_4D, 69+OS, 79+OS, 4, T, 22 )
+                CALL COLLAPSE( Lct, REGR_4D, 70+OS, 83+OS, 4, T, 22 )
+                CALL COLLAPSE( Lct, REGR_4D, 71+OS, 87+OS, 4, T, 22 )
+                CALL COLLAPSE( Lct, REGR_4D, 72+OS, 91+OS, 4, T, 22 )
+                CALL COLLAPSE( Lct, REGR_4D, 73+OS, 95+OS, 4, T, 22 )
+                CALL COLLAPSE( Lct, REGR_4D, 74+OS, 99+OS, 4, T, 22 )
+
+             ENDIF
+          ENDDO ! T
+
+          ! Verbose
+          IF ( HCO_IsVerb(HcoState%Config%Err, 3) ) THEN
+             WRITE(MSG,*) 'Mapped ', nlev, ' levels onto reduced GISS levels.'
+             CALL HCO_MSG(HcoState%Config%Err,MSG)
+          ENDIF
+
+          ! Done!
+          DONE = .TRUE.
+
        ENDIF
 
     ENDIF ! Vertical regridding required
@@ -834,7 +952,10 @@ CONTAINS
     !===================================================================
     IF ( .NOT. DONE ) THEN
        CALL FileData_ArrCheck( HcoState%Config, Lct%Dct%Dta, nx, ny, nlev, nt, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        DO T = 1, nt
           Lct%Dct%Dta%V3(T)%Val(:,:,:) = REGR_4D(:,:,:,T)
@@ -865,7 +986,7 @@ CONTAINS
        ENDIF
     ELSE
        WRITE(MSG,*) 'Vertical regridding failed: ',TRIM(Lct%Dct%cName)
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+       CALL HCO_ERROR( MSG, RC )
        RETURN
     ENDIF
 
@@ -875,7 +996,7 @@ CONTAINS
   END SUBROUTINE ModelLev_Interpolate
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -926,8 +1047,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  07 Jan 2015 - C. Keller   - Initial version.
-!  24 Sep 2015 - C. Keller   - Added option to interpolate edges.
-!  06 Dec 2015 - C. Keller   - Added input argument NZ
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -942,7 +1062,7 @@ CONTAINS
     ! Check number of levels to be used
     IF ( NZ /= 28 .AND. NZ /= 29 ) THEN
        MSG = 'Cannot map GEOS-5 onto GEOS-4 data, number of levels must be 28 or 29: '//TRIM(Lct%Dct%cName)
-       CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+       CALL HCO_ERROR ( MSG, RC, THISLOC=LOC )
        RETURN
     ENDIF
 
@@ -950,7 +1070,7 @@ CONTAINS
     IF ( SIZE(REGR_4D,3) < NZ ) THEN
        WRITE(MSG,*) 'Cannot map GEOS-5 onto GEOS-4 data, original data has not enough levels: ', &
           TRIM(Lct%Dct%cName), ' --> ', SIZE(REGR_4D,3), ' smaller than ', NZ
-       CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+       CALL HCO_ERROR ( MSG, RC, THISLOC=LOC )
        RETURN
     ENDIF
 
@@ -1098,7 +1218,7 @@ CONTAINS
   END SUBROUTINE GEOS5_TO_GEOS4_LOWLEV
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1122,7 +1242,7 @@ CONTAINS
     INTEGER,          INTENT(IN)     :: InLev1
     INTEGER,          INTENT(IN)     :: NLEV
     INTEGER,          INTENT(IN)     :: T
-    INTEGER,          INTENT(IN)     :: MET               ! 4=GEOS-4, else GEOS-5
+    INTEGER,          INTENT(IN)     :: MET               ! 4=GEOS-4, 22=GISS E2.2, else GEOS-5
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -1130,7 +1250,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  30 Dec 2014 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1159,6 +1279,8 @@ CONTAINS
     ! Get pointer to grid edges on the native input grid
     IF ( Met == 4 ) THEN
        EDG => G4_EDGE_NATIVE(InLev1:TOPLEV)
+    ELSE IF ( Met == 22 ) THEN
+       EDG => E102_EDGE_NATIVE(InLev1:TOPLEV)
     ELSE
        EDG => G5_EDGE_NATIVE(InLev1:TOPLEV)
     ENDIF
@@ -1189,7 +1311,7 @@ CONTAINS
   END SUBROUTINE COLLAPSE
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1218,23 +1340,31 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  30 Dec 2014 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
-    INTEGER :: I, NZ, ILEV
+    INTEGER :: I, DZ, NZ, ILEV
 
     !=================================================================
     ! INFLATE begins here
     !=================================================================
 
     ! Get input data array
-    NZ = SIZE(REGR_4D,3)
+    NZ = SIZE( REGR_4D, 3 )
+
+    ! Get size of data array in the HEMCO state (bmy, 22 Mar 2022)
+    DZ = SIZE( Lct%Dct%Dta%V3(T)%Val, 3 )
 
     ! Do for every output level
     DO I = 1, NLEV
 
        ! Current output level
        ILEV = OutLev1 + I - 1
+
+       ! Avoid out-of-bounds errors if ILEV is greater than the
+       ! number of levels in Lct%Dct%Dta%V3(T)%Val (bmy, 22 Mar 2022)
+       IF ( ILEV > DZ ) EXIT
 
        ! If input level is beyond vert. extent of input data, set output
        ! data to zero.

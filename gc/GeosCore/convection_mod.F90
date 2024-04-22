@@ -54,7 +54,6 @@ CONTAINS
 !
 ! !USES:
 !
-    USE Diagnostics_Mod, ONLY : Compute_Column_Mass
     USE Diagnostics_Mod, ONLY : Compute_Budget_Diagnostics
     USE ErrCode_Mod
     USE ERROR_MOD,       ONLY : GEOS_CHEM_STOP
@@ -80,6 +79,7 @@ CONTAINS
 !
     TYPE(ChmState), INTENT(INOUT) :: State_Chm   ! Chemistry State object
     TYPE(DgnState), INTENT(INOUT) :: State_Diag  ! Diagnostics State object
+!
 ! !OUTPUT PARAMETERS:
 !
     INTEGER,        INTENT(OUT)   :: RC          ! Success or failure?
@@ -94,12 +94,13 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     ! Scalars
-    INTEGER            :: N, NA, nAdvect, NW, EC, ISOL
+    INTEGER            :: N, NA, nAdvect, NW, EC, ISOL, S
     INTEGER            :: I, J, L, NN, TS_DYN
     REAL(fp)           :: AREA_M2, DT
     LOGICAL            :: DO_ND14, DoConvFlux
     LOGICAL            :: DO_ND38, DoWetLoss
-    REAL(fp)           :: DT_Conv
+    INTEGER            :: TS_Conv
+    REAL(f8)           :: DT_Conv
 
     ! Strings
     CHARACTER(LEN=255) :: ErrMsg, ThisLoc
@@ -115,33 +116,43 @@ CONTAINS
     ! Pointers
     REAL(fp), POINTER  :: p_FSOL (:,:,:)
 
-    !=================================================================
+    !========================================================================
     ! DO_CONVECT begins here!
-    !=================================================================
+    !========================================================================
 
-    !-----------------------------------------------------------------
+    !------------------------------------------------------------------------
     ! Initialize
-    !----------------------------------------------------------------
+    !------------------------------------------------------------------------
     RC      = GC_SUCCESS
     p_FSOL  => NULL()
     ErrMsg  = ''
     ThisLoc = ' -> at Do_Convection (in module GeosCore/convection_mod.F)'
 
-    !----------------------------------------------------------
+    !------------------------------------------------------------------------
     ! Convection budget diagnostics - Part 1 of 2
-    !----------------------------------------------------------
+    !------------------------------------------------------------------------
     IF ( State_Diag%Archive_BudgetConvection ) THEN
-       ! Get initial column masses
-       CALL Compute_Column_Mass( Input_Opt,                               &
-                                 State_Chm,                               &
-                                 State_Grid,                              &
-                                 State_Met,                               &
-                                 State_Chm%Map_Advect,                    &
-                                 State_Diag%Archive_BudgetConvectionFull, &
-                                 State_Diag%Archive_BudgetConvectionTrop, &
-                                 State_Diag%Archive_BudgetConvectionPBL,  &
-                                 State_Diag%BudgetMass1,                  &
-                                 RC )
+
+       ! Get initial column masses (full, trop, PBL)
+       CALL Compute_Budget_Diagnostics(                                      &
+            Input_Opt   = Input_Opt,                                         &
+            State_Chm   = State_Chm,                                         &
+            State_Grid  = State_Grid,                                        &
+            State_Met   = State_Met,                                         &
+            isFull      = State_Diag%Archive_BudgetConvectionFull,           &
+            diagFull    = NULL(),                                            &
+            mapDataFull = State_Diag%Map_BudgetConvectionFull,               &
+            isTrop      = State_Diag%Archive_BudgetConvectionTrop,           &
+            diagTrop    = NULL(),                                            &
+            mapDataTrop = State_Diag%Map_BudgetConvectionTrop,               &
+            isPBL       = State_Diag%Archive_BudgetConvectionPBL,            &
+            diagPBL     = NULL(),                                            &
+            mapDataPBL  = State_Diag%Map_BudgetConvectionPBL,                &
+            colMass     = State_Diag%BudgetColumnMass,                       &
+            before_op   = .TRUE.,                                            &
+            RC          = RC                                                )
+
+       ! Trap potential errors
        IF ( RC /= GC_SUCCESS ) THEN
           ErrMsg = 'Convection budget diagnostics error 1'
           CALL GC_Error( ErrMsg, RC, ThisLoc )
@@ -149,26 +160,27 @@ CONTAINS
        ENDIF
     ENDIF
 
-    !-----------------------------------------------------------------
+    !------------------------------------------------------------------------
     ! More initializations
-    !-----------------------------------------------------------------
+    !------------------------------------------------------------------------
     TS_DYN     = GET_TS_DYN()                           ! Dyn timestep [sec]
     DT         = DBLE( TS_DYN )                         ! Dyn timestep [sec]
     FSOL       = 0e+0_fp                                ! Zero the FSOL array
     DoConvFlux = State_Diag%Archive_CloudConvFlux       ! Save mass flux?
-    DoWetLoss  = State_Diag%Archive_WetLossConv         ! Save wet loss?
+    DoWetLoss  = ( State_Diag%Archive_WetLossConv                       .or. &
+                   State_Diag%Archive_SatDiagnWetLossConv )
 
     ! Number of advected species
     nAdvect = State_Chm%nAdvect
 
-    !=================================================================
+    !========================================================================
     ! Compute fraction of soluble species lost in conv. updrafts
-    !=================================================================
+    !========================================================================
 
     ! Loop over advected species
-    !$OMP PARALLEL DO       &
-    !$OMP DEFAULT( SHARED ) &
-    !$OMP PRIVATE( NA, N, p_FSOL, EC, ISOL )
+    !$OMP PARALLEL DO                           &
+    !$OMP DEFAULT( SHARED                     ) &
+    !$OMP PRIVATE( NA, N, p_FSOL, EC, ISOL, S )
     DO NA = 1, nAdvect
 
        ! Species ID
@@ -186,13 +198,16 @@ CONTAINS
           RC = EC
        ENDIF
 
-       !--------------------------------------------------------------
+       !--------------------------------------------------------------------
        ! HISTORY (aka netCDF diagnostics)
        !
        ! Fraction of soluble species lost in convective updrafts
-       !--------------------------------------------------------------
+       !--------------------------------------------------------------------
        IF ( State_Diag%Archive_WetLossConvFrac .and. ISOL > 0 ) THEN
-          State_Diag%WetLossConvFrac(:,:,:,ISOL) = p_FSOL
+          S = State_Diag%Map_WetLossConvFrac%id2Slot(ISOL)
+          IF ( S > 0 ) THEN
+             State_Diag%WetLossConvFrac(:,:,:,S) = p_FSOL
+          ENDIF
        ENDIF
 
        ! Free pointer memory
@@ -208,17 +223,17 @@ CONTAINS
        RETURN
     ENDIF
 
-    !=================================================================
+    !=======================================================================
     ! Do convection column by column
     !
     ! NOTE: Later on, consider moving the I,J loops within the call
     ! to DO_CLOUD_CONVECTION, to gain computational efficiency
-    !=================================================================
+    !=======================================================================
 
-    !$OMP PARALLEL DO       &
-    !$OMP DEFAULT( SHARED ) &
-    !$OMP PRIVATE( J,      I,      AREA_M2, L, F,  EC ) &
-    !$OMP PRIVATE( DIAG14, DIAG38, RC,      N, NA, NW ) &
+    !$OMP PARALLEL DO                                      &
+    !$OMP DEFAULT( SHARED                                ) &
+    !$OMP PRIVATE( J,      I,      AREA_M2, L, F,  EC    ) &
+    !$OMP PRIVATE( DIAG14, DIAG38, RC,      N, NA, NW, S ) &
     !$OMP SCHEDULE( DYNAMIC )
     DO J = 1, State_Grid%NY
     DO I = 1, State_Grid%NX
@@ -265,31 +280,48 @@ CONTAINS
           RC = EC
        ENDIF
 
-       !--------------------------------------------------------------
+       !--------------------------------------------------------------------
        ! HISTORY (aka netCDF diagnostics)
        !
        ! Convective mass flux [kg/s]
        ! NOTE: May be replaced soon with better flux diagnostics
-       !--------------------------------------------------------------
+       !--------------------------------------------------------------------
        IF ( State_Diag%Archive_CloudConvFlux ) THEN
-          DO N = 1, State_Chm%nAdvect
-          DO L = 1, State_Grid%NZ
-             State_Diag%CloudConvFlux(I,J,L,N) = Diag14(L,N)
-          ENDDO
+          DO S = 1, State_Diag%Map_CloudConvFlux%nSlots
+             N = State_Diag%Map_CloudConvFlux%slot2id(S)
+             DO L = 1, State_Grid%NZ
+                State_Diag%CloudConvFlux(I,J,L,S) = Diag14(L,N)
+             ENDDO
           ENDDO
        ENDIF
 
-       !--------------------------------------------------------------
+       !--------------------------------------------------------------------
        ! HISTORY (aka netCDF diagnostics)
        !
        ! Loss of soluble species in convective mass flux [kg/s]
        ! NOTE: May be replaced soon with better flux diagnostics
-       !--------------------------------------------------------------
+       !--------------------------------------------------------------------
        IF ( State_Diag%Archive_WetLossConv ) THEN
-          DO NW = 1, State_Chm%nWetDep
-          DO L  = 1, State_Grid%NZ
-             State_Diag%WetLossConv(I,J,L,NW) = Diag38(L,NW)
+          DO S = 1, State_Diag%Map_WetLossConv%nSlots
+             NW = State_Diag%Map_WetLossConv%slot2id(S)
+             DO L = 1, State_Grid%NZ
+#ifdef MODEL_GEOS
+                State_Diag%WetLossConv(I,J,L,S) = Diag38(L,NW) / AREA_M2
+#else
+                State_Diag%WetLossConv(I,J,L,S) = Diag38(L,NW)
+#endif
+             ENDDO
           ENDDO
+       ENDIF
+
+       ! Satellite diagnostic
+       ! Loss of soluble species in convective updrafts [kg/s]
+       IF ( State_Diag%Archive_SatDiagnWetLossConv ) THEN
+          DO S = 1, State_Diag%Map_SatDiagnWetLossConv%nSlots
+             NW = State_Diag%Map_SatDiagnWetLossConv%slot2id(S)
+             DO L = 1, State_Grid%NZ
+                State_Diag%SatDiagnWetLossConv(I,J,L,S) = Diag38(L,NW)
+             ENDDO
           ENDDO
        ENDIF
 
@@ -304,43 +336,43 @@ CONTAINS
        RETURN
     ENDIF
 
-    ! Convection timestep [s]
-    DT_Conv = GET_TS_CONV()
-
     !----------------------------------------------------------
     ! Convection budget diagnostics - Part 2 of 2
     !----------------------------------------------------------
     IF ( State_Diag%Archive_BudgetConvection ) THEN
-       ! Get final masses and compute diagnostics
-       CALL Compute_Column_Mass( Input_Opt,                               &
-                                 State_Chm,                               &
-                                 State_Grid,                              &
-                                 State_Met,                               &
-                                 State_Chm%Map_Advect,                    &
-                                 State_Diag%Archive_BudgetConvectionFull, &
-                                 State_Diag%Archive_BudgetConvectionTrop, &
-                                 State_Diag%Archive_BudgetConvectionPBL,  &
-                                 State_Diag%BudgetMass2,                  &
-                                 RC )
-       CALL Compute_Budget_Diagnostics( State_Grid,                       &
-                                 State_Chm%Map_Advect,                    &
-                                 DT_Conv,                                 &
-                                 State_Diag%Archive_BudgetConvectionFull, &
-                                 State_Diag%Archive_BudgetConvectionTrop, &
-                                 State_Diag%Archive_BudgetConvectionPBL,  &
-                                 State_Diag%BudgetConvectionFull,         &
-                                 State_Diag%BudgetConvectionTrop,         &
-                                 State_Diag%BudgetConvectionPBL,          &
-                                 State_Diag%BudgetMass1,                  &
-                                 State_Diag%BudgetMass2,                  &
-                                 RC )
+
+       ! Convection timestep [s]
+       TS_Conv = Get_Ts_Conv()
+       DT_Conv = DBLE( TS_Conv )
+
+       ! Compute change in column masses (after conv - before conv)
+       ! and store in diagnostic arrays.  Units are [kg/s].
+       CALL Compute_Budget_Diagnostics(                                      &
+            Input_Opt   = Input_Opt,                                         &
+            State_Chm   = State_Chm,                                         &
+            State_Grid  = State_Grid,                                        &
+            State_Met   = State_Met,                                         &
+            isFull      = State_Diag%Archive_BudgetConvectionFull,           &
+            diagFull    = State_Diag%BudgetConvectionFull,                   &
+            mapDataFull = State_Diag%Map_BudgetConvectionFull,               &
+            isTrop      = State_Diag%Archive_BudgetConvectionTrop,           &
+            diagTrop    = State_Diag%BudgetConvectionTrop,                   &
+            mapDataTrop = State_Diag%Map_BudgetConvectionTrop,               &
+            isPBL       = State_Diag%Archive_BudgetConvectionPBL,            &
+            diagPBL     = State_Diag%BudgetConvectionPBL,                    &
+            mapDataPBL  = State_Diag%Map_BudgetConvectionPBL,                &
+            colMass     = State_Diag%BudgetColumnMass,                       &
+            timeStep    = DT_Conv,                                           &
+            RC          = RC                                                )
+
+       ! Trap potential errors
        IF ( RC /= GC_SUCCESS ) THEN
           ErrMsg = 'Convection budget diagnostics error 2'
           CALL GC_Error( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
     ENDIF
-
+       
   END SUBROUTINE DO_CONVECTION
 !EOC
 !------------------------------------------------------------------------------
@@ -384,7 +416,7 @@ CONTAINS
     USE State_Diag_Mod,     ONLY : DgnState
     USE State_Grid_Mod,     ONLY : GrdState
     USE State_Met_Mod,      ONLY : MetState
-    USE Species_Mod,        ONLY : Species
+    USE Species_Mod,        ONLY : Species, SpcConc
     USE WETSCAV_MOD,        ONLY : WASHOUT
     USE WETSCAV_MOD,        ONLY : LS_K_RAIN
     USE WETSCAV_MOD,        ONLY : LS_F_PRIME
@@ -446,6 +478,9 @@ CONTAINS
 ! !DEFINED PARAMETERS:
 !
     REAL(fp), PARAMETER    :: TINYNUM = 1e-14_fp
+#ifdef LUO_WETDEP
+    REAL(fp), PARAMETER    :: pHRain = 5.6_fp
+#endif
 !
 ! !LOCAL VARIABLES:
 !
@@ -476,18 +511,19 @@ CONTAINS
     REAL(fp)               :: PDOWN    (State_Grid%NZ)
 
     ! Pointers
-    REAL(fp),      POINTER :: BXHEIGHT (:        )
-    REAL(fp),      POINTER :: CMFMC    (:        )
-    REAL(fp),      POINTER :: DQRCU    (:        )
-    REAL(fp),      POINTER :: DTRAIN   (:        )
-    REAL(fp),      POINTER :: PFICU    (:        )
-    REAL(fp),      POINTER :: PFLCU    (:        )
-    REAL(fp),      POINTER :: REEVAPCN (:        )
-    REAL(fp),      POINTER :: DELP_DRY (:        )
-    REAL(fp),      POINTER :: T        (:        )
-    REAL(fp),      POINTER :: H2O2s    (:        )
-    REAL(fp),      POINTER :: SO2s     (:        )
-    REAL(fp),      POINTER :: Q        (:,:      )
+    REAL(fp),      POINTER :: BXHEIGHT (:)
+    REAL(fp),      POINTER :: CMFMC    (:)
+    REAL(fp),      POINTER :: DQRCU    (:)
+    REAL(fp),      POINTER :: DTRAIN   (:)
+    REAL(fp),      POINTER :: PFICU    (:)
+    REAL(fp),      POINTER :: PFLCU    (:)
+    REAL(fp),      POINTER :: REEVAPCN (:)
+    REAL(fp),      POINTER :: DELP_DRY (:)
+    REAL(fp),      POINTER :: T        (:)
+    REAL(fp),      POINTER :: H2O2s    (:)
+    REAL(fp),      POINTER :: SO2s     (:)
+    REAL(fp),      POINTER :: Q        (:)
+    TYPE(SpcConc), POINTER :: Spc      (:)
     TYPE(Species), POINTER :: SpcInfo
 
     !========================================================================
@@ -510,8 +546,7 @@ CONTAINS
     T        => State_Met%T       (I,J,:        ) ! Air temperature [K]
     H2O2s    => State_Chm%H2O2AfterChem(I,J,:   ) ! H2O2s from sulfate_mod
     SO2s     => State_Chm%SO2AfterChem (I,J,:   ) ! SO2s from sulfate_mod
-    Q        => State_Chm%Species (I,J,:,:      ) ! Chemical species
-                                                  ! [mol/mol dry air]
+    Spc      => State_Chm%Species              ! Chemical species vector
     SpcInfo  => NULL()                            ! Species database entry
 
     ! PFICU and PFLCU are on level edges
@@ -532,9 +567,15 @@ CONTAINS
     ! Convection timestep [s]
     NDT      = TS_DYN
 
-    ! Internal time step for convective mixing is 300 sec.
-    ! Doug Rotman (LLNL) says that 450 sec works just as well.
-    NS       = NDT / 300                ! Num internal timesteps (int)
+    IF ( State_Grid%NZ > 72 .or. &
+         Input_Opt%MetField == "MODELE2.1" ) THEN 
+       ! Higher vertical resolution runs need shorter convective timestep
+       NS       = NDT / 60
+    ELSE
+       ! Internal time step for convective mixing is 300 sec.
+       ! Doug Rotman (LLNL) says that 450 sec works just as well.
+       NS       = NDT / 300                ! Num internal timesteps (int)
+    ENDIF
     NS       = MAX( NS, 1 )             ! Set lower bound to 1
     DNS      = DBLE( NS )               ! Num internal timesteps (real)
     SDT      = DBLE( NDT ) / DBLE( NS ) ! seconds in internal timestep
@@ -600,6 +641,9 @@ CONTAINS
        ! Get the species ID (modelID) from the advected species ID
        IC       =  State_Chm%Map_Advect(NA)
 
+       ! Point to the species concentrations array
+       Q => Spc(IC)%Conc(I,J,:) ! Chemical species [mol/mol dry air]
+
        ! Look up the corresponding entry in the species database
        SpcInfo  => State_Chm%SpcData(IC)%Info
 
@@ -654,7 +698,7 @@ CONTAINS
                 DELP_DRY_NUM = 0e+0_fp
 
                 DO K  = 1, CLDBASE-1
-                   QB_NUM = QB_NUM + Q(K,IC) * DELP_DRY(K)
+                   QB_NUM = QB_NUM + Q(K) * DELP_DRY(K)
                    DELP_DRY_NUM = DELP_DRY_NUM + DELP_DRY(K)
                 ENDDO
 
@@ -670,12 +714,12 @@ CONTAINS
                 ! QC =  --------------------------------------------
                 !            Dry air mass below cloud base
                 !
-                QC = ( MB*QB + CMFMC(CLDBASE-1) * Q(CLDBASE,IC) * SDT  ) / &
+                QC = ( MB*QB + CMFMC(CLDBASE-1) * Q(CLDBASE) * SDT  ) / &
                      ( MB    + CMFMC(CLDBASE-1) * SDT  )
 
                 ! Copy QC to all levels of the species array Q
                 ! that are below the cloud base level [kg/kg]
-                Q(1:CLDBASE-1,IC) = QC
+                Q(1:CLDBASE-1) = QC
 
              ELSE
 
@@ -685,7 +729,7 @@ CONTAINS
 
                 ! When CMFMC is negligible, then set QC to the species
                 ! concentration at the cloud base level [kg/kg]
-                QC = Q(CLDBASE,IC)
+                QC = Q(CLDBASE)
 
              ENDIF
 
@@ -696,8 +740,7 @@ CONTAINS
              ! set QC to the species concentration at the surface
              ! level [kg/kg]
              !-----------------------------------------------------
-             QC = Q(CLDBASE,IC)
-
+             QC = Q(CLDBASE)
           ENDIF
 
           !==================================================================
@@ -826,12 +869,11 @@ CONTAINS
 
                 ENDIF
                 !- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
                 ! Update QC taking entrainment into account [kg/kg]
                 ! Prevent div by zero condition
                 IF ( ENTRN >= 0e+0_fp .and. CMOUT > 0e+0_fp ) THEN
                    QC   = ( CMFMC_BELOW * QC_PRES   + &
-                          ENTRN       * Q(K,IC) ) / CMOUT
+                          ENTRN       * Q(K) ) / CMOUT
                 ENDIF
 
                 !------------------------------------------------------------
@@ -895,7 +937,7 @@ CONTAINS
                 !
                 !    DELQ = (Term 1) - (Term 2) + (Term 3) - (Term 4)
                 !
-                ! and Q(K,IC) = Q(K,IC) + DELQ.
+                ! and Q(K) = Q(K) + DELQ.
                 !
                 ! The term T0 is the amount of species that is scavenged
                 ! out of the box.
@@ -906,36 +948,37 @@ CONTAINS
                 T0      =  CMFMC_BELOW * QC_SCAV
                 T1      =  CMFMC_BELOW * QC_PRES
                 T2      = -CMFMC(K  )  * QC
-                T3      =  CMFMC(K  )  * Q(K+1,IC)
-                T4      = -CMFMC_BELOW * Q(K,  IC)
+                T3      =  CMFMC(K  )  * Q(K+1)
+                T4      = -CMFMC_BELOW * Q(K)
 
                 TSUM    = T1 + T2 + T3 + T4
 
                 DELQ    = ( SDT / BMASS(K) ) * TSUM    ! change in [kg/kg]
 
                 ! If DELQ > Q then do not make Q negative!!!
-                IF ( Q(K,IC) + DELQ < 0 ) THEN
-                   DELQ = -Q(K,IC)
+                IF ( Q(K) + DELQ < 0 ) THEN
+                   DELQ = -Q(K)
                 ENDIF
 
                 ! Increment the species array [kg/kg]
-                Q(K,IC) = Q(K,IC) + DELQ
+                Q(K) = Q(K) + DELQ
 
                 ! Return if we encounter NInf
-                IF ( .not. IT_IS_FINITE( Q(K,IC) ) ) THEN
+                IF ( .not. IT_IS_FINITE( Q(K) ) ) THEN
                    WRITE( 6, 200 )
 200                FORMAT( 'Infinity in DO_CLOUD_CONVECTION!' )
-                   WRITE( 6, 255 ) K, IC, Q(K,IC)
+                   WRITE( 6, 255 ) K, IC, Q(K), TRIM(SpcInfo%Name)
+                   WRITE(*,*) T0,T1,T2,T3,T4,DELQ,SDT,TSUM
                    RC = GC_FAILURE
                    RETURN
                 ENDIF
 
                 ! Return if we encounter NaN
-                IF ( IT_IS_NAN( Q(K,IC) ) ) THEN
+                IF ( IT_IS_NAN( Q(K) ) ) THEN
                    WRITE( 6, 250 )
-                   WRITE( 6, 255 ) K, IC, Q(K,IC)
+                   WRITE( 6, 255 ) K, IC, Q(K), TRIM(SpcInfo%Name)
 250                FORMAT( 'NaN encountered in DO_CLOUD_CONVECTION!' )
-255                FORMAT( 'K, IC, Q(K,IC): ', 2i4, 1x, es13.6 )
+255                FORMAT( 'K, IC, Q(K): ', 2i4, 1x, es13.6, 1x, a10 )
                    RC = GC_FAILURE
                    RETURN
                 ENDIF
@@ -988,7 +1031,7 @@ CONTAINS
 
                 ! If there is no cloud mass flux coming from below, set
                 ! QC to the species concentration at this level [kg/kg]
-                QC = Q(K,IC)
+                QC = Q(K)
 
                 ! Bug fix for the cloud base layer, which is not necessarily
                 ! in the boundary layer, and there could be
@@ -1003,18 +1046,18 @@ CONTAINS
 
                    ! Species subsiding from K+1 -> K [kg/m2/s]
                    ! [kg/m2/s * kg species/kg dry air]
-                   T3   =  CMFMC(K) * Q(K+1,IC)
+                   T3   =  CMFMC(K) * Q(K+1)
 
                    ! Change in species concentration [kg/kg]
                    DELQ = ( SDT / BMASS(K) ) * (T2 + T3)
 
                    ! If DELQ > Q then do not make Q negative!!!
-                   IF ( Q(K,IC) + DELQ < 0.0e+0_fp ) THEN
-                      DELQ = -Q(K,IC)
+                   IF ( Q(K) + DELQ < 0.0e+0_fp ) THEN
+                      DELQ = -Q(K)
                    ENDIF
 
                    ! Add change in species to Q array [kg/kg]
-                   Q(K,IC) = Q(K,IC) + DELQ
+                   Q(K) = Q(K) + DELQ
 
                 ENDIF
              ENDIF
@@ -1072,6 +1115,9 @@ CONTAINS
                               K,         IC,         BXHEIGHT(K),   &
                               T(K),      QDOWN,      SDT,           &
                               F_WASHOUT, H2O2s(K),   SO2s(K),       &
+#ifdef LUO_WETDEP
+                              pHRain,                               &
+#endif
                               WASHFRAC,  AER,        Input_Opt,     &
                               State_Chm, State_Grid, State_Met,  RC )
 
@@ -1137,7 +1183,7 @@ CONTAINS
 
                    ! Amount of aerosol lost to washout in grid box [kg/m2]
                    ! (V. Shah, 9/14/15)
-                   WETLOSS = ( Q(K,IC) * BMASS(K) + GAINED ) * &
+                   WETLOSS = ( Q(K) * BMASS(K) + GAINED ) * &
                              WASHFRAC - GAINED
 
                    ! LOST is the rained out aerosol coming down from
@@ -1148,7 +1194,7 @@ CONTAINS
 
                    ! Update species concentration (V. Shah, mps, 5/20/15)
                    ! [kg/kg]
-                   Q(K,IC) = Q(K,IC) - WETLOSS / BMASS(K)
+                   Q(K) = Q(K) - WETLOSS / BMASS(K)
 
                    ! Update T0_SUM, the total amount of scavenged
                    ! species that will be passed to the grid box below
@@ -1165,7 +1211,7 @@ CONTAINS
                    ! MASS_NOWASH is the amount of non-aerosol species in
                    ! grid box (I,J,L) that is NOT available for washout.
                    ! Calculate in units of [kg/kg]
-                   MASS_NOWASH = ( 1e+0_fp - F_WASHOUT ) * Q(K,IC)
+                   MASS_NOWASH = ( 1e+0_fp - F_WASHOUT ) * Q(K)
 
                    ! MASS_WASH is the total amount of non-aerosol species
                    ! that is available for washout in grid box (I,J,L).
@@ -1174,7 +1220,7 @@ CONTAINS
                    ! species coming down from grid box (I,J,L+1).
                    ! (Eq. 15, Jacob et al, 2000)
                    ! Units are [kg species/m2/timestep]
-                   MASS_WASH = ( F_WASHOUT * Q(K,IC) ) * BMASS(K) + T0_SUM
+                   MASS_WASH = ( F_WASHOUT * Q(K) ) * BMASS(K) + T0_SUM
 
                    ! WETLOSS is the amount of species mass in
                    ! grid box (I,J,L) that is lost to washout.
@@ -1186,7 +1232,7 @@ CONTAINS
                    ! originally in the non-precipitating fraction
                    ! of the box, plus MASS_WASH, less WETLOSS.
                    ! [kg/kg]
-                   Q(K,IC) = Q(K,IC) - WETLOSS / BMASS(K)
+                   Q(K) = Q(K) - WETLOSS / BMASS(K)
 
                    ! Update T0_SUM, the total scavenged species
                    ! that will be passed to the grid box below
@@ -1256,12 +1302,9 @@ CONTAINS
                 ! Wet scavenged Hg(II) in [kg]
                 WET_Hg2 = ( T0_SUM * AREA_M2 )
 
-                ! Category # for this Hg2 species
-                Hg_Cat  = SpcInfo%Hg_Cat
-
                 ! Pass to "ocean_mercury_mod.f"
-                CALL ADD_Hg2_WD      ( I, J, Hg_Cat, WET_Hg2  )
-                CALL ADD_Hg2_SNOWPACK( I, J, Hg_Cat, WET_Hg2, &
+                CALL ADD_Hg2_WD      ( I, J, WET_Hg2  )
+                CALL ADD_Hg2_SNOWPACK( I, J, WET_Hg2, &
                                        State_Met, State_Chm, State_Diag )
              ENDIF
 
@@ -1273,18 +1316,16 @@ CONTAINS
                 ! Wet scavenged Hg(P) in [kg]
                 WET_HgP = ( T0_SUM * AREA_M2 )
 
-                ! Category # for this Hg2 species
-                Hg_Cat  = SpcInfo%Hg_Cat
-
                 ! Pass to "ocean_mercury_mod.f"
-                CALL ADD_HgP_WD      ( I, J, Hg_Cat, WET_HgP  )
-                CALL ADD_Hg2_SNOWPACK( I, J, Hg_Cat, WET_HgP, &
+                CALL ADD_HgP_WD      ( I, J, WET_HgP  )
+                CALL ADD_Hg2_SNOWPACK( I, J, WET_HgP, &
                                        State_Met, State_Chm, State_Diag )
              ENDIF
           ENDIF
        ENDDO               ! End internal timestep loop
 
-       ! Free pointer
+       ! Free pointers
+       Q       => NULL()
        SpcInfo => NULL()
     ENDDO                  ! End loop over advected species
 
@@ -1304,7 +1345,7 @@ CONTAINS
     NULLIFY( T        )
     NULLIFY( H2O2s    )
     NULLIFY( SO2s     )
-    NULLIFY( Q        )
+    NULLIFY( Spc      )
 
     ! Set error code to success
     RC                      = GC_SUCCESS

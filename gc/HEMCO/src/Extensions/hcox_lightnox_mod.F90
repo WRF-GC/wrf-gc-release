@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -79,77 +79,7 @@ MODULE HCOX_LightNOx_Mod
 !
 ! !REVISION HISTORY:
 !  14 Apr 2004 - L. Murray, R. Hudman - Initial version
-!  (1 ) Based on "lightnox_nox_mod.f", but updated for near-land formulation
-!        and for CTH, MFLUX, PRECON parameterizations (ltm, bmy, 5/10/06)
-!  (2 ) Now move computation of IC/CG flash ratio out of routines FLASHES_CTH,
-!        FLASHES_MFLUX, FLASHES_PRECON, and into routine GET_IC_CG_RATIO.
-!        Added a fix in LIGHTDIST for pathological grid boxes.  Set E_IC_CG=1
-!        according to Allen & Pickering [2002].  Rename OTDSCALE array to
-!        OTD_REG_REDIST, and also add OTD_LOC_REDIST array.  Now scale
-!        lightnox to 6 Tg N/yr for both 2x25 and 4x5.  Rename routine
-!        GET_OTD_LIS_REDIST to GET_REGIONAL_REDIST.  Add similar routine
-!        GET_LOCAL_REDIST.  Removed GET_OTD_LOCp AL_REDIST.  Bug fix: divide
-!        A_M2 by 1d6 to get A_KM2. (rch, ltm, bmy, 2/22/07)
-!  (3 ) Rewritten for separate treatment of LNOx emissions at tropics &
-!        midlatitudes, based on Hudman et al 2007.  Removed obsolete
-!        variable E_IC_CG. (rch, ltm, bmy, 3/27/07)
-!  (4 ) Changes implemented in this version (ltm, bmy, 10/3/07)
-!        * Revert to not classifying near-land as land
-!        * Eliminate NOx emisisons per path length entirely
-!        * Scale tropics to 260 mol/fl constraint from Randall Martin's
-!           4.4 Tg and OTD-LIS avg ann flash rate
-!        * Remove top-down scaling (remove the three functions)
-!        * Allow option of mid-level scaling to match global avg ann flash
-!           rate between G-C and OTD-LIS 11-year climatology (new function)
-!        * Local Redist now a la Murray et al, 2007 in preparation (monthly)
-!        * Replace GEMISNOX (from CMN_NOX) with module variable EMIS_LI_NOx
-!  (5 ) Added MFLUX, PRECON redistribution options (ltm, bmy, 11/29/07)
-!  (6 ) Updated OTD/LIS scaling for GEOS-5 to get more realistic totals
-!        (ltm, bmy, 2/20/08)
-!  (7 ) Now add the proper scale factors for the GEOS-5 0.5 x 0.666 grid
-!        and the GEOS-3 1x1 nested N. America grid in routine
-!        GET_OTD_LIS_SCALE. (yxw, dan, ltm, bmy, 11/14/08)
-!  (8 ) Added quick fix for GEOS-5 reprocessed met fields (ltm, bmy, 2/18/09)
-!  (9 ) Added quick fix for GEOS-5 years 2004, 2005, 2008 (ltm, bmy, 4/29/09)
-!  (10) Updated OTD/LIS scaling for GEOS-5 reprocessed data (ltm, bmy, 7/10/09)
-!  (11) Updated for GEOS-4 1 x 1.25 grid (lok, ltm, bmy, 1/13/10)
-!  (12) Reprocessed for CLDTOPS calculation error; Updated Ott vertical
-!        profiles; Removal of depreciated options, e.g., MFLUX and PRECON;
-!        GEOS5 5.1.0 vs. 5.2.0 special treatment; MERRA; Other changes.
-!        Please see PDF on wiki page for full description of lightnox
-!        changes to v9-01-01. (ltm, 1/25/11)
-!  13 Aug 2010 - R. Yantosca - Add modifications for MERRA
-!  10 Nov 2010 - L. Murray   - Updated OTD/LIS local scaling for MERRA 4x5
-!  10 Nov 2010 - R. Yantosca - Added ProTeX headers
-!  02 Feb 2012 - R. Yantosca - Added modifications for GEOS-5.7.x met fields
-!  01 Mar 2012 - R. Yantosca - Now reference new grid_mod.F90
-!  03 Aug 2012 - R. Yantosca - Move calls to findFreeLUN out of DEVEL block
-!  22 Oct 2013 - C. Keller   - Now a HEMCO extension.
-!  22 Jul 2014 - R. Yantosca - Now hardwire the Lesley Ott et al CDF's in
-!                              lightning_cdf_mod.F90.  This avoids having to
-!                              read an ASCII input in the ESMF environment.
-!  13 Jan 2015 - L. Murray   - Add most recent lightning updates to HEMCO version
-!  26 Feb 2015 - R. Yantosca - Restore reading the lightning CDF's from an
-!                              ASCII file into the PROFILE array.  This helps
-!                              to reduce compilation time.
-!  31 Jul 2015 - C. Keller   - Added option to define scalar/gridded scale
-!                              factors via HEMCO configuration file.
-!  14 Oct 2016 - C. Keller   - Now use HCO_EvalFld instead of HCO_GetPtr.
-!  02 Dec 2016 - M. Sulprizio- Update WEST_NS_DIV from 23d0 to 35d0 (K. Travis)
-!  16 Feb 2017 - L. Murray   - Updated BETA factors for all GEOS-FP/MERRA-2
-!                              products fields available by v11-01 release
-!                              (through Dec. 2016), and latest version of
-!                              LIS/OTD satellite climatology.
-!  24 Aug 2017 - M. Sulprizio- Remove support for GCAP, GEOS-4, GEOS-5 and MERRA
-!  17 Oct 2017 - C. Keller   - Add option to use GEOS-5 lightning flash rate
-!                              (LFR). Autoselection of flash rate scale factor.
-!  16 Jan 2019 - L. Murray   - Lightning flash densities and convective depths
-!                              for vertical distribution are now calculated offline
-!                              at the native model resolution and prescribed in
-!                              HEMCO_Config.rc as the other model meteorology.
-!                              Model flash climatology remains constrained to the
-!                              LIS/OTD climatology, as described by Murray et al.
-!                              (2012). Removed obsolete subroutines and code.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -199,7 +129,7 @@ MODULE HCOX_LightNOx_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -229,23 +159,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  09 Oct 1997 - R. Yantosca - Initial version
-!  (1 ) Remove IOFF, JOFF from the argument list.  Also remove references
-!        to header files "CMN_O3" and "comtrid.h" (bmy, 3/16/00)
-!  (2 ) Now use allocatable array for ND32 diagnostic (bmy, 3/16/00)
-!  (3 ) Now reference BXHEIGHT from "dao_mod.f".  Updated comments, cosmetic
-!        changes.  Replace LCONVM with the parameter LLCONVM. (bmy, 9/18/02)
-!  (4 ) Removed obsolete reference to "CMN".  Now bundled into
-!        "lightnox_mod.f" (bmy, 4/14/04)
-!  (5 ) Renamed from EMLIGHTNOX_NL to EMLIGHTNOX.  Now replace GEMISNOX
-!        (from CMN_NOX) with module variable EMIS_LI_NOx. (ltm, bmy, 10/3/07)
-!  10 Nov 2010 - R. Yantosca - Added ProTeX headers
-!  09 Nov 2012 - M. Payer    - Replaced all met field arrays with State_Met
-!                              derived type object
-!  25 Mar 2013 - R. Yantosca - Now accept State_Chm
-!  22 Oct 2013 - C. Keller   - Now a HEMCO extension.
-!  07 Oct 2013 - C. Keller   - Now allow OTD-LIS scale factor to be set
-!                              externally. Check for transition to Sep 2008.
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -255,15 +169,19 @@ CONTAINS
     TYPE(MyInst), POINTER :: Inst
     INTEGER               :: Yr, Mt
     LOGICAL               :: FOUND
-    CHARACTER(LEN=255)    :: MSG
+    CHARACTER(LEN=255)    :: MSG, LOC
 
     !=================================================================
     ! HCOX_LIGHTNOX_RUN begins here!
     !=================================================================
+    LOC = 'HCOX_LIGHTNOX_RUN (HCOX_LIGHTNOX_MOD.F90)'
 
     ! Enter
-    CALL HCO_ENTER( HcoState%Config%Err, 'HCOX_LightNOx_Run (hcox_lightnox_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Return if extension disabled
     IF ( ExtState%LightNOx <= 0 ) THEN
@@ -278,13 +196,16 @@ CONTAINS
     CALL InstGet ( ExtState%LightNOx, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        WRITE(MSG,*) 'Cannot find lightning NOx instance Nr. ', ExtState%LightNOx
-       CALL HCO_ERROR(HcoState%Config%Err,MSG,RC)
+       CALL HCO_ERROR(MSG,RC)
        RETURN
     ENDIF
 
     ! Update lightnox NOx emissions (fill SLBASE)
     CALL LIGHTNOX( HcoState, ExtState, Inst, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     !=================================================================
     ! Pass to HEMCO State and update diagnostics
@@ -295,7 +216,7 @@ CONTAINS
        CALL HCO_EmisAdd( HcoState, Inst%SLBASE, Inst%IDTNO, &
                          RC, ExtNr=Inst%ExtNr)
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'HCO_EmisAdd error: SLBASE', RC )
+          CALL HCO_ERROR( 'HCO_EmisAdd error: SLBASE', RC )
           RETURN
        ENDIF
 
@@ -308,7 +229,7 @@ CONTAINS
   END SUBROUTINE HCOX_LightNOx_Run
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -345,80 +266,54 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 May 2006 - L. Murray - Initial version
-!  (1 ) Now recompute the cold cloud thickness according to updated formula
-!        from Lee Murray.  Rearranged argument lists to routines FLASHES_CTH,
-!        FLASHES_MFLUX, FLASHES_PRECON.  Now call READ_REGIONAL_REDIST and
-!        READ_LOCAL_REDIST. Updated comments accordingly.  Now apply
-!        FLASH_SCALE to scale the total lightnox NOx to 6 Tg N/yr.  Now apply
-!        OTD/LIS regional or local redistribution (cf. B. Sauvage) to the ND56
-!        diagnostic. lightnox redistribution to the ND56 diag.  Renamed
-!        REGSCALE variable to REDIST.  Bug fix: divide A_M2 by 1d6 to get
-!        A_KM2. (rch, ltm, bmy, 2/14/07)
-!  (2 ) Rewritten for separate treatment of LNOx emissions at tropics &
-!        midlatitudes (rch, ltm, bmy, 3/27/07)
-!  (3 ) Remove path-length algorithm.  Renamed from LIGHTNOX_NL to LIGHTNOX.
-!        Other improvements. (ltm, bmy, 9/24/07)
-!  (4 ) Remove depreciated options; Update to new Ott et al vertical profiles;
-!        Reprocessed for bug in CLDTOPS calculation. See PDF on wiki for
-!        full description of changes for v9-01-01. (ltm, bmy, 1/25,11)
-!  10 Nov 2010 - R. Yantosca - Added ProTeX headers
-!  09 Nov 2012 - M. Payer    - Replaced all met field arrays with State_Met
-!                              derived type object
-!  22 Oct 2013 - C. Keller   - Now a HEMCO extension.
-!  06 Oct 2014 - C. Keller   - Now calculate pressure centers from edges.
-!  16 Jan 2015 - R. Yantosca - Bug fix: TmpScale should be REAL(dp)
-!  11 Mar 2015 - C. Keller   - Now determine LTOP from buoyancy for grid boxes
-!                              where convection is explicitly resolved. For now,
-!                              this will only work in an ESMF environment.
-!  31 Jul 2015 - C. Keller   - Take into account scalar/gridded scale factors
-!                              defined in HEMCO configuration file.
-!  03 Mar 2016 - C. Keller   - Use buoyancy in combination with convective
-!                              fraction CNV_FRC (ESMF only).
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
-!  30 Aug 2018 - C. Keller   - Use diagnostic names for special diagnostics.
-!                              This makes interface with GEOS easier.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
 ! !LOCAL VARIABLES:
 !
-    INTEGER           :: I, J, L
-    INTEGER           :: LTOP
-    INTEGER           :: MONTH
-    INTEGER           :: MTYPE
-    REAL*8            :: A_M2
-    REAL*8            :: A_KM2
-    REAL*8            :: H0
-    REAL*8            :: IC_CG_RATIO
-    REAL*8            :: RATE
-    REAL*8            :: RATE_SAVE
-    REAL*8            :: TOTAL
-    REAL*8            :: TOTAL_CG
-    REAL*8            :: TOTAL_IC
-    REAL*8            :: X
-    REAL*8            :: YMID
-    REAL*8            :: XMID
-    REAL*8            :: VERTPROF(HcoState%NZ)
-    INTEGER           :: LMAX
-    INTEGER           :: LNDTYPE
-    INTEGER           :: SFCTYPE
-    REAL(hp)          :: TROPP
-    REAL(dp)          :: TmpScale
+    INTEGER             :: I, J, L
+    INTEGER             :: LTOP
+    INTEGER             :: MONTH
+    INTEGER             :: MTYPE
+    REAL*8              :: A_M2
+    REAL*8              :: A_KM2
+    REAL*8              :: H0
+    REAL*8              :: IC_CG_RATIO
+    REAL*8              :: RATE
+    REAL*8              :: RATE_SAVE
+    REAL*8              :: TOTAL
+    REAL*8              :: TOTAL_CG
+    REAL*8              :: TOTAL_IC
+    REAL*8              :: X
+    REAL*8              :: YMID
+    REAL*8              :: XMID
+    REAL*8              :: VERTPROF(HcoState%NZ)
+    INTEGER             :: LMAX
+    INTEGER             :: LNDTYPE
+    INTEGER             :: SFCTYPE
+    REAL(hp)            :: TROPP
+    REAL(dp)            :: TmpScale
+    CHARACTER(LEN=255)  :: LOC
 
     !=================================================================
     ! LIGHTNOX begins here!
     !=================================================================
+    LOC = 'LIGHTNOX (HCOX_LIGHTNOX_MOD.F90)'
 
     ! Enter
-    CALL HCO_ENTER( HcoState%Config%Err, 'LightNOx (hcox_lightnox_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Reset arrays
     Inst%SLBASE         = 0.0_hp
     Inst%FLASH_DENS_TOT = 0.0_sp
-    Inst%FLASH_DENS_IC  = 0.0_sp
-    Inst%FLASH_DENS_CG  = 0.0_sp
+    !Inst%FLASH_DENS_IC  = 0.0_sp
+    !Inst%FLASH_DENS_CG  = 0.0_sp
     Inst%CONV_DEPTH     = 0.0_sp
 
     ! LMAX: the highest L-level to look for lightning NOx (usually LLPAR-1)
@@ -426,7 +321,10 @@ CONTAINS
 
     ! Get current month (to be passed to LIGHTDIST)
     CALL HcoClock_Get( HcoState%Clock, cMM=MONTH, RC=RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     !=================================================================
     ! Compute lightning NOx emissions for each (I,J) column
@@ -457,11 +355,15 @@ CONTAINS
        IF ( XMID >= 180.0d0 ) XMID = XMID - 360.0d0
 
        ! Get surface type. Note that these types are different than
-       ! the types used elsewhere: 0 = land, 1=water, 2=ice!
-       LNDTYPE = HCO_LANDTYPE( ExtState%WLI%Arr%Val(I,J),  &
-                               ExtState%ALBD%Arr%Val(I,J) )
+       ! the types used elsewhere in this module. HCO_LANDTYPE returns
+       ! 0=ocean, 1=land, 2=ice; elsewhere we use 0=land, 1=ocean, 2=ice!
+       LNDTYPE = HCO_LANDTYPE( ExtState%FRLAND%Arr%Val(I,J),   &
+                               ExtState%FRLANDIC%Arr%Val(I,J), &
+                               ExtState%FROCEAN%Arr%Val(I,J),  &
+                               ExtState%FRSEAICE%Arr%Val(I,J), &
+                               ExtState%FRLAKE%Arr%Val(I,J))
 
-       ! Adjusted SFCTYPE variable for this module:
+       ! Set surface type (0=land, 1=ocean, 2=ice) based on land type
        IF ( LNDTYPE == 2 ) THEN
           SFCTYPE = 2    ! Ice
        ELSEIF ( LNDTYPE == 1 ) THEN
@@ -561,12 +463,12 @@ CONTAINS
        IF ( RATE > 0d0 ) THEN
 
           ! Flashes per km2 per minute
-          RATE_SAVE   = RATE / 360d0
+          RATE_SAVE   = RATE / 60d0
 
           ! Store total, IC, and CG flash rates
           Inst%FLASH_DENS_TOT(I,J) = RATE_SAVE
-          Inst%FLASH_DENS_IC(I,J)  = RATE_SAVE * X
-          Inst%FLASH_DENS_CG(I,J)  = H0 * 1d-3
+          !Inst%FLASH_DENS_IC(I,J)  = RATE_SAVE * X
+          !Inst%FLASH_DENS_CG(I,J)  = RATE_SAVE * ( 1d0 - X )
 
        ENDIF
 
@@ -622,7 +524,7 @@ CONTAINS
        TOTAL = TOTAL_IC + TOTAL_CG
 
        ! Convert from molec km-2 s-1 to kg(NO) m-2 s-1
-       TOTAL = TOTAL * ( HcoState%Spc(Inst%IDTNO)%EmMW_g / 1000.0_hp ) / &
+       TOTAL = TOTAL * ( HcoState%Spc(Inst%IDTNO)%MW_g / 1000.0_hp ) / &
                          HcoState%Phys%Avgdr / 1000000.0_hp
 
        !===========================================================
@@ -672,7 +574,10 @@ CONTAINS
 
     ! Eventually apply spatiotemporal scale factors
     CALL HCOX_SCALE( HcoState, Inst%SLBASE, TRIM(Inst%SpcScalFldNme(1)), RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 4', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Return w/ success
     CALL HCO_LEAVE( HcoState%Config%Err,RC )
@@ -680,7 +585,7 @@ CONTAINS
   END SUBROUTINE LightNOx
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -723,36 +628,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Sep 2002 - M. Evans - Initial version (based on Yuhang Wang's code)
-!  (1 ) Use functions IS_LAND and IS_WATER to determine if the given grid
-!        box is over land or water.  These functions work for all DAO met
-!        field data sets. (bmy, 4/2/02)
-!  (2 ) Renamed M2 to LTOP and THEIGHT to H0 for consistency w/ variable names
-!        w/in "lightning.f".  Now read the "light_dist.dat.geos3" file for
-!        GEOS-3 directly from the DATA_DIR/lightning_NOx_200203/ subdirectory.
-!        Now read the "light_dist.dat" file for GEOS-1, GEOS-STRAT directly
-!        from the DATA_DIR/lightning_NOx_200203/ subdirectory.  Added
-!        descriptive comment header.  Now trap I/O errors across all
-!        platforms with subroutine "ioerror.f".  Updated comments, cosmetic
-!        changes.  Redimension FRAC(NNLIGHT) to FRAC(LLPAR). (bmy, 4/2/02)
-!  (3 ) Deleted obsolete code from April 2002.  Now reference IU_FILE and
-!        IOERROR from "file_mod.f".  Now use IU_FILE instead of IUNIT as the
-!        file unit number. (bmy, 6/27/02)
-!  (4 ) Now reference BXHEIGHT from "dao_mod.f" (bmy, 9/18/02)
-!  (5 ) Bug fix: add GEOS_4 to the #if block (bmy, 3/4/04)
-!  (6 ) Now bundled into "lightning_mod.f".  CDF's are now read w/in
-!        routine INIT_LIGHTNOX to allow parallelization (bmy, 4/14/04)
-!  (7 ) Now references DATA_DIR from "directory_mod.f" (bmy, 7/20/04)
-!  (8 ) Now uses near-land formulation (ltm, bmy, 5/10/06)
-!  (9 ) Added extra safety check for pathological boxes (bmy, 12/11/06)
-!  (10) Remove the near-land formulation, except for PRECON (ltm, bmy, 9/24/07)
-!  (11) Now use the Ott et al. [2010] profiles, and apply consistently with
-!        GMI model [Allen et al., 2010] (ltm, bmy, 1/25/11).
-!  10 Nov 2010 - R. Yantosca - Added ProTeX headers
-!  01 Mar 2012 - R. Yantosca - Now use GET_AREA_CM2(I,J,L) from grid_mod.F90
-!  15 Jun 2012 - Nielsen - INQUIRE finds free logical unit number for IU_FILE
-!  09 Nov 2012 - M. Payer    - Replaced all met field arrays with State_Met
-!                              derived type object
-!  22 Oct 2013 - C. Keller   - Now a HEMCO extension.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -876,7 +752,7 @@ CONTAINS
   END SUBROUTINE LightDist
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -900,7 +776,7 @@ CONTAINS
     USE HCO_State_Mod,     ONLY : HCO_GetHcoID
     USE HCO_State_Mod,     ONLY : HCO_GetExtHcoID
     USE HCO_ReadList_Mod,  ONLY : ReadList_Remove
-    USE inquireMod,        ONLY : findfreeLUN
+    USE HCO_inquireMod,    ONLY : findfreeLUN
 !
 ! !INPUT PARAMETERS:
 !
@@ -914,27 +790,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  14 Apr 2004 - R. Yantosca - Initial version
-!  (1 ) Now reference DATA_DIR from "directory_mod.f"
-!  (2 ) Now call GET_MET_FIELD_SCALE to initialize the scale factor for
-!        each met field type and grid resolution (bmy, 8/25/05)
-!  (3 ) Now make sure all USE statements are USE, ONLY (bmy, 10/3/05)
-!  (4 ) Now get the box area at 30N for MFLUX, PRECON (lth, bmy, 5/10/06)
-!  (5 ) Rename OTDSCALE to OTD_REG_REDIST.  Also add similar array
-!        OTD_LOC_REDIST.  Now call GET_FLASH_SCALE_CTH, GET_FLASH_SCALE_MFLUX,
-!        GET_FLASH_SCALE_PRECON depending on the type of lightning param used.
-!        Updated comments.  (ltm, bmy, 1/31/07)
-!  (6 ) Removed near-land stuff.  Renamed from HCOX_LightNOX_Init_NL to
-!        HCOX_LightNOX_Init.  Now allocate EMIS_LI_NOx. (ltm, bmy, 10/3/07)
-!  (7 ) Also update location of PDF file to lightning_NOx_200709 directory.
-!        (bmy, 1/24/08)
-!  (8 ) Read in new Ott profiles from lightning_NOx_201101. Remove
-!        depreciated options. (ltm, bmy, 1/25/11)
-!  10 Nov 2010 - R. Yantosca - Added ProTeX headers
-!  01 Mar 2012 - R. Yantosca - Removed reference to GET_YEDGE
-!  22 Oct 2013 - C. Keller   - Now a HEMCO extension.
-!  26 Feb 2015 - R. Yantosca - Now re-introduce reading the CDF table from an
-!                              ASCII file (reduces compilation time)
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -952,20 +808,24 @@ CONTAINS
     !=======================================================================
     ! HCOX_LightNOX_Init begins here!
     !=======================================================================
+    LOC = 'HCOX_LightNOX_Init (HCOX_LIGHTNOX_MOD.F90)'
 
     ! Extension Nr.
     ExtNr = GetExtNr( HcoState%Config%ExtList, TRIM(ExtName) )
     IF ( ExtNr <= 0 ) RETURN
 
     ! Enter
-    CALL HCO_ENTER( HcoState%Config%Err, 'HCOX_LightNOx_Init (hcox_lightnox_mod.F90)', RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 5', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Create LightNOx instance for this simulation
     Inst => NULL()
     CALL InstCreate ( ExtNr, ExtState%LightNOx, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot create LightNOx instance', RC )
+       CALL HCO_ERROR ( 'Cannot create LightNOx instance', RC )
        RETURN
     ENDIF
 
@@ -979,13 +839,19 @@ CONTAINS
     ! Get filename from configuration file
     CALL GetExtOpt( HcoState%Config, ExtNr, 'CDF table',                     &
                     OptValChar=FILENAME, RC=RC                              )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 6', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Call HEMCO parser to replace tokens such as $ROOT, $MET, or $RES.
     ! There shouldn't be any date token in there ($YYYY, etc.), so just
     ! provide some dummy variables here
     CALL HCO_CharParse( HcoState%Config, FILENAME, -999, -1, -1, -1, -1, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 7', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     !-----------------------------------------------------------------------
     ! In dry-run mode, print file path to dryrun log and exit.
@@ -1017,7 +883,7 @@ CONTAINS
     ELSE
        IF ( .not. FileExists ) THEN
           WRITE( MSG, 300 ) TRIM( FileMsg ), TRIM( FileName )
-          CALL HCO_ERROR(HcoState%Config%Err, MSG, RC )
+          CALL HCO_ERROR(MSG, RC )
           RETURN
        ENDIF
     ENDIF
@@ -1039,7 +905,10 @@ CONTAINS
     ! if both the convective fraction and the buoyancy field are available.
     CALL GetExtOpt( HcoState%Config, ExtNr, 'Use CNV_FRC', &
                      OptValBool=Inst%LCNVFRC, FOUND=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 8', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. FOUND ) Inst%LCNVFRC = .FALSE.
 
     ! Check for usage of GEOS-5 lightning flash rates. If on, the GEOS-5
@@ -1047,15 +916,21 @@ CONTAINS
     ! rates. This is off by default.
     CALL GetExtOpt( HcoState%Config, ExtNr, 'GEOS-5 flash rates', &
                      OptValBool=Inst%LLFR, FOUND=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 9', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. FOUND ) Inst%LLFR = .FALSE.
 
     ! Get species ID
     CALL HCO_GetExtHcoID( HcoState, ExtNr, HcoIDs, SpcNames, nSpc, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 10', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( nSpc /= 1 ) THEN
        MSG = 'Lightning NOx module must have exactly one species!'
-       CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+       CALL HCO_ERROR(MSG, RC )
        RETURN
     ENDIF
     Inst%IDTNO = HcoIDs(1)
@@ -1063,11 +938,17 @@ CONTAINS
     ! Get species scale factor
     CALL GetExtSpcVal( HcoState%Config, ExtNr, nSpc, &
                        SpcNames, 'Scaling', 1.0_sp, Inst%SpcScalVal, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 11', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL GetExtSpcVal( HcoState%Config, ExtNr, nSpc, &
                        SpcNames, 'ScaleField', HCOX_NOSCALE, Inst%SpcScalFldNme, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 12', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Echo info about this extension
     IF ( HcoState%amIRoot ) THEN
@@ -1089,42 +970,42 @@ CONTAINS
 
     ALLOCATE( Inst%PROFILE( NNLIGHT, NLTYPE ), STAT=AS )
     IF( AS /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'PROFILE', RC )
+       CALL HCO_ERROR ( 'PROFILE', RC )
        RETURN
     ENDIF
     Inst%PROFILE = 0.0_hp
 
     ALLOCATE( Inst%SLBASE(HcoState%NX,HcoState%NY,HcoState%NZ), STAT=AS )
     IF( AS /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'SLBASE', RC )
+       CALL HCO_ERROR ( 'SLBASE', RC )
        RETURN
     ENDIF
     Inst%SLBASE = 0.0_hp
 
     ALLOCATE ( Inst%FLASH_DENS_TOT( HcoState%NX, HcoState%NY), STAT=AS )
     IF ( AS/=0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLASH_DENS_TOT', RC )
+       CALL HCO_ERROR( 'FLASH_DENS_TOT', RC )
        RETURN
     ENDIF
     Inst%FLASH_DENS_TOT = 0.0_sp
 
-    ALLOCATE ( Inst%FLASH_DENS_IC( HcoState%NX, HcoState%NY), STAT=AS )
-    IF ( AS/=0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLASH_DENS_IC', RC )
-       RETURN
-    ENDIF
-    Inst%FLASH_DENS_IC = 0.0_sp
+    !ALLOCATE ( Inst%FLASH_DENS_IC( HcoState%NX, HcoState%NY), STAT=AS )
+    !IF ( AS/=0 ) THEN
+    !   CALL HCO_ERROR( 'FLASH_DENS_IC', RC )
+    !   RETURN
+    !ENDIF
+    !Inst%FLASH_DENS_IC = 0.0_sp
 
-    ALLOCATE ( Inst%FLASH_DENS_CG( HcoState%NX, HcoState%NY), STAT=AS )
-    IF ( AS/=0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLASH_DENS_CG', RC )
-       RETURN
-    ENDIF
-    Inst%FLASH_DENS_CG = 0.0_sp
+    !ALLOCATE ( Inst%FLASH_DENS_CG( HcoState%NX, HcoState%NY), STAT=AS )
+    !IF ( AS/=0 ) THEN
+    !   CALL HCO_ERROR( 'FLASH_DENS_CG', RC )
+    !   RETURN
+    !ENDIF
+    !Inst%FLASH_DENS_CG = 0.0_sp
 
     ALLOCATE ( Inst%CONV_DEPTH( HcoState%NX, HcoState%NY), STAT=AS )
     IF ( AS/=0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'CONV_DEPTH', RC )
+       CALL HCO_ERROR( 'CONV_DEPTH', RC )
        RETURN
     ENDIF
     Inst%CONV_DEPTH = 0.0_sp
@@ -1142,7 +1023,7 @@ CONTAINS
     OPEN( IU_FILE, FILE=TRIM( FILENAME ), STATUS='OLD', IOSTAT=IOS )
     IF ( IOS /= 0 ) THEN
        MSG = 'IOERROR: LightDist: 1'
-       CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+       CALL HCO_ERROR(MSG, RC )
        RETURN
     ENDIF
 
@@ -1151,7 +1032,7 @@ CONTAINS
        READ( IU_FILE, '(a)', IOSTAT=IOS )
        IF ( IOS /= 0 ) THEN
           MSG = 'IOERROR: LightDist: 2'
-          CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+          CALL HCO_ERROR(MSG, RC )
           RETURN
        ENDIF
     ENDDO
@@ -1161,7 +1042,7 @@ CONTAINS
        READ( IU_FILE,*,IOSTAT=IOS) (Inst%PROFILE(III,JJJ),JJJ=1,NLTYPE)
        IF ( IOS /= 0 ) THEN
           MSG = 'IOERROR: LightDist: 3'
-          CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+          CALL HCO_ERROR(MSG, RC )
           RETURN
        ENDIF
     ENDDO
@@ -1173,7 +1054,7 @@ CONTAINS
     ! Create diagnostics for lightning flash rates and convective cloud height
     !=======================================================================
     CALL Diagn_Create( HcoState  = HcoState,                        &
-                       cName     = 'LightningFlashRate_Total' ,     &
+                       cName     = 'HcoLightningFlashRate_Total',   &
                        ExtNr     = ExtNr,                           &
                        Cat       = -1,                              &
                        Hier      = -1,                              &
@@ -1183,36 +1064,39 @@ CONTAINS
                        AutoFill  = 0,                               &
                        Trgt2D    = Inst%FLASH_DENS_TOT,             &
                        RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 13', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
-    CALL Diagn_Create( HcoState  = HcoState,                        &
-                       cName     = 'LightningFlashRate_IntraCloud', &
-                       ExtNr     = ExtNr,                           &
-                       Cat       = -1,                              &
-                       Hier      = -1,                              &
-                       HcoID     = -1,                              &
-                       SpaceDim  = 2,                               &
-                       OutUnit   = 'flashes/min/km2',               &
-                       AutoFill  = 0,                               &
-                       Trgt2D    = Inst%FLASH_DENS_IC,              &
-                       RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    !CALL Diagn_Create( HcoState  = HcoState,                        &
+    !                   cName     = 'HcoLightningFlashRate_IntraCld', &
+    !                   ExtNr     = ExtNr,                           &
+    !                   Cat       = -1,                              &
+    !                   Hier      = -1,                              &
+    !                   HcoID     = -1,                              &
+    !                   SpaceDim  = 2,                               &
+    !                   OutUnit   = 'flashes/min/km2',               &
+    !                   AutoFill  = 0,                               &
+    !                   Trgt2D    = Inst%FLASH_DENS_IC,              &
+    !                   RC        = RC )
+    !IF ( RC /= HCO_SUCCESS ) RETURN
+    !    
+    !CALL Diagn_Create( HcoState  = HcoState,                         &
+    !                   cName     = 'HcoLightningFlashRate_CldGround', &
+    !                   ExtNr     = ExtNr,                            &
+    !                   Cat       = -1,                               &
+    !                   Hier      = -1,                               &
+    !                   HcoID     = -1,                               &
+    !                   SpaceDim  = 2,                                &
+    !                   OutUnit   = 'flashes/min/km2',                &
+    !                   AutoFill  = 0,                                &
+    !                   Trgt2D    = Inst%FLASH_DENS_CG,               &
+    !                   RC        = RC )
+    !IF ( RC /= HCO_SUCCESS ) RETURN
 
     CALL Diagn_Create( HcoState  = HcoState,                         &
-                       cName     = 'LightningFlashRate_CloudGround', &
-                       ExtNr     = ExtNr,                            &
-                       Cat       = -1,                               &
-                       Hier      = -1,                               &
-                       HcoID     = -1,                               &
-                       SpaceDim  = 2,                                &
-                       OutUnit   = 'flashes/min/km2',                &
-                       AutoFill  = 0,                                &
-                       Trgt2D    = Inst%FLASH_DENS_CG,               &
-                       RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    CALL Diagn_Create( HcoState  = HcoState,                         &
-                       cName     = 'ConvectiveCloudTopHeight',       &
+                       cName     = 'HcoConvectiveCloudTopHeight',       &
                        ExtNr     = ExtNr,                            &
                        Cat       = -1,                               &
                        Hier      = -1,                               &
@@ -1222,7 +1106,10 @@ CONTAINS
                        AutoFill  = 0,                                &
                        Trgt2D    = Inst%CONV_DEPTH,                  &
                        RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 14', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     !=======================================================================
     ! Activate met fields required by this module
@@ -1231,11 +1118,14 @@ CONTAINS
     ExtState%TROPP%DoUse      = .TRUE.
     ExtState%CNV_MFC%DoUse    = .TRUE.
     ExtState%CNV_FRC%DoUse    = .TRUE.
-    ExtState%ALBD%DoUse       = .TRUE.
-    ExtState%WLI%DoUse        = .TRUE.
     ExtState%LFR%DoUse        = .TRUE.
     ExtState%FLASH_DENS%DoUse = .TRUE.
     ExtState%CONV_DEPTH%DoUse = .TRUE.
+    ExtState%FRLAND%DoUse     = .TRUE.
+    ExtState%FRLANDIC%DoUse   = .TRUE.
+    ExtState%FROCEAN%DoUse    = .TRUE.
+    ExtState%FRSEAICE%DoUse   = .TRUE.
+    ExtState%FRLAKE%DoUse     = .TRUE.
 
     ! Only activate BYNCY and LFR if they are needed
     IF ( Inst%LCNVFRC .OR. Inst%LLFR ) ExtState%BYNCY%DoUse = .TRUE.
@@ -1252,7 +1142,7 @@ CONTAINS
   END SUBROUTINE HCOX_LightNOx_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1272,17 +1162,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  14 Apr 2004 - R. Yantosca - Initial version
-!  (1 ) Now deallocates OTDSCALE (ltm, bmy, 5/10/06)
-!  (2 ) Rename OTDSCALE to OTD_REG_REDIST.  Now deallocate OTD_LOC_REDIST.
-!        (bmy, 1/31/07)
-!  (3 ) Renamed from HCOX_LightNOX_Final_NL to HCOX_LightNOX_Final.
-!        Now deallocate EMIS_LI_NOx. (ltm, bmy, 10/3/07)
-!  (4 ) Remove depreciated options. (ltm, bmy, 1/25/11)
-!  10 Nov 2010 - R. Yantosca - Added ProTeX headers
-!  22 Oct 2013 - C. Keller   - Now a HEMCO extension.
-!  22 Jul 2014 - R. Yantosca - PROFILE is now set in lightning_cdf_mod.F90
-!  26 Feb 2015 - R. Yantosca - Now re-introduce PROFILE, as we read the CDF
-!                              table from an ASCII file (reduces compile time)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1295,7 +1175,7 @@ CONTAINS
   END SUBROUTINE HCOX_LightNOx_Final
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1317,6 +1197,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1349,7 +1230,7 @@ CONTAINS
   END SUBROUTINE InstGet
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1379,7 +1260,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1423,7 +1304,7 @@ CONTAINS
   END SUBROUTINE InstCreate
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1443,7 +1324,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1455,32 +1336,72 @@ CONTAINS
     ! InstRemove begins here!
     !=================================================================
 
-    ! Get instance. Also archive previous instance.
+    ! Init
     PrevInst => NULL()
     Inst     => NULL()
+
+    ! Get instance. Also archive previous instance.
     CALL InstGet ( Instance, Inst, RC, PrevInst=PrevInst )
 
     ! Instance-specific deallocation
     IF ( ASSOCIATED(Inst) ) THEN
-       ! Free pointer
-       IF ( ASSOCIATED( Inst%PROFILE       ) ) DEALLOCATE ( Inst%PROFILE       )
-       IF ( ASSOCIATED( Inst%SLBASE        ) ) DEALLOCATE ( Inst%SLBASE        )
-       IF ( ASSOCIATED( Inst%FLASH_DENS_TOT) ) DEALLOCATE ( Inst%FLASH_DENS_TOT)
-       IF ( ASSOCIATED( Inst%FLASH_DENS_IC ) ) DEALLOCATE ( Inst%FLASH_DENS_IC )
-       IF ( ASSOCIATED( Inst%FLASH_DENS_CG ) ) DEALLOCATE ( Inst%FLASH_DENS_CG )
-       IF ( ASSOCIATED( Inst%CONV_DEPTH    ) ) DEALLOCATE ( Inst%CONV_DEPTH    )
-       IF ( ALLOCATED ( Inst%SpcScalVal    ) ) DEALLOCATE ( Inst%SpcScalVal    )
-       IF ( ALLOCATED ( Inst%SpcScalFldNme ) ) DEALLOCATE ( Inst%SpcScalFldNme )
 
+       !---------------------------------------------------------------------
+       ! Deallocate fields of Inst before popping off from the list
+       ! in order to avoid memory leaks (Bob Yantosca (17 Aug 2022)
+       !---------------------------------------------------------------------   
+       IF ( ASSOCIATED( Inst%PROFILE ) ) THEN
+          DEALLOCATE( Inst%PROFILE )
+       ENDIF
+       Inst%PROFILE => NULL()
+
+       IF ( ASSOCIATED( Inst%SLBASE ) ) THEN
+          DEALLOCATE( Inst%SLBASE )
+       ENDIF
+       Inst%SLBASE => NULL()
+
+       IF ( ASSOCIATED( Inst%FLASH_DENS_TOT ) ) THEN
+          DEALLOCATE( Inst%FLASH_DENS_TOT )
+       ENDIF
+       Inst%FLASH_DENS_TOT => NULL()
+
+       !IF ( ASSOCIATED( Inst%FLASH_DENS_IC ) ) THEN
+       !   DEALLOCATE( Inst%FLASH_DENS_IC )
+       !ENDIF
+       Inst%FLASH_DENS_IC => NULL()
+
+       !IF ( ASSOCIATED( Inst%FLASH_DENS_CG ) ) THEN
+       !   DEALLOCATE ( Inst%FLASH_DENS_CG )
+       !ENDIF
+       Inst%FLASH_DENS_CG => NULL()
+
+       IF ( ASSOCIATED( Inst%CONV_DEPTH ) ) THEN
+          DEALLOCATE( Inst%CONV_DEPTH )
+       ENDIF
+       Inst%CONV_DEPTH => NULL()
+
+       IF ( ALLOCATED ( Inst%SpcScalVal ) ) THEN
+          DEALLOCATE( Inst%SpcScalVal )
+       ENDIF
+
+       IF ( ALLOCATED( Inst%SpcScalFldNme ) ) THEN
+          DEALLOCATE( Inst%SpcScalFldNme )
+       ENDIF
+
+       !---------------------------------------------------------------------
        ! Pop off instance from list
+       !---------------------------------------------------------------------
        IF ( ASSOCIATED(PrevInst) ) THEN
           PrevInst%NextInst => Inst%NextInst
        ELSE
           AllInst => Inst%NextInst
        ENDIF
        DEALLOCATE(Inst)
-       Inst => NULL()
     ENDIF
+
+    ! Free pointers before exiting
+    PrevInst => NULL()
+    Inst     => NULL()
 
    END SUBROUTINE InstRemove
 !EOC

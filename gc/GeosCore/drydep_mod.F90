@@ -17,9 +17,9 @@ MODULE DRYDEP_MOD
 !
   USE CMN_SIZE_Mod,     ONLY : NPOLY, NSURFTYPE
   USE ERROR_MOD              ! Error handling routines
-#ifdef TOMAS                 
+#ifdef TOMAS
   USE TOMAS_MOD              ! For TOMAS microphysics
-#endif                       
+#endif
   USE PhysConstants          ! Physical constants
   USE PRECISION_MOD          ! For GEOS-Chem Precision (fp)
   USE TIME_MOD
@@ -33,6 +33,15 @@ MODULE DRYDEP_MOD
   PUBLIC :: DO_DRYDEP
   PUBLIC :: INIT_DRYDEP
   PUBLIC :: INIT_WEIGHTSS
+#if defined( MODEL_CESM )
+  PUBLIC :: UPDATE_DRYDEPFREQ
+#else
+
+!
+! !PRIVATE MEMBER FUNCTIONS:
+!
+  PRIVATE :: UPDATE_DRYDEPFREQ
+#endif
 !
 ! !PUBLIC DATA MEMBERS:
 !
@@ -41,6 +50,9 @@ MODULE DRYDEP_MOD
   PUBLIC :: NTRAIND
   PUBLIC :: IDEP,   IRGSS,  IRAC, IRCLS
   PUBLIC :: IRGSO,  IRLU,   IRI,  IRCLO, DRYCOEFF
+#if defined( MODEL_CESM )
+  PUBLIC :: NDVZIND
+#endif
 !
 ! !REMARKS:
 !  References:
@@ -100,8 +112,9 @@ MODULE DRYDEP_MOD
 !
 ! !DEFINED PARAMETERS:
 !
-  INTEGER,  PARAMETER :: NR_MAX    = 200       ! # of seasalt bins
-  INTEGER,  PARAMETER :: NDRYDTYPE = 11        ! # of drydep land types
+  INTEGER,  PARAMETER :: NR_MAX      = 200   ! # of seasalt bins
+  INTEGER,  PARAMETER :: NDRYDTYPE   = 11    ! # of drydep land types
+  REAL(f8), PARAMETER :: TWO_THIRDS  = 2.0_fp / 3.0_fp
 !
 ! PRIVATE TYPES:
 !
@@ -140,21 +153,19 @@ MODULE DRYDEP_MOD
   !    NTYPE     : Max # of landtypes / grid box
   !    NPOLY     : Number of drydep polynomial coefficients
   !    NSURFTYPE : Number of Olson land types
-  !
-  !  NOTE: these grid-dependent variables are defined in State_Chm_Mod.F90
-  !    DEPSAV    : Array containing dry deposition frequencies [s-1]
   !========================================================================
 
   ! Scalars
   INTEGER                        :: NUMDEP,   NWATER
   INTEGER                        :: DRYHg0,   DRYHg2,   DryHgP
   INTEGER                        :: id_ACET,  id_ALD2,  id_O3
-  INTEGER                        :: id_MENO3, id_ETNO3
-  INTEGER                        :: id_NK1
+  INTEGER                        :: id_MENO3, id_ETNO3, id_MOH
+  INTEGER                        :: id_NK1,   id_Hg0
   INTEGER                        :: id_HNO3,  id_PAN,   id_IHN1
+  INTEGER                        :: id_H2O2,  id_SO2,   id_NH3
 
   ! Arrays for Baldocchi drydep polynomial coefficients
-  REAL(fp), TARGET               :: DRYCOEFF(NPOLY    )
+  REAL(fp), TARGET               :: DRYCOEFF(NPOLY    ) = 0.0_fp
 
   ! Arrays that hold information for each of the 74 Olson land types
   INTEGER                        :: INDOLSON(NSURFTYPE )
@@ -186,9 +197,6 @@ MODULE DRYDEP_MOD
   REAL(f8),          ALLOCATABLE :: A_DEN   (:    ) ! Aer density [kg/m3]
   CHARACTER(LEN=14), ALLOCATABLE :: DEPNAME (:    ) ! Species name
 
-  REAL(f4), POINTER :: HCO_Iodide(:,:)   => NULL()
-  REAL(f4), POINTER :: HCO_Salinity(:,:) => NULL()
-
   ! Allocatable arrays
   REAL(f8),          ALLOCATABLE :: DMID    (:    )
   REAL(f8),          ALLOCATABLE :: SALT_V  (:    )
@@ -219,10 +227,9 @@ CONTAINS
 ! !USES:
 !
     USE ErrCode_Mod
-    USE HCO_ERROR_MOD
-    USE HCO_INTERFACE_MOD,  ONLY : HcoState
-    USE HCO_EmisList_Mod,   ONLY : HCO_GetPtr
-    USE HCO_DIAGN_MOD,      ONLY : Diagn_Update
+
+
+
     USE Input_Opt_Mod,      ONLY : OptInput
     USE Species_Mod,        ONLY : Species
     USE State_Chm_Mod,      ONLY : ChmState
@@ -269,38 +276,24 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     ! Scalars
-    INTEGER            :: I,   J,   L,   D,   N,  NDVZ,  A
+    INTEGER            :: I,   J,   L,   D,   N,  NDVZ,  A,  S
     REAL(f8)           :: DVZ, THIK
     CHARACTER(LEN=255) :: ErrMsg,  ThisLoc
 
-
     ! Arrays
-    LOGICAL       :: LSNOW (State_Grid%NX,State_Grid%NY) ! Flag for snow/ice on the sfc
-    REAL(f8)      :: CZ1   (State_Grid%NX,State_Grid%NY) ! Midpt ht of 1st model lev[m]
-    REAL(f8)      :: TC0   (State_Grid%NX,State_Grid%NY) ! Grid box sfc temperature [K]
-    REAL(f8)      :: ZH    (State_Grid%NX,State_Grid%NY) ! PBL height [m]
-    REAL(f8)      :: OBK   (State_Grid%NX,State_Grid%NY) ! Monin-Obhukov Length [m]
-    REAL(f8)      :: CFRAC (State_Grid%NX,State_Grid%NY) ! Column cloud frac [unitless]
-    REAL(f8)      :: RADIAT(State_Grid%NX,State_Grid%NY) ! Solar radiation [W/m2]
-    REAL(f8)      :: USTAR (State_Grid%NX,State_Grid%NY) ! Grid box friction vel [m/s]
-    REAL(f8)      :: RHB   (State_Grid%NX,State_Grid%NY) ! Relative humidity [unitless]
-    REAL(f8)      :: DVEL  (State_Grid%NX,State_Grid%NY,NUMDEP) ! Drydep velocities [m/s]
-    REAL(f8)      :: PRESSU(State_Grid%NX,State_Grid%NY) ! Local surface pressure [Pa]
-    REAL(f8)      :: W10   (State_Grid%NX,State_Grid%NY) ! 10m windspeed [m/s]
-    REAL(f8)      :: AZO   (State_Grid%NX,State_Grid%NY)        ! Z0, per (I,J) square
-    REAL(f8)      :: SUNCOS_MID(State_Grid%NX,State_Grid%NY)    ! COS(SZA) @ midpoint of the
-                                                  !  current chemistry timestep
-
-    ! Pointers
-    REAL(fp), POINTER :: DEPSAV (:,:,:   )      ! Dry deposition frequencies [s-1]
-
-    ! For ESMF, need to assign these from Input_Opt
-    LOGICAL       :: PBL_DRYDEP
-    LOGICAL       :: prtDebug
-
-    ! Objects
-    TYPE(Species), POINTER :: SpcInfo
-
+    REAL(f8) :: CZ1   (State_Grid%NX,State_Grid%NY) ! Midpt ht of 1st level [m]
+    REAL(f8) :: TC0   (State_Grid%NX,State_Grid%NY) ! Grid box sfc temp [K]
+    REAL(f8) :: ZH    (State_Grid%NX,State_Grid%NY) ! PBL height [m]
+    REAL(f8) :: OBK   (State_Grid%NX,State_Grid%NY) ! Monin-Obhukov Length [m]
+    REAL(f8) :: CFRAC (State_Grid%NX,State_Grid%NY) ! Column cld frac [unitless]
+    REAL(f8) :: RADIAT(State_Grid%NX,State_Grid%NY) ! Solar radiation [W/m2]
+    REAL(f8) :: USTAR (State_Grid%NX,State_Grid%NY) ! Gridbox friction vel [m/s]
+    REAL(f8) :: RHB   (State_Grid%NX,State_Grid%NY) ! Rel. humidity [unitless]
+    REAL(f8) :: PRESSU(State_Grid%NX,State_Grid%NY) ! Local sfc pressure [Pa]
+    REAL(f8) :: W10   (State_Grid%NX,State_Grid%NY) ! 10m windspeed [m/s]
+    REAL(f8) :: AZO   (State_Grid%NX,State_Grid%NY) ! Z0, per (I,J) square
+    REAL(f8) :: SUNCOS_MID(State_Grid%NX,State_Grid%NY) ! COS(SZA) @ midt of
+                                                        ! current chem timestep
     !=================================================================
     ! DO_DRYDEP begins here!
     !=================================================================
@@ -309,35 +302,23 @@ CONTAINS
     RC = GC_SUCCESS
 
     ! Initialize
-    SpcInfo => NULL()
-    ErrMsg  = ''
-    ThisLoc = ' -> at Do_DryDep  (in module GeosCore/drydep_mod.F90)'
+    ErrMsg   = ''
+    ThisLoc  = ' -> at Do_DryDep  (in module GeosCore/drydep_mod.F90)'
 
-    ! Point to columns of derived-type object fields
-    DEPSAV     => State_Chm%DryDepSav
-
-    ! Copy values from the Input Options object to local variables
-    PBL_DRYDEP = Input_Opt%PBL_DRYDEP
-    prtDebug   = ( Input_Opt%LPRT .and. Input_Opt%amIRoot )
-
-    ! Get fields for oceanic O3 drydeposition
-    CALL HCO_GetPtr( HcoState, 'surf_iodide',   HCO_Iodide,   RC )
-    CALL HCO_GetPtr( HcoState, 'surf_salinity', HCO_Salinity, RC )
-
-    ! Call METERO to obtain meterological fields (all 1-D arrays)
+    ! Call METERO to obtain meteorological fields (all 1-D arrays)
     ! Added sfc pressure as PRESSU and 10m windspeed as W10
     !  (jaegle 5/11/11, mpayer 1/10/12)
     CALL METERO( State_Grid, State_Met, CZ1,     TC0, OBK,  CFRAC, &
-                 RADIAT,     AZO,       USTAR,   ZH,        LSNOW, &
-                 RHB,        PRESSU,    W10,     SUNCOS_MID        )
+                 RADIAT,     AZO,       USTAR,   ZH,        RHB,   &
+                 PRESSU,    W10,     SUNCOS_MID                   )
 
     ! Call DEPVEL to compute dry deposition velocities [m/s]
     CALL DEPVEL( Input_Opt, State_Chm,  State_Diag, State_Grid, &
                  State_Met, RADIAT,     TC0,        SUNCOS_MID, &
                  F0,        HSTAR,      XMW,        AIROSOL,    &
                  USTAR,     CZ1,        OBK,        CFRAC,      &
-                 ZH,        LSNOW,      DVEL,       AZO,        &
-                 RHB,       PRESSU,     W10,        RC          )
+                 ZH,        AZO,        RHB,        PRESSU,     &
+                 W10,        RC                                )
 
     ! Trap potential errors
     IF ( RC /= GC_SUCCESS ) THEN
@@ -346,12 +327,104 @@ CONTAINS
        RETURN
     ENDIF
 
+#if !defined( MODEL_CESM )
+    ! Call UPDATE_DRYDEPFREQ to update dry deposition frequencies [s-1]
+    ! from dry deposition velocities [m/s].
+    CALL UPDATE_DRYDEPFREQ( Input_Opt, State_Chm, State_Diag, State_Grid, &
+                           State_Met, RC )
+
+    ! Trap potential errors
+    IF ( RC /= GC_SUCCESS ) THEN
+       ErrMsg = 'Error encountered in call to "UPDATE_DRYDEPFREQ!'
+       CALL GC_Error( ErrMsg, RC, ThisLoc )
+       RETURN
+    ENDIF
+#endif
+
+    !### Debug
+    IF ( Input_Opt%LPRT .and. Input_Opt%amIRoot ) THEN
+       CALL DEBUG_MSG( '### DO_DRYDEP: after dry dep' )
+    ENDIF
+
+  END SUBROUTINE DO_DRYDEP
+!EOC
+!------------------------------------------------------------------------------
+!                  GEOS-Chem Global Chemical Transport Model                  !
+!------------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: update_DryDepFreq
+!
+! !DESCRIPTION: Subroutine UPDATE\_DRYDEPFREQ updates dry deposition
+! frequencies from dry deposition velocities
+!\\
+!\\
+! !INTERFACE:
+!
+  SUBROUTINE UPDATE_DRYDEPFREQ( Input_Opt, State_Chm, State_Diag, State_Grid, &
+                               State_Met, RC )
+!
+! !USES:
+!
+    USE ErrCode_Mod
+    USE Input_Opt_Mod,      ONLY : OptInput
+    USE Species_Mod,        ONLY : Species
+    USE State_Chm_Mod,      ONLY : ChmState
+    USE State_Diag_Mod,     ONLY : DgnState
+    USE State_Grid_Mod,     ONLY : GrdState
+    USE State_Met_Mod,      ONLY : MetState
+!
+! !INPUT PARAMETERS:
+!
+    TYPE(OptInput), INTENT(IN)    :: Input_Opt   ! Input Options object
+    TYPE(GrdState), INTENT(IN)    :: State_Grid  ! Grid State object
+    TYPE(MetState), INTENT(IN)    :: State_Met   ! Meteorology State object
+!
+! !INPUT/OUTPUT PARAMETERS:
+!
+    TYPE(ChmState), INTENT(INOUT) :: State_Chm   ! Chemistry State object
+    TYPE(DgnState), INTENT(INOUT) :: State_Diag  ! Diagnostics State object
+!
+! !OUTPUT PARAMETERS:
+!
+    INTEGER,        INTENT(OUT)   :: RC          ! Success or failure?
+!
+!
+! !REMARKS:
+!  02 Mar 2020 - T. M. Fritz - Separate DO_DRYDEP into two calls. The first
+!                              call updates dry deposition velocities. The
+!                              second call computes dry deposition frequencies.
+!  See https://github.com/geoschem/geos-chem for complete history
+!EOP
+!------------------------------------------------------------------------------
+!BOC
+!
+! !LOCAL VARIABLES:
+!
+    ! Scalars
+    INTEGER            :: I,   J,   L,   D,   N,  NDVZ,  A, S
+    REAL(f8)           :: DVZ, THIK
+    CHARACTER(LEN=255) :: ErrMsg,  ThisLoc
+
+    ! Objects
+    TYPE(Species), POINTER :: SpcInfo
+
+    !=================================================================
+    ! UPDATE_DRYDEPFREQ begins here!
+    !=================================================================
+
+    ! Assume success
+    RC = GC_SUCCESS
+
+    ! Initialize
+    SpcInfo => NULL()
+
     !=================================================================
     ! Compute dry deposition frequencies; archive diagnostics
     !=================================================================
-    !$OMP PARALLEL DO       &
-    !$OMP DEFAULT( SHARED ) &
-    !$OMP PRIVATE( I, J, THIK, D, N, NDVZ, DVZ, SpcInfo, A )
+    !$OMP PARALLEL DO                                           &
+    !$OMP DEFAULT( SHARED                                     ) &
+    !$OMP PRIVATE( I, J, THIK, D, N, NDVZ, DVZ, SpcInfo )
     DO J = 1, State_Grid%NY
     DO I = 1, State_Grid%NX
 
@@ -364,27 +437,23 @@ CONTAINS
        ! Add option for non-local PBL mixing scheme: THIK must
        ! be the first box height. (Lin, 03/31/09)
        ! Now use PBL_DRYDEP instead of LNLPBL (ckeller, 3/5/15).
-       IF (PBL_DRYDEP) THIK = MAX( ZH(I,J), THIK )
+       IF (Input_Opt%PBL_DRYDEP) THIK = MAX( State_Met%PBL_TOP_m(I,J), THIK )
 
        ! Loop over drydep species
        DO D = 1, State_Chm%nDryDep
 
           ! GEOS-CHEM species number
-          N       =  State_Chm%Map_DryDep(D)
+          N = State_Chm%Map_DryDep(D)
 
           ! Get info about this species from the database
           SpcInfo => State_Chm%SpcData(N)%Info
 
-          ! Get the "DryAltID" index, that is used to archive species
-          ! concentrations at a user-defined altitude above the surface
-          A       =  SpcInfo%DryAltID
-
-          ! Index of drydep species in the DVEL array
+          ! Index of drydep species in the State_Chm%DryDepVel array
           ! as passed back from subroutine DEPVEL
-          NDVZ    =  NDVZIND(D)
+          NDVZ = NDVZIND(D)
 
           ! Dry deposition velocity [cm/s]
-          DVZ     =  DVEL(I,J,NDVZ) * 100.e+0_f8
+          DVZ = State_Chm%DryDepVel(I,J,NDVZ) * 100.e+0_f8
 
           ! Scale relative to specified species (krt, 3/1/15)
           IF ( FLAG(D) .eq. 1 )  THEN
@@ -394,7 +463,7 @@ CONTAINS
                        / sqrt(SpcInfo%MW_g)
 
           ELSE IF ( FLAG(D) .eq. 2 ) THEN
-             
+
              ! Scale species to PAN
              DVZ = DVZ * sqrt(State_Chm%SpcData(id_PAN)%Info%MW_g) &
                        / sqrt(SpcInfo%MW_g)
@@ -410,7 +479,7 @@ CONTAINS
           !-----------------------------------------------------------
           ! Special treatment for snow vs. ice
           !-----------------------------------------------------------
-          IF ( LSNOW(I,J) ) THEN
+          IF ( State_Met%isSnow(I,J) ) THEN
 
              !-------------------------------------
              ! %%% SURFACE IS SNOW OR ICE %%%
@@ -429,6 +498,13 @@ CONTAINS
                 ! (cf. the GOCART model).  NOTE: In practice this will
                 ! only apply to the species SO2, SO4, MSA, NH3, NH4, NIT.
                 DVZ = MAX( DVZ, DBLE( SpcInfo%DD_DvzMinVal(1) ) )
+#ifdef LUO_WETDEP
+                IF ( DBLE( SpcInfo%DD_DvzMinVal(1) ) > 0.0_fp ) THEN
+                   IF ( State_Met%TS(I,J) < 253.0_fp ) THEN
+                      DVZ = DBLE( SpcInfo%DD_DvzMinVal(1) )
+                   ENDIF
+                ENDIF
+#endif
 
              ENDIF
 
@@ -496,24 +572,26 @@ CONTAINS
           ENDIF
 
           !-----------------------------------------------------------
-          ! Compute drydep frequency and update diagnostics
+          ! Special treatment for MOH
           !-----------------------------------------------------------
 
-          ! Dry deposition frequency [1/s]
-          DEPSAV(I,J,D) = ( DVZ / 100.e+0_f8 ) / THIK
-
-          ! Archive dry dep velocity [cm/s]
-          IF ( State_Diag%Archive_DryDepVel ) THEN
-             State_Diag%DryDepVel(I,J,D) = DVZ
-          ENDIF
-
-          ! Archive dry dep velocity [cm/s] only for those species
-          ! that are requested at a given altitude (e.g. 10m)
-          IF ( State_Diag%Archive_DryDepVelForALT1 ) THEN
-             IF ( A > 0 ) THEN
-                State_Diag%DryDepVelForALT1(I,J,A) = DVZ
+          ! For MOH, we need to only do drydep over the land
+          ! and not over the oceans.
+          IF ( N == id_MOH ) THEN
+             IF ( .not. State_Met%IsLand(I,J) ) THEN
+                DVZ = 0e+0_f8
              ENDIF
           ENDIF
+
+          !-----------------------------------------------------------
+          ! Compute drydep velocity and frequency
+          !-----------------------------------------------------------
+
+          ! Dry deposition velocities [m/s]
+          State_Chm%DryDepVel(I,J,NDVZ) = DVZ / 100.e+0_f8
+
+          ! Dry deposition frequency [1/s]
+          State_Chm%DryDepFreq(I,J,D) = State_Chm%DryDepVel(I,J,NDVZ) / THIK
 
           ! Free pointer
           SpcInfo => NULL()
@@ -522,15 +600,56 @@ CONTAINS
     ENDDO
     !$OMP END PARALLEL DO
 
-    !### Debug
-    IF ( prtDebug ) THEN
-       CALL DEBUG_MSG( '### DO_DRYDEP: after dry dep' )
+    ! Set diagnostics - cnsider moving?
+    IF ( State_Diag%Archive_DryDepVel                                   .or. &
+         State_Diag%Archive_DryDepVelForALT1                            .or. &
+         State_Diag%Archive_SatDiagnDryDepVel                         ) THEN 
+
+       !$OMP PARALLEL DO                                                     &
+       !$OMP DEFAULT( SHARED                                                )&
+       !$OMP PRIVATE( D, S, N, A, NDVZ                                      )
+       DO D = 1, State_Chm%nDryDep
+
+          ! Point to State_Chm%DryDepVel [m/s]
+          NDVZ = NDVZIND(D)
+
+          ! Dry dep velocity [cm/s]
+          IF ( State_Diag%Archive_DryDepVel ) THEN
+             S = State_Diag%Map_DryDepVel%id2slot(D)
+             IF ( S > 0 ) THEN
+                State_Diag%DryDepVel(:,:,S)   =                              &
+                State_Chm%DryDepVel(:,:,NDVZ) * 100.0_f4
+             ENDIF
+          ENDIF
+
+          ! Satellite diagnostic: Dry dep velocity [cm/s]
+          IF ( State_Diag%Archive_SatDiagnDryDepVel ) THEN
+             S = State_Diag%Map_SatDiagnDryDepVel%id2slot(D)
+             IF ( S > 0 ) THEN
+                State_Diag%SatDiagnDryDepVel(:,:,S)   =                      &
+                State_Chm%DryDepVel(:,:,NDVZ) * 100.0_f4
+             ENDIF
+          ENDIF
+
+          ! Dry dep velocity [cm/s] for species at altitude (e.g. 10m)
+          IF ( State_Diag%Archive_DryDepVelForALT1 ) THEN
+             ! Get the "DryAltID" index, that is used to archive species
+             ! concentrations at a user-defined altitude above the surface
+             ! GEOS-CHEM species number
+             N = State_Chm%Map_DryDep(D)
+             A = State_Chm%SpcData(N)%Info%DryAltID
+             IF ( A > 0 ) THEN
+                State_Diag%DryDepVelForALT1(:,:,A) = &
+                           State_Chm%DryDepVel(:,:,NDVZ) * 100._f4
+             ENDIF
+          ENDIF
+
+       ENDDO
+       !$OMP END PARALLEL DO
+
     ENDIF
 
-    ! Nullify pointers
-    NULLIFY( DEPSAV )
-
-  END SUBROUTINE DO_DRYDEP
+  END SUBROUTINE UPDATE_DRYDEPFREQ
 !EOC
 !------------------------------------------------------------------------------
 !                  GEOS-Chem Global Chemical Transport Model                  !
@@ -539,9 +658,9 @@ CONTAINS
 !
 ! !IROUTINE: OceanO3
 !
-! !DESCRIPTION: Function OCEANO3 calculates the dry deposition velcoity of O3
+! !DESCRIPTION: Function OCEANO3 calculates the dry deposition velocity of O3
 !     to the ocean using method described in Pound et.al (2019)
-!     currently under discussion in ACPD. 
+!     currently under discussion in ACPD.
 !     Accounts for the turbulence of the ocean surface,Iodide concentration
 !     and surface temperature effects on the dry deposition velocity of
 !     ozone to the ocean.
@@ -549,21 +668,22 @@ CONTAINS
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE OCEANO3( TEMPK, USTAR, DEPV, I, J )
+  SUBROUTINE OCEANO3( TEMPK, USTAR, IODIDE_IN, I, J, DEPV )
 !
 ! !USES:
 !
     USE Input_Opt_Mod,      ONLY : OptInput
     USE State_Met_Mod,      ONLY : MetState
-!     
-! !INPUT PARAMETERS: 
+!
+! !INPUT PARAMETERS:
 !
     REAL(f8), INTENT(IN)         :: TEMPK ! Temperature [K]
     REAL(f8), INTENT(IN)         :: USTAR ! Fictional Velocity [m/s]
+    REAL(fp), INTENT(IN)         :: IODIDE_IN ! Surface iodide concentration [nM]
     INTEGER,  INTENT(IN)         :: I,J
     REAL(f8), INTENT(OUT)        :: DEPV  ! the new deposition vel [cm/s]
-! 
-! !REVISION HISTORY: 
+!
+! !REVISION HISTORY:
 !  21 Aug 2018 - R. Pound - Initial version
 !  See https://github.com/geoschem/geos-chem for complete history
 !EOP
@@ -577,19 +697,19 @@ CONTAINS
     !=================================================================
     ! OCEANO3 begins here!
     !=================================================================
-      
+
     USTARWater = 0.0345_f8*USTAR !waterside friction velocity
-    
-    Iodide = HCO_Iodide(I,J)*1.0E-9_f8 !retrieve iodide from HEMCO
-     
+
+    Iodide = IODIDE_IN*1.0E-9_f8 ! Convert from nM to M
+
     a = Iodide*EXP((-8772.2/TEMPK)+51.5) !chemical reactivity
 
     D = 1.1E-6*EXP(-1896.0/TEMPK) ! diffusivity
 
     DelM = SQRT(D/a) ! reaction-diffusion length
-      
+
     b = 2.0_f8/(0.4_f8*USTARWater)
-   
+
     LAM = DelM*SQRT(a/D) ! this cancels to 1 but here for completeness
                          ! of equations
 
@@ -601,7 +721,7 @@ CONTAINS
 
     DEPV = SQRT(a*D)*((PSI*K1*COSH(LAM)+K0*SINH(LAM))/(PSI*K1* &
            SINH(LAM)+K0*COSH(LAM)))
-   
+
   END SUBROUTINE OCEANO3
 !EOC
 !------------------------------------------------------------------------------
@@ -612,32 +732,32 @@ CONTAINS
 ! !IROUTINE: K0K1_APROX
 !
 ! !DESCRIPTION:  Function to estimate the modified Bessel functions of
-!     the second kind order zero and one (K0,K1). Approach initially based on 
+!     the second kind order zero and one (K0,K1). Approach initially based on
 !     that described in Numerical Recipes in Fortran 90 second edition
 !     (1996). This implementation is designed to be specific to the use
 !     case required for calculating oceanic deposition velocity. Uses a
 !     polynomial fit of each type of modified bessel function to
-!     estimate the value of the function for each input. 
+!     estimate the value of the function for each input.
 !\\
 !\\
 ! !INTERFACE:
 !
   SUBROUTINE K0K1_APROX( input_arg, K0, K1 )
-!     
-! !INPUT PARAMETERS: 
-!     
+!
+! !INPUT PARAMETERS:
+!
     REAL(f8), INTENT(IN)  :: input_arg !the value we want the soln for
     REAL(f8), INTENT(OUT) :: K0,K1 !the values of the modified bessel fncs
-!     
-! !REVISION HISTORY: 
-!  21 Aug 2018 - R. Pound - Initial version    
+!
+! !REVISION HISTORY:
+!  21 Aug 2018 - R. Pound - Initial version
 !  See https://github.com/geoschem/geos-chem for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
-!     
+!
 ! !LOCAL VARIABLES:
-!    
+!
     REAL(f8), DIMENSION(7) :: coeff !coefficients for polynomial fit
                                     ! of each bessel function
     REAL(f8)               :: I0,I1 !modified bessel functions of
@@ -692,21 +812,21 @@ CONTAINS
 ! !INTERFACE:
 !
   FUNCTION poly_fit ( input, coeffs )
-!     
-! !INPUT PARAMETERS: 
-!     
+!
+! !INPUT PARAMETERS:
+!
     REAL(f8), INTENT(IN)               :: input
     REAL(f8), DIMENSION(:), INTENT(IN) :: coeffs
 !
-! !REVISION HISTORY: 
+! !REVISION HISTORY:
 !  21 Aug 2018 - R. Pound - Initial version
 !  See https://github.com/geoschem/geos-chem for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
-!     
+!
 ! !LOCAL VARIABLES:
-!     
+!
     REAL(f8)                           :: poly_fit
     INTEGER                            :: i
 
@@ -733,8 +853,8 @@ CONTAINS
 ! !INTERFACE:
 !
   SUBROUTINE METERO( State_Grid, State_Met, CZ1,  TC0, OBK, CFRAC, &
-                     RADIAT,     AZO,       USTR, ZH,  LSNOW,      &
-                     RHB,        PRESSU,    W10,  SUNCOS_MID        )
+                     RADIAT,     AZO,       USTR, ZH,  RHB,        &
+                     PRESSU,    W10,  SUNCOS_MID                  )
 !
 ! !USES:
 !
@@ -749,7 +869,6 @@ CONTAINS
 !
 ! !OUTPUT PARAMETERS:
 !
-    LOGICAL,  INTENT(OUT) :: LSNOW (State_Grid%NX,State_Grid%NY)  ! Flag for denoting snow/ice
     REAL(f8), INTENT(OUT) :: CZ1   (State_Grid%NX,State_Grid%NY)  ! Midpt ht of 1st model lev [m]
     REAL(f8), INTENT(OUT) :: TC0   (State_Grid%NX,State_Grid%NY)  ! Grid box sfc temp [K]
     REAL(f8), INTENT(OUT) :: OBK   (State_Grid%NX,State_Grid%NY)  ! Monin-Obhukov length [m]
@@ -818,9 +937,6 @@ CONTAINS
        ! Column cloud fraction [unitless]
        CFRAC(I,J)  = State_Met%CLDFRC(I,J)
 
-       ! Set logical LSNOW if snow and sea ice (ALBEDO > 0.4)
-       LSNOW(I,J)  = ( State_Met%ALBD(I,J) > 0.4 )
-
        ! Monin-Obhukov length [m]
        OBK(I,J)    = GET_OBK( I, J, State_Met )
 
@@ -874,31 +990,35 @@ CONTAINS
                      State_Met, RADIAT,    TEMP,       SUNCOS,     &
                      F0,        HSTAR,     XMW,        AIROSOL,    &
                      USTAR,     CZ1,       OBK,        CFRAC,      &
-                     ZH,        LSNOW,     DVEL,       ZO,         &
-                     RHB,       PRESSU,    W10,        RC          )
+                     ZH,        ZO,        RHB,        PRESSU,     &
+                     W10,       RC                                )
 !
 ! !USES:
 !
-    USE CMN_SIZE_MOD,       ONLY : NTYPE
-    USE Drydep_Toolbox_Mod, ONLY : BioFit
+    USE CMN_SIZE_MOD,         ONLY : NTYPE
+    USE Drydep_Toolbox_Mod,   ONLY : BioFit
     USE ErrCode_Mod
     USE ERROR_MOD
+#if !defined( MODEL_CESM )
+    USE HCO_State_GC_Mod,   ONLY : HcoState
+    USE HCO_Calc_Mod,       ONLY : HCO_EvalFld
+#endif
     USE Input_Opt_Mod,      ONLY : OptInput
     USE Species_Mod,        ONLY : Species
     USE State_Chm_Mod,      ONLY : ChmState
     USE State_Diag_Mod,     ONLY : DgnState
     USE State_Grid_Mod,     ONLY : GrdState
     USE State_Met_Mod,      ONLY : MetState
+    USE HCO_Utilities_GC_Mod, ONLY : HCO_GC_EvalFld
 #ifdef APM
-    USE APM_INIT_MOD,       ONLY : APMIDS
-    USE APM_INIT_MOD,       ONLY : RDRY, RSALT, RDST, DENDST
-    USE APM_DRIV_MOD,       ONLY : GFTOT3D, DENWET3D, MWSIZE3D
+    USE APM_INIT_MOD,         ONLY : APMIDS
+    USE APM_INIT_MOD,         ONLY : RDRY, RSALT, RDST, DENDST
+    USE APM_DRIV_MOD,         ONLY : GFTOT3D, DENWET3D, MWSIZE3D
 #endif
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(OptInput), INTENT(IN) :: Input_Opt      ! Input Options object
-    TYPE(DgnState), INTENT(IN) :: State_Diag     ! Diagnostics state object
     TYPE(GrdState), INTENT(IN) :: State_Grid     ! Grid state object
     TYPE(MetState), INTENT(IN) :: State_Met      ! Meteorology state object
 
@@ -906,7 +1026,7 @@ CONTAINS
     REAL(f8), INTENT(IN) :: TEMP   (State_Grid%NX,State_Grid%NY) ! Temperature [K]
     REAL(f8), INTENT(IN) :: SUNCOS (State_Grid%NX,State_Grid%NY) ! Cos of solar zenith angle
     LOGICAL,  INTENT(IN) :: AIROSOL(NUMDEP)      ! =T denotes aerosol species
-    REAL(f8), INTENT(IN) :: F0     (NUMDEP)      ! React. factor for oxidation
+    REAL(f8), INTENT(INOUT) :: F0     (NUMDEP)      ! React. factor for oxidation
                                                  !  of biological substances
     REAL(f8), INTENT(IN) :: HSTAR  (NUMDEP)      ! Henry's law constant
     REAL(f8), INTENT(IN) :: XMW    (NUMDEP)      ! Molecular weight [kg/mol]
@@ -922,11 +1042,11 @@ CONTAINS
 ! !INPUT/OUTPUT PARAMETERS:
 !
     TYPE(ChmState), INTENT(INOUT) :: State_Chm   ! Chemistry State object
+    TYPE(DgnState), INTENT(INOUT) :: State_Diag  ! Diagnostics state object
 !
 ! !OUTPUT PARAMETERS:
 !
     INTEGER,  INTENT(OUT) :: RC                  ! Success or failure?
-    REAL(f8), INTENT(OUT) :: DVEL(State_Grid%NX,State_Grid%NY,NUMDEP) ! Drydep velocity [m/s]
 !
 ! !REMARKS:
 !  Need as landtype input for each grid square (I,J); see CMN_DEP_mod.F
@@ -986,9 +1106,6 @@ CONTAINS
 !     RSURFC(K,LDT)  - Bulk surface resistance (s m-1) for species K to
 !                      surface LDT
 !     C1X(K)         - Total resistance to deposition (s m-1) for species K
-!                                                                             .
-!  Returned:
-!     DVEL(I,J,K) - Deposition velocity (m s-1) of species K
 !                                                                             .
 !  References:
 !  ============================================================================
@@ -1054,15 +1171,16 @@ CONTAINS
     ! for corr O3, krt,11/2017
     REAL(f8) :: RA_Alt, DUMMY2_Alt, DUMMY4_Alt, Z0OBK_Alt
 
+#ifdef LUO_WETDEP
+    REAL(f8) :: HSTAR3D(State_Grid%NX,State_Grid%NY,NUMDEP)
+#endif
+
 #ifdef TOMAS
     ! For TOMAS aerosol (win, 7/15/09)
     INTEGER  :: BIN
     REAL(f8) :: SIZ_DIA(State_Grid%NX,State_Grid%NY,IBINS)
     REAL(f8) :: SIZ_DEN(State_Grid%NX,State_Grid%NY,IBINS)
 #endif
-
-    ! Logical for snow and sea ice
-    LOGICAL  ::LSNOW(State_Grid%NX,State_Grid%NY)
 
     ! Loop indices (bmy, 3/29/12)
     INTEGER  :: I, J
@@ -1093,14 +1211,6 @@ CONTAINS
     REAL(fp)          :: XLAI_FP
     REAL(fp)          :: SUNCOS_FP
     REAL(fp)          :: CFRAC_FP
-
-#ifdef MODEL_GEOS
-    ! Archive Ra?
-    REAL(fp)          :: RA2M,  Z0OBK2M
-    REAL(fp)          :: RA10M, Z0OBK10M
-    !LOGICAL           :: WriteRa2m
-    !LOGICAL           :: WriteRa10m
-#endif
 
     ! For the species database
     INTEGER                :: SpcId
@@ -1145,19 +1255,26 @@ CONTAINS
     ! Size of drycoeff (ckeller, 05/19/14)
     NN = SIZE(DRYCOEFF)
 
-#ifdef MODEL_GEOS
-    ! Logical flag for Ra (ckeller, 12/29/17)
-    State_Chm%DryDepRa2m  = 0.0_fp
-    State_Chm%DryDepRa10m = 0.0_fp
-    !WriteRa2m = ASSOCIATED ( State_Diag%DryDepRa2m )
-    !IF ( WriteRa2m ) THEN
-    !   State_Diag%DryDepRa2m = 0.0_fp
-    !ENDIF
-    !WriteRa10m = ASSOCIATED ( State_Diag%DryDepRa10m )
-    !IF ( WriteRa10m ) THEN
-    !   State_Diag%DryDepRa10m = 0.0_fp
-    !ENDIF
+#if !defined( MODEL_CESM )
+    ! Evaluate iodide and salinity from HEMCO for O3 oceanic dry deposition
+    IF ( id_O3 > 0 ) THEN
+       CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'surf_iodide', State_Chm%Iodide, RC )
+       IF ( RC /= GC_SUCCESS ) THEN
+          ErrMsg = 'Could not find surf_iodide in HEMCO data list!'
+          CALL GC_Error( ErrMsg, RC, 'drydep_mod.F90' )
+          RETURN
+       ENDIF
+       CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'surf_salinity', State_Chm%Salinity, RC )
+       IF ( RC /= GC_SUCCESS ) THEN
+          ErrMsg = 'Could not find surf_salinity in HEMCO data list!'
+          CALL GC_Error( ErrMsg, RC, 'drydep_mod.F90' )
+          RETURN
+       ENDIF
+    ENDIF
 #endif
+
+    ! Initialize State_Chm%DryDepVel
+    State_Chm%DryDepVel = 0.0e+0_f8
 
     !***********************************************************************
     !
@@ -1178,8 +1295,10 @@ CONTAINS
        ENDIF
     ENDDO
 
-    ! Initialize DVEL
-    DVEL = 0.0e+0_f8
+#ifdef LUO_WETDEP
+    ! Get the Henry's law constant as a function of lon, lat, and species
+    CALL Luo_Get_HStar3d( Input_Opt, State_Grid, State_Met, HStar3d, RC )
+#endif
 
     !***********************************************************************
     !*
@@ -1220,9 +1339,6 @@ CONTAINS
     !$OMP PRIVATE( C1X,     VK,      I,       J,      IW                ) &
     !$OMP PRIVATE( DIAM,    DEN,     XLAI_FP, SUNCOS_FP,       CFRAC_FP ) &
     !$OMP PRIVATE( N_SPC,   alpha,   DEPVw                              ) &
-#ifdef MODEL_GEOS
-    !$OMP PRIVATE( RA2M,    Z0OBK2M, RA10M, Z0OBK10M                    ) &
-#endif
 #ifdef TOMAS
     !$OMP PRIVATE( BIN                                                  ) &
 #endif
@@ -1306,7 +1422,7 @@ CONTAINS
           !** If the surface to be snow or ice;
           !** set II to 1 instead.
           !
-          IF(LSNOW(I,J)) II=1
+          IF(State_Met%isSnow(I,J)) II=1
 
           !* Read the internal resistance RI (minimum stomatal resistance for
           !* water vapor,per unit area of leaf) from the IRI array; a '9999'
@@ -1425,12 +1541,13 @@ CONTAINS
              N_SPC = State_Chm%Map_DryDep(K)
              IF ((N_SPC .EQ. ID_O3) .AND. (II .EQ. 11)) THEN
 
-                IF (HCO_Salinity(I,J) .GT. 20.0_f8) THEN
+                IF (State_Chm%SALINITY(I,J) .GT. 20.0_f8) THEN
 
                    ! Now apply the Luhar et al. [2018] equations for the
                    ! special treatment of O3 dry deposition to the ocean
-                   ! surface 
-                   CALL OCEANO3(State_Met%TSKIN(I,J),USTAR(I,J),DEPVw,I,J)
+                   ! surface
+                   CALL OCEANO3(State_Met%TSKIN(I,J),USTAR(I,J),&
+                                State_Chm%IODIDE(I,J),I,J,DEPVw)
 
                    ! Now convert to the new rc value(s) can probably tidy
                    ! this up a bit
@@ -1446,19 +1563,47 @@ CONTAINS
 
                 ENDIF
 
+             ! currently messy test for if surface is snow/ice to change O3
+             ! surface resistance to an updated value
+             ELSE IF ((N_SPC .EQ. ID_O3) .AND. (State_Met%isSnow(I,J))) THEN
+                 RSURFC(K,LDT) = 10000.0_f8
              ELSE
+                ! Check latitude and longitude, alter F0 only for Amazon rainforest for Hg0
+                ! (see reference: Feinberg et al., ESPI, 2022: Evaluating atmospheric mercury (Hg) uptake by vegetation in a
+                ! chemistry-transport model)
+                IF (N_SPC .EQ. ID_Hg0) THEN ! Check for Hg0
+                   IF ( II .EQ. 6 .AND. & ! if rainforest land type
+                        State_Grid%XMid(I,J) > -82 .AND. & ! bounding box of Amazon
+                        State_Grid%XMid(I,J) < -33  .AND. &
+                        State_Grid%YMid(I,J) >  -34  .AND. &
+                        State_Grid%YMid(I,J) <  14 ) THEN
+                      F0(K) = 2.0e-01_f8 ! increase reactivity, as inferred from observations
+                   ELSE
+                      F0(K) = 3.0e-05_f8 ! elsewhere, lower reactivity 
+                   ENDIF
+                ENDIF
 
                 !XMWH2O = 18.e-3_f8 ! Use global H2OMW (ewl, 1/6/16)
                 XMWH2O = H2OMW * 1.e-3_f8
+#ifdef LUO_WETDEP
+                RIXX = RIX*DIFFG(TEMPK,PRESSU(I,J),XMWH2O)/ &
+                     DIFFG(TEMPK,PRESSU(I,J),XMW(K)) &
+                     + 1.e+0_f8/(HSTAR3D(I,J,K)/3000.e+0_f8+100.e+0_f8*F0(K))
+#else
                 RIXX = RIX*DIFFG(TEMPK,PRESSU(I,J),XMWH2O)/ &
                      DIFFG(TEMPK,PRESSU(I,J),XMW(K)) &
                      + 1.e+0_f8/(HSTAR(K)/3000.e+0_f8+100.e+0_f8*F0(K))
+#endif
                 RLUXX = 1.e+12_f8
                 IF (RLU(LDT).LT.9999.e+0_f8) &
+#ifdef LUO_WETDEP
+                     RLUXX = RLU(LDT)/(HSTAR3D(I,J,K)/1.0e+05_f8 + F0(K))
+#else
                      RLUXX = RLU(LDT)/(HSTAR(K)/1.0e+05_f8 + F0(K))
+#endif
 
                 ! If POPs simulation, scale cuticular resistances with octanol-
-                ! air partition coefficient (Koa) instead of HSTAR 
+                ! air partition coefficient (Koa) instead of HSTAR
                 ! (clf, 1/3/2011)
                 IF (IS_POPS) &
                      RLUXX = RLU(LDT)/(KOA(K)/1.0e+05_f8 + F0(K))
@@ -1473,10 +1618,17 @@ CONTAINS
                 !* corresponding minimum resistance is 50 s m-1. This correction
                 !* was introduced by J.Y. Liang on 7/9/95.
                 !*
+#ifdef LUO_WETDEP
+                RGSX = 1.e+0_f8/(HSTAR3D(I,J,K)/1.0e+05_f8/RGSS(LDT) + &
+                       F0(K)/RGSO(LDT))
+                RCLX = 1.e+0_f8/(HSTAR3D(I,J,K)/1.0e+05_f8/RCLS(LDT) + &
+                       F0(K)/RCLO(LDT))
+#else
                 RGSX = 1.e+0_f8/(HSTAR(K)/1.0e+05_f8/RGSS(LDT) + &
                        F0(K)/RGSO(LDT))
                 RCLX = 1.e+0_f8/(HSTAR(K)/1.0e+05_f8/RCLS(LDT) + &
                        F0(K)/RCLO(LDT))
+#endif
                 !*
                 !** Get the bulk surface resistance of the canopy, RSURFC, from
                 !** the network of resistances in parallel and in series (Fig. 1
@@ -1521,7 +1673,7 @@ CONTAINS
                 ! Use size-resolved dry deposition calculations for
                 ! dust aerosols only.  Do not account for hygroscopic
                 ! growth of the dust aerosol particles.
-                !=====================================================  
+                !=====================================================
 #ifdef TOMAS
                 !-------------------------------
                 !%%% TOMAS SIMULATIONS %%%
@@ -1644,7 +1796,7 @@ CONTAINS
           DO 180 LDT = 1, IREG(I,J)
              IF ( IUSE(I,J,LDT) == 0 ) GOTO 180
              ! because of high resistance values, different rule applied for
-             ! ocean ozone               
+             ! ocean ozone
              N_SPC = State_Chm%Map_DryDep(K)
              IF ((N_SPC .EQ. ID_O3) .AND. (II .EQ. 11)) THEN
                 RSURFC(K,LDT)= MAX(1.e+0_f8, MIN(RSURFC(K,LDT),999999.e+0_f8))
@@ -1660,7 +1812,7 @@ CONTAINS
 180       CONTINUE
 190    CONTINUE
        !*
-       !*    Loop through the different landuse types present in 
+       !*    Loop through the different landuse types present in
        !*    the grid square
        !*
        DO 500 LDT = 1, IREG(I,J)
@@ -1763,10 +1915,6 @@ CONTAINS
 
           ! Define Z0OBK
           Z0OBK = ZO(I,J)/OBK(I,J)
-#ifdef MODEL_GEOS
-          Z0OBK2M  = MAX(Z0OBK,  2e+0_fp/OBK(I,J) )
-          Z0OBK10M = MAX(Z0OBK, 10e+0_fp/OBK(I,J) )
-#endif
           !--------------------------------------------------------
           ! Z0OBK_Alt is Z0OBK for a user-specified height above
           ! the surface.  This is required for diagnostics.
@@ -1801,7 +1949,7 @@ CONTAINS
           ! roughness Reynolds number Rr = U* Z0 / Nu and found the flow to
           ! be smooth for Rr < 0.13 and rough for Rr > 2.5 with a transition
           ! regime in between." (E.B. Kraus and J.A. Businger, Atmosphere-Ocean
-          ! Interaction, second edition, P.144-145, 1994). 
+          ! Interaction, second edition, P.144-145, 1994).
           ! Similar statements can be found in the books: Evaporation into the
           ! atmosphere, by Wilfried Brutsaert ,P.59,89, 1982; or Seinfeld &
           ! Pandis, P.858, 1998.
@@ -1826,20 +1974,10 @@ CONTAINS
                 !*... unstable condition; set RA to zero.
                 !*    (first implemented in V. 3.2)
                 RA     = 0.e+0_f8
-#ifdef MODEL_GEOS
-                RA2M   = 0.e+0_f8
-                RA10M  = 0.e+0_f8
-#endif
-
                 !*... error trap: prevent CORR1 or Z0OBK from being
                 !*... zero or close to zero (ckeller, 3/15/16)
              ELSEIF ( ABS(CORR1)<=SMALL .OR. ABS(Z0OBK)<=SMALL ) THEN
                 RA = 0.e+0_f8
-#ifdef MODEL_GEOS
-                RA2M  = 0.e+0_f8
-                RA10M = 0.e+0_f8
-#endif
-
              ELSEIF (CORR1.LE.0.0e+0_f8 .AND. Z0OBK .GE. -1.e+0_f8) THEN
                 !*... unstable conditions;
                 !*... compute Ra as described above
@@ -1848,35 +1986,15 @@ CONTAINS
                 DUMMY3 = ABS((DUMMY1 - 1.e+0_f8)/(DUMMY1 + 1.e+0_f8))
                 DUMMY4 = ABS((DUMMY2 - 1.e+0_f8)/(DUMMY2 + 1.e+0_f8))
                 RA = 0.74e+0_f8* (1.e+0_f8/CKUSTR) * LOG(DUMMY3/DUMMY4)
-#ifdef MODEL_GEOS
-                ! 2M
-                DUMMY1 = (1.e+0_f8 - 9e+0_f8*Z0OBK2M)**0.5e+0_f8
-                DUMMY3 = ABS((DUMMY1 - 1.e+0_f8)/(DUMMY1 + 1.e+0_f8))
-                RA2M   = 0.74e+0_f8* (1.e+0_f8/CKUSTR) * LOG(DUMMY3/DUMMY4)
-                DUMMY1 = (1.e+0_f8 - 9e+0_f8*Z0OBK10M)**0.5e+0_f8
-                DUMMY3 = ABS((DUMMY1 - 1.e+0_f8)/(DUMMY1 + 1.e+0_f8))
-                RA10M  = 0.74e+0_f8* (1.e+0_f8/CKUSTR) * LOG(DUMMY3/DUMMY4)
-#endif
 
              ELSEIF((CORR1.GT.0.0e+0_f8).AND.(.NOT.LRGERA(I,J)))  THEN
                 !*... moderately stable conditions (z/zMO <1);
                 !*... compute Ra as described above
                 RA = (1e+0_f8/CKUSTR) * (.74e+0_f8*LOG(CORR1/Z0OBK) + &
                      4.7e+0_f8*(CORR1-Z0OBK))
-#ifdef MODEL_GEOS
-                RA2M = (1e+0_f8/CKUSTR) * (0.74_f8*LOG(Z0OBK2M/Z0OBK)+4.7_f8* &
-                       (Z0OBK2M-Z0OBK))
-                RA10M = (1e+0_f8/CKUSTR) * (0.74_f8*LOG(Z0OBK10M/Z0OBK)+4.7_f8*&
-                        (Z0OBK10M-Z0OBK))
-#endif
-
              ELSEIF(LRGERA(I,J)) THEN
                 !*... very stable conditions
                 RA     = 1.e+04_f8
-#ifdef MODEL_GEOS
-                RA2M   = 1.e+04_f8
-                RA10M  = 1.e+04_f8
-#endif
              ENDIF
              !* check that RA is positive; if RA is negative (as occassionally
              !* happened in version 3.1) send a warning message.
@@ -1893,16 +2011,6 @@ CONTAINS
                 DUMMY3 = ABS((DUMMY1 - 1.e+0_f8)/(DUMMY1 + 1.e+0_f8))
                 DUMMY4 = ABS((DUMMY2 - 1.e+0_f8)/(DUMMY2 + 1.e+0_f8))
                 RA = 1.e+0_f8 * (1.e+0_f8/CKUSTR) * LOG(DUMMY3/DUMMY4)
-#ifdef MODEL_GEOS
-                ! 2M
-                DUMMY1 = (1.D0 - 15.e+0_f8*Z0OBK2M)**0.5e+0_f8
-                DUMMY3 = ABS((DUMMY1 - 1.e+0_f8)/(DUMMY1 + 1.e+0_f8))
-                RA2M = 1.e+0_f8 * (1.e+0_f8/CKUSTR)*LOG(DUMMY3/DUMMY4)
-                ! 10M
-                DUMMY1 = (1.D0 - 15.e+0_f8*Z0OBK10M)**0.5e+0_f8
-                DUMMY3 = ABS((DUMMY1 - 1.e+0_f8)/(DUMMY1 + 1.e+0_f8))
-                RA10M= 1.e+0_f8 * (1.e+0_f8/CKUSTR)*LOG(DUMMY3/DUMMY4)
-#endif
                 !--------------------------------------------------
                 ! Compute RA at user-defined altitude above surface
                 ! (krt, bmy, 7/10/19)
@@ -1920,12 +2028,6 @@ CONTAINS
                 !coef_b=5.e+0_f8
                 RA = (1D0/CKUSTR) * (1.e+0_f8*LOG(CORR1/Z0OBK) + &
                      5.e+0_f8*(CORR1-Z0OBK))
-#ifdef MODEL_GEOS
-                RA2M = (1D0/CKUSTR) * (1.e+0_f8*LOG(Z0OBK2M/Z0OBK)+ &
-                        5.e+0_f8*(Z0OBK2M-Z0OBK))
-                RA10M = (1D0/CKUSTR) * (1.e+0_f8*LOG(Z0OBK10M/Z0OBK)+ &
-                        5.e+0_f8*(Z0OBK10M-Z0OBK))
-#endif
                 !--------------------------------------------------
                 ! Compute RA at user-defined altitude above surface
                 ! for diagnostic output (krt, bmy, 7/10/19)
@@ -1941,12 +2043,6 @@ CONTAINS
                 !coef_b=1.e+0_f8
                 RA = (1D0/CKUSTR) * (5.e+0_f8*LOG(CORR1/Z0OBK) + &
                      1.e+0_f8*(CORR1-Z0OBK))
-#ifdef MODEL_GEOS
-                RA2M = (1D0/CKUSTR) * (5.e+0_f8*LOG(Z0OBK2M/Z0OBK)+ &
-                       1.e+0_f8*(Z0OBK2M-Z0OBK))
-                RA10M = (1D0/CKUSTR) * (5.e+0_f8*LOG(Z0OBK10M/z0OBK)+ &
-                        1.e+0_f8*(Z0OBK10M-Z0OBK))
-#endif
                 !--------------------------------------------------
                 ! Compute RA at user-defined altitude above surface
                 ! for diagnostic output (krt, bmy, 7/10/19)
@@ -1961,20 +2057,11 @@ CONTAINS
           ENDIF
 
           RA   = MIN(RA,1.e+4_f8)
-#ifdef MODEL_GEOS
-          RA2M   = MIN(RA2M,  1.e+4_f8)
-          RA10M  = MIN(RA10M, 1.e+4_f8)
-#endif
           ! If RA is < 0, set RA = 0 (bmy, 11/12/99)
           IF (RA .LT. 0.e+0_f8) THEN
              WRITE (6,1001) I,J,RA,CZ,ZO(I,J),OBK(I,J)
              RA = 0.0e+0_f8
           ENDIF
-#ifdef MODEL_GEOS
-          ! Adjust 2M Ra if needed
-          IF ( RA2M  < 0.e+0_f8 ) RA2M  = 0.e+0_f8
-          IF ( RA10M < 0.e+0_f8 ) RA10M = 0.e+0_f8
-#endif
           !----------------------------------------------------
           ! Compute RA at user-defined altitude above surface
           ! for diagnostic output (krt, bmy, 7/10/19)
@@ -2008,7 +2095,7 @@ CONTAINS
           DO 215 K = 1,NUMDEP
              IF (.NOT.LDEP(K)) GOTO 215
              !** DAIR is the thermal diffusivity of air;
-             !** value of 0.2*1.E-4 m2 s-1 cited on p. 16,476 of 
+             !** value of 0.2*1.E-4 m2 s-1 cited on p. 16,476 of
              !** Jacob et al. [1992]
              DAIR = 0.2e0_f8*1.e-4_f8
              RB = (2.e+0_f8/CKUSTR)* &
@@ -2026,10 +2113,6 @@ CONTAINS
           DO 230 K = 1,NUMDEP
              IF ( LDEP(K) ) THEN
                 RA     = 1.0D4
-#ifdef MODEL_GEOS
-                RA2M   = 1.0D4
-                RA10M  = 1.0D4
-#endif
                 C1X(K) = RA + RSURFC(K,LDT)
              ENDIF
 230       CONTINUE
@@ -2045,36 +2128,20 @@ CONTAINS
              VK(K) = VD(K)
              VD(K) = VK(K) +.001D0* DBLE( IUSE(I,J,LDT) )/C1X(K)
 400       CONTINUE
-
-#ifdef MODEL_GEOS
-          !--- Eventually archive aerodynamic resistance.
-          !--- Convert s m-1 to s cm-1.
-          !--- Ra is set to an arbitrary large value of 1.0e4 in stable
-          !--- conditions. Adjust archived Ra's downward to avoid excessive
-          !--- surface concentration adjustments when using C'=(1-Ra*vd)*C. 
-          !--- (ckeller, 2/2/18)
-          !IF ( RA2M >= 1.0d4 ) RA2M = 0.0
-          State_Chm%DryDepRa2m(I,J) = State_Chm%DryDepRa2m(I,J) + &
-               0.001d0 * DBLE(IUSE(I,J,LDT)) * ( MAX(0.0d0,RA-RA2M)/100.0d0 )
-          !IF ( RAKT >= 1.0d4 ) RAKT = 0.0
-          State_Chm%DryDepRa10m(I,J) = State_Chm%DryDepRa10m(I,J) + &
-               0.001d0 * DBLE(IUSE(I,J,LDT)) * ( MAX(0.0d0,RA-RA10M)/100.0d0 )
-#endif
-
 500    CONTINUE
 
-       !** Load array DVEL
+       !** Load array State_Chm%DryDepVel
        DO 550 K=1,NUMDEP
           IF (.NOT.LDEP(K)) GOTO 550
-          DVEL(I,J,K) = VD(K)
+          State_Chm%DryDepVel(I,J,K) = VD(K)
 
           ! Now check for negative deposition velocity before returning to
           ! calling program (bmy, 4/16/00)
           ! Also call CLEANUP to deallocate arrays (bmy, 10/15/02)
-          IF ( DVEL(I,J,K) < 0e+0_f8 ) THEN
+          IF ( State_Chm%DryDepVel(I,J,K) < 0e+0_f8 ) THEN
              !$OMP CRITICAL
              PRINT*, 'DEPVEL: Deposition velocity is negative!'
-             PRINT*, 'Dep. Vel = ', DVEL(I,J,K)
+             PRINT*, 'Dep. Vel = ', State_Chm%DryDepVel(I,J,K)
              PRINT*, 'Species  = ', K
              PRINT*, 'I, J     = ', I, J
              PRINT*, 'RADIAT   = ', RADIAT(I,J)
@@ -2088,18 +2155,22 @@ CONTAINS
              PRINT*, 'LRGERA   = ', LRGERA(I,J)
              PRINT*, 'ZO       = ', ZO(I,J)
              PRINT*, 'STOP in depvel.f!'
+#if defined( MODEL_CESM )
+             CALL ERROR_STOP('Negative drydep velocity!', 'DRYDEP_MOD')
+#else
              CALL CLEANUP
              STOP
+#endif
              !$OMP END CRITICAL
           ENDIF
 
           ! Now check for IEEE NaN (not-a-number) condition before returning to
           ! calling program (bmy, 4/16/00)
           ! Also call CLEANUP to deallocate arrays (bmy, 10/15/02)
-          IF ( IT_IS_NAN( DVEL(I,J,K) ) ) THEN
+          IF ( IT_IS_NAN( State_Chm%DryDepVel(I,J,K) ) ) THEN
              !$OMP CRITICAL
              PRINT*, 'DEPVEL: Deposition velocity is NaN!'
-             PRINT*, 'Dep. Vel = ', DVEL(I,J,K)
+             PRINT*, 'Dep. Vel = ', State_Chm%DryDepVel(I,J,K)
              PRINT*, 'Species  = ', K
              PRINT*, 'I, J     = ', I, J
              PRINT*, 'RADIAT   = ', RADIAT(I,J)
@@ -2112,8 +2183,12 @@ CONTAINS
              PRINT*, 'ZH       = ', ZH(I,J)
              PRINT*, 'LRGERA   = ', LRGERA(I,J)
              PRINT*, 'ZO       = ', ZO(I,J)
+#if defined( MODEL_CESM )
+             CALL ERROR_STOP('Drydep velocity is NaN!', 'DRYDEP_MOD')
+#else
              CALL CLEANUP
              STOP
+#endif
              !$OMP END CRITICAL
           ENDIF
 550    CONTINUE
@@ -2136,6 +2211,161 @@ CONTAINS
 
   END SUBROUTINE DEPVEL
 !EOC
+#ifdef LUO_WETDEP
+!------------------------------------------------------------------------------
+!                  GEOS-Chem Global Chemical Transport Model                  !
+!------------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: Luo_Get_Hstar3d
+!
+! !DESCRIPTION: Computes the Henry's law constants for SO2, NH3, and H2O2
+!  as a function of longitude & latitude.  For all other species, will
+!  return a constant Henry's law constant.
+!\\
+!\\
+! !INTERFACE:
+!
+  SUBROUTINE Luo_Get_Hstar3d( Input_Opt, State_Grid, State_Met, HStar3d, RC )
+!
+! !USES:
+!
+    USE ErrCode_Mod
+    USE Input_Opt_Mod,  ONLY : OptInput
+    USE State_Grid_Mod, ONLY : GrdState
+    USE State_Met_Mod,  ONLY : MetState
+!
+! !INPUT PARAMETERS:
+!
+    TYPE(OptInput), INTENT(IN)  :: Input_Opt
+    TYPE(GrdState), INTENT(IN)  :: State_Grid
+    TYPE(MetState), INTENT(IN)  :: State_Met
+!
+! !OUTPUT PARAMETERS:
+!
+    REAL(fp),       INTENT(OUT) :: Hstar3d(State_Grid%NX,State_Grid%NY,NUMDEP)
+    INTEGER,        INTENT(OUT) :: RC
+!
+! !REMARKS:
+!  For now, only used with the Luo et al 2020 wetdep option.
+!EOP
+!------------------------------------------------------------------------------
+!BOC
+!
+! !LOCAL VARIABLES:
+!
+    INTEGER             :: I,     J,     K,       spcId
+    REAL(f8)            :: coeff, Hplus, inv_tAq, Ks1,  Ks2, tAq, t298_taq
+!
+! !DEFINED PARAMETERS:
+!
+    REAL(f8), PARAMETER :: INV_T298  = 1.0_f8 / 298.15_f8
+    REAL(f8), PARAMETER :: HPLUS_ice = 10.0_f8**(-5.4_f8) ! pH ice/snow
+    REAL(f8), PARAMETER :: HPLUS_lnd = 10.0_f8**(-7.0_f8) ! pH land
+    REAL(f8), PARAMETER :: HPLUS_ocn = 10.0_f8**(-8.2_f8) ! pH ocean
+
+    !=======================================================================
+    ! Luo_Get_Hstar3D begins here!
+    !=======================================================================
+
+    ! Initialize
+    RC = GC_SUCCESS
+
+    IF ( Input_Opt%ITS_A_FULLCHEM_SIM .or. Input_Opt%ITS_AN_AEROSOL_SIM ) THEN
+
+       !====================================================================
+       ! For fullchem and aerosol simulations, the effective Henry's law
+       ! constant for SO3, H2O2, and NH3 will be computed as a function
+       ! of lon & lat (i.e. as a function of temperature & land cover).
+       !
+       ! For all other species, assume that the effective Henry's law
+       ! constant does not vary with lon & lat.
+       !====================================================================
+
+       ! Loop over drydep species
+       !$OMP PARALLEL DO                                                     &
+       !$OMP DEFAULT( SHARED                                                )&
+       !$OMP PRIVATE( K,       SpcId,    J,     I,   Hplus, tAq             )&
+       !$OMP PRIVATE( inv_tAq, t298_tAq, coeff, ks1, ks2                    )
+       DO K = 1, NUMDEP
+
+          ! Get the modelId from the drydep Id
+          SpcId = NTRAIND(K)
+
+          ! Loop over grid boxes
+          DO J = 1, State_Grid%NY
+          DO I = 1, State_Grid%NX
+
+             ! Pick the proper Hplus value based on surface
+             IF ( State_Met%isIce(I,J) .OR. State_Met%isSnow(I,J) ) THEN
+                Hplus = HPLUS_ice
+             ELSEIF ( State_Met%IsWater(I,J) .AND. &
+                      ( State_Met%FROCEAN(I,J) > State_met%FRLAKE(I,J) ) ) THEN
+                Hplus = HPLUS_ocn
+             ELSE
+                Hplus = HPLUS_lnd ! includes lakes but not ice/snow
+             ENDIF
+
+             ! Temperature terms
+             tAq      = MAX( 253.0_f8, State_Met%TS(I,J) )
+             inv_tAq  = 1.0_f8    / tAq
+             t298_tAq = 298.15_f8 / tAq
+
+             ! Henry's constant [mol/l-atm] and Effective Henry's constant
+             IF ( SpcId == id_SO2 ) THEN
+
+                coeff = 1.22_f8    * EXP( 10.55_f8 * (t298_tAq - 1.0_f8)    )
+                Ks1   = 1.30e-2_f8 * EXP(  6.75_f8 * (t298_tAq - 1.0_f8)    )
+                Ks2   = 6.31e-8_fp * EXP(  5.05_f8 * (t298_tAq - 1.0_f8)    )
+
+                HSTAR3D(I,J,K) = coeff *                                     &
+                  ( 1.0_f8 + ( Ks1/Hplus ) + ( Ks1*Ks2 / ( HPlus*HPlus ) )  )
+
+             ELSE IF ( SpcId == id_H2O2 ) THEN
+
+                coeff = 8.3e+04_f8  * EXP(  24.82_f8 * (t298_tAq - 1.0_f8)  )
+                Ks1   = 2.20e-12_f8 * EXP( -12.52_f8 * (t298_tAq - 1.0_f8)  )
+
+                HSTAR3D(I,J,K) = coeff * ( 1.0_f8 + ( Ks1 / Hplus ) )
+
+             ELSE IF ( SpcId == id_NH3 ) THEN
+
+                coeff = 59.8_f8    * EXP(  4200.0_f8 * (inv_tAq - INV_T298) )
+                Ks1   = 1.0e-14_f8 * EXP( -6710.0_f8 * (inv_tAq - INV_T298) )
+                Ks2   = 1.7e-5_f8  * EXP( -4325.0_f8 * (inv_tAq - INV_T298) )
+
+                HSTAR3D(I,J,K) = coeff *                                     &
+                                 ( 1.0_f8 + ( ( Ks2 * Hplus ) / Ks1 )       )
+
+             ELSE
+
+                HSTAR3D(I,J,K) = HSTAR(K)
+
+             ENDIF
+
+          ENDDO
+          ENDDO
+       ENDDO
+       !$OMP END PARALLEL DO
+
+    ELSE
+
+       !====================================================================
+       ! None of the other simulation types include SO3, H2O2, and NH3,
+       ! so we can skip all of the computations above.
+       !
+       ! For each species, we can return an effective Henry's law constant
+       ! that does not depend on lon & lat.
+       !====================================================================
+       DO K = 1, NUMDEP
+          HSTAR3D(:,:,K) = HSTAR(K)
+       ENDDO
+
+    ENDIF
+
+  END SUBROUTINE Luo_Get_Hstar3d
+!EOC
+#endif
 !------------------------------------------------------------------------------
 !                  GEOS-Chem Global Chemical Transport Model                  !
 !------------------------------------------------------------------------------
@@ -2236,12 +2466,20 @@ CONTAINS
     USE ErrCode_Mod
     USE Input_Opt_Mod, ONLY : OptInput
 
+#if defined( MODEL_CESM )
+    USE CAM_PIO_UTILS, ONLY : CAM_PIO_OPENFILE
+    USE IOFILEMOD,     ONLY : GETFIL
+    USE PIO,           ONLY : PIO_CLOSEFILE, PIO_INQ_DIMID, PIO_INQ_DIMLEN
+    USE PIO,           ONLY : PIO_INQ_VARID, PIO_GET_VAR, PIO_NOERR
+    USE PIO,           ONLY : PIO_NOWRITE, FILE_DESC_T
+#else
     ! Modules for netCDF read
     USE m_netcdf_io_open
     USE m_netcdf_io_get_dimlen
     USE m_netcdf_io_read
     USE m_netcdf_io_readattr
     USE m_netcdf_io_close
+#endif
 
 #     include "netcdf.inc"
 !
@@ -2328,6 +2566,12 @@ CONTAINS
     ! Shadow variable for reading in data at REAL*8
     REAL(f8)           :: DRYCOEFF_R8(NPOLY)
 
+#if defined( MODEL_CESM )
+    INTEGER            :: iret
+    INTEGER            :: vid
+    TYPE(FILE_DESC_T)  :: ncid
+#endif
+
     !=================================================================
     ! In dry-run mode, print file path to dryrun log and exit.
     ! Otherwise, print file path to stdout and continue.
@@ -2375,9 +2619,13 @@ CONTAINS
     ENDIF
 
     !=================================================================
-    ! Open and read data from the netCDF file
-    !=================================================================       
+    ! Open and read data
+    !=================================================================
+#if defined( MODEL_CESM )
+    CALL CAM_PIO_OPENFILE( ncid, TRIM( nc_path ), PIO_NOWRITE )
+#else
     CALL Ncop_Rd( fId, TRIM(nc_path) )
+#endif
 
     !----------------------------------------
     ! VARIABLE: DRYCOEFF
@@ -2389,11 +2637,18 @@ CONTAINS
     ! Read DRYCOEFF from file
     st1d   = (/ 1     /)
     ct1d   = (/ NPOLY /)
+#if defined( MODEL_CESM )
+    iret = PIO_INQ_VARID( ncid, TRIM(v_name), vid )
+    iret = PIO_GET_VAR( ncid, vid, st1d, ct1d, DRYCOEFF_R8 )
+    ! Assume units
+    a_val = "1"
+#else
     CALL NcRd( DRYCOEFF_R8, fId, TRIM(v_name), st1d, ct1d )
 
     ! Read the DRYCOEFF:units attribute
     a_name = "units"
     CALL NcGet_Var_Attributes( fId,TRIM(v_name),TRIM(a_name),a_val )
+#endif
 
     ! Echo info to stdout
     IF ( Input_Opt%amIRoot ) THEN
@@ -2414,11 +2669,18 @@ CONTAINS
     ! Read IOLSON from file
     st1d   = (/ 1         /)
     ct1d   = (/ NSURFTYPE /)
+#if defined( MODEL_CESM )
+    iret = PIO_INQ_VARID( ncid, TRIM(v_name), vid )
+    iret = PIO_GET_VAR( ncid, vid, st1d, ct1d, IOLSON )
+    ! Assume units
+    a_val = "1"
+#else
     CALL NcRd( IOLSON, fId, TRIM(v_name), st1d, ct1d )
 
     ! Read the IOLSON:units attribute
     a_name = "units"
     CALL NcGet_Var_Attributes( fId,TRIM(v_name),TRIM(a_name),a_val )
+#endif
 
     ! Echo info to stdout
     IF ( Input_Opt%amIRoot ) THEN
@@ -2435,11 +2697,18 @@ CONTAINS
     ! Read IDEP from file
     st1d   = (/ 1         /)
     ct1d   = (/ NSURFTYPE /)
+#if defined( MODEL_CESM )
+    iret = PIO_INQ_VARID( ncid, TRIM(v_name), vid )
+    iret = PIO_GET_VAR( ncid, vid, st1d, ct1d, IDEP )
+    ! Assume units
+    a_val = "1"
+#else
     CALL NcRd( IDEP, fId, TRIM(v_name), st1d, ct1d )
 
     ! Read the IDEP:units attribute
     a_name = "units"
     CALL NcGet_Var_Attributes( fId,TRIM(v_name),TRIM(a_name),a_val )
+#endif
 
     ! Echo info to stdout
     IF ( Input_Opt%amIRoot ) THEN
@@ -2455,7 +2724,12 @@ CONTAINS
 
     ! Get the # of Olson types that are water
     ! (NOTE: IWATER is an index array, dimension name = variable name)
+#if defined( MODEL_CESM )
+    iret = PIO_INQ_DIMID( ncid, TRIM(v_name), vid )
+    iret = PIO_INQ_DIMLEN(ncid, vid, NWATER       )
+#else
     CALL NcGet_DimLen( fId, TRIM(v_name), NWATER )
+#endif
 
     ! Initialize
     IWATER = 0
@@ -2465,11 +2739,18 @@ CONTAINS
     ! The rest can be zeroed out
     st1d   = (/ 1      /)
     ct1d   = (/ NWATER /)
+#if defined( MODEL_CESM )
+    iret = PIO_INQ_VARID( ncid, TRIM(v_name), vid     )
+    iret = PIO_GET_VAR( ncid, vid, st1d, ct1d, IWATER )
+    ! Assume units
+    a_val = "1"
+#else
     CALL NcRd( IWATER(1:NWATER), fId, TRIM(v_name), st1d, ct1d )
 
     ! Read the IWATER:units attribute
     a_name = "units"
     CALL NcGet_Var_Attributes( fId,TRIM(v_name),TRIM(a_name),a_val )
+#endif
 
     ! Echo info to stdout
     IF ( Input_Opt%amIRoot ) THEN
@@ -2486,11 +2767,18 @@ CONTAINS
     ! Read IZO from file
     st1d   = (/ 1         /)
     ct1d   = (/ NSURFTYPE /)
+#if defined( MODEL_CESM )
+    iret = PIO_INQ_VARID( ncid, TRIM(v_name), vid )
+    iret = PIO_GET_VAR( ncid, vid, st1d, ct1d, IZO )
+    ! Assume units
+    a_val = "1e-4 m"
+#else
     CALL NcRd( IZO, fId, TRIM(v_name), st1d, ct1d )
 
     ! Read the IZO:long_name attribute
     a_name = "long_name"
     CALL NcGet_Var_Attributes( fId,TRIM(v_name),TRIM(a_name),a_val )
+#endif
 
     ! Echo info to stdout
     IF ( Input_Opt%amIRoot ) THEN
@@ -2507,11 +2795,18 @@ CONTAINS
     ! Read IDRYDEP from file
     st1d   = (/ 1         /)
     ct1d   = (/ NDRYDTYPE /)
+#if defined( MODEL_CESM )
+    iret = PIO_INQ_VARID( ncid, TRIM(v_name), vid )
+    iret = PIO_GET_VAR( ncid, vid, st1d, ct1d, IDRYDEP )
+    ! Assume units
+    a_val = "1"
+#else
     CALL NcRd( IDRYDEP, fId, TRIM(v_name), st1d, ct1d )
 
     ! Read the IDRYDEP:units attribute
     a_name = "units"
     CALL NcGet_Var_Attributes( fId,TRIM(v_name),TRIM(a_name),a_val )
+#endif
 
     ! Echo info to stdout
     IF ( Input_Opt%amIRoot ) THEN
@@ -2528,11 +2823,18 @@ CONTAINS
     ! Read IRI from file
     st1d   = (/ 1         /)
     ct1d   = (/ NDRYDTYPE /)
+#if defined( MODEL_CESM )
+    iret = PIO_INQ_VARID( ncid, TRIM(v_name), vid )
+    iret = PIO_GET_VAR( ncid, vid, st1d, ct1d, IRI )
+    ! Assume units
+    a_val = "s m-1"
+#else
     CALL NcRd( IRI, fId, TRIM(v_name), st1d, ct1d )
 
     ! Read the IRI:units attribute
     a_name = "units"
     CALL NcGet_Var_Attributes( fId,TRIM(v_name),TRIM(a_name),a_val )
+#endif
 
     ! For Olson 2001 land map, change IRI for coniferous forests
     ! to match IRI for deciduous forests (skim, mps, 2/3/14)
@@ -2553,11 +2855,18 @@ CONTAINS
     ! Read IRLU from file
     st1d   = (/ 1         /)
     ct1d   = (/ NDRYDTYPE /)
+#if defined( MODEL_CESM )
+    iret = PIO_INQ_VARID( ncid, TRIM(v_name), vid )
+    iret = PIO_GET_VAR( ncid, vid, st1d, ct1d, IRLU )
+    ! Assume units
+    a_val = "s m-1"
+#else
     CALL NcRd( IRLU, fId, TRIM(v_name), st1d, ct1d )
 
     ! Read the IRLU:units attribute
     a_name = "units"
     CALL NcGet_Var_Attributes( fId,TRIM(v_name),TRIM(a_name),a_val )
+#endif
 
     ! Echo info to stdout
     IF ( Input_Opt%amIRoot ) THEN
@@ -2574,11 +2883,18 @@ CONTAINS
     ! Read IRAC from file
     st1d   = (/ 1         /)
     ct1d   = (/ NDRYDTYPE /)
+#if defined( MODEL_CESM )
+    iret = PIO_INQ_VARID( ncid, TRIM(v_name), vid )
+    iret = PIO_GET_VAR( ncid, vid, st1d, ct1d, IRAC )
+    ! Assume units
+    a_val = "s m-1"
+#else
     CALL NcRd( IRAC, fId, TRIM(v_name), st1d, ct1d )
 
     ! Read the IRAC:units attribute
     a_name = "units"
     CALL NcGet_Var_Attributes( fId,TRIM(v_name),TRIM(a_name),a_val )
+#endif
 
     ! Echo info to stdout
     IF ( Input_Opt%amIRoot ) THEN
@@ -2595,11 +2911,18 @@ CONTAINS
     ! Read IRGSS from file
     st1d   = (/ 1         /)
     ct1d   = (/ NDRYDTYPE /)
+#if defined( MODEL_CESM )
+    iret = PIO_INQ_VARID( ncid, TRIM(v_name), vid )
+    iret = PIO_GET_VAR( ncid, vid, st1d, ct1d, IRGSS )
+    ! Assume units
+    a_val = "s m-1"
+#else
     CALL NcRd( IRGSS, fId, TRIM(v_name), st1d, ct1d )
 
     ! Read the IRGSS:units attribute
     a_name = "units"
     CALL NcGet_Var_Attributes( fId,TRIM(v_name),TRIM(a_name),a_val )
+#endif
 
     ! Echo info to stdout
     IF ( Input_Opt%amIRoot ) THEN
@@ -2616,11 +2939,18 @@ CONTAINS
     ! Read IRGSO from file
     st1d   = (/ 1         /)
     ct1d   = (/ NDRYDTYPE /)
+#if defined( MODEL_CESM )
+    iret = PIO_INQ_VARID( ncid, TRIM(v_name), vid )
+    iret = PIO_GET_VAR( ncid, vid, st1d, ct1d, IRGSO )
+    ! Assume units
+    a_val = "s m-1"
+#else
     CALL NcRd( IRGSO, fId, TRIM(v_name), st1d, ct1d )
 
     ! Read the IRGSO:units attribute
     a_name = "units"
     CALL NcGet_Var_Attributes( fId,TRIM(v_name),TRIM(a_name),a_val )
+#endif
 
     ! Echo info to stdout
     IF ( Input_Opt%amIRoot ) THEN
@@ -2637,11 +2967,18 @@ CONTAINS
     ! Read IRCLS from file
     st1d   = (/ 1         /)
     ct1d   = (/ NDRYDTYPE /)
+#if defined( MODEL_CESM )
+    iret = PIO_INQ_VARID( ncid, TRIM(v_name), vid )
+    iret = PIO_GET_VAR( ncid, vid, st1d, ct1d, IRCLS )
+    ! Assume units
+    a_val = "s m-1"
+#else
     CALL NcRd( IRCLS, fId, TRIM(v_name), st1d, ct1d )
 
     ! Read the IRCLS:units attribute
     a_name = "units"
     CALL NcGet_Var_Attributes( fId,TRIM(v_name),TRIM(a_name),a_val )
+#endif
 
     ! Echo info to stdout
     IF ( Input_Opt%amIRoot ) THEN
@@ -2658,11 +2995,18 @@ CONTAINS
     ! Read IRCLO from file
     st1d   = (/ 1         /)
     ct1d   = (/ NDRYDTYPE /)
+#if defined( MODEL_CESM )
+    iret = PIO_INQ_VARID( ncid, TRIM(v_name), vid )
+    iret = PIO_GET_VAR( ncid, vid, st1d, ct1d, IRCLO )
+    ! Assume units
+    a_val = "s m-1"
+#else
     CALL NcRd( IRCLO, fId, TRIM(v_name), st1d, ct1d )
 
     ! Read the IRCLO:units attribute
     a_name = "units"
     CALL NcGet_Var_Attributes( fId,TRIM(v_name),TRIM(a_name),a_val )
+#endif
 
     ! Echo info to stdout
     IF ( Input_Opt%amIRoot ) THEN
@@ -2679,11 +3023,18 @@ CONTAINS
     ! Read IVSMAX from file
     st1d   = (/ 1         /)
     ct1d   = (/ NDRYDTYPE /)
+#if defined( MODEL_CESM )
+    iret = PIO_INQ_VARID( ncid, TRIM(v_name), vid )
+    iret = PIO_GET_VAR( ncid, vid, st1d, ct1d, IVSMAX )
+    ! Assume units
+    a_val = "1e-2 cm s-1"
+#else
     CALL NcRd( IVSMAX, fId, TRIM(v_name), st1d, ct1d )
 
     ! Read the IVSMAX:units attribute
     a_name = "units"
     CALL NcGet_Var_Attributes( fId,TRIM(v_name),TRIM(a_name),a_val )
+#endif
 
     ! Echo info to stdout
     IF ( Input_Opt%amIRoot ) THEN
@@ -2695,7 +3046,11 @@ CONTAINS
     !=================================================================
 
     ! Close netCDF file
+#if defined( MODEL_CESM )
+    CALL PIO_CLOSEFILE( ncid )
+#else
     CALL NcCl( fId )
+#endif
 
     ! Echo info to stdout
     IF ( Input_Opt%amIRoot ) THEN
@@ -2747,64 +3102,77 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 Apr 2004 - R. Yantosca - Initial version
+!  26 Jan 2021 - J. Pierce   - Update to Emerson et al. PNAS (2020) parameters
 !  See https://github.com/geoschem/geos-chem for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
-! !LOCAL VARIABLES:
+! !DEFINED PARAMETERS
 !
-    INTEGER               :: N
-    REAL(f8), PARAMETER   :: C1 = 0.7674e+0_f8
-    REAL(f8), PARAMETER   :: C2 = 3.079e+0_f8
-    REAL(f8), PARAMETER   :: C3 = 2.573e-11_f8
-    REAL(f8), PARAMETER   :: C4 = -1.424e+0_f8
-    REAL(f8), PARAMETER   :: BETA  = 2.e+0_f8
-    REAL(f8), PARAMETER   :: E0 = 3.e+0_f8
-    REAL(f8)  :: AIRVS       ! kinematic viscosity of Air (m^2/s)
-    REAL(f8)  :: DP          ! Diameter of aerosol [um]
-    REAL(f8)  :: PDP         ! Press * Dp
-    REAL(f8)  :: CONST       ! Constant for settling velocity calculations
-    REAL(f8)  :: SLIP        ! Slip correction factor
-    REAL(f8)  :: VISC        ! Viscosity of air (Pa s)
-    REAL(f8)  :: DIFF        ! Brownian Diffusion constant for particles (m2/s)
-    REAL(f8)  :: SC, ST      ! Schmidt and Stokes number (nondim)
-    REAL(f8)  :: RHBL        ! Relative humidity local
-
-    ! replace RCM with RUM (radius in microns instead of cm) - jaegle 5/11/11
-    !REAL(f8)  :: DIAM, DEN, RATIO_R, RWET, RCM
-    REAL(f8)  :: DIAM, DEN, RATIO_R, RWET, RUM
-    REAL(f8)  :: FAC1, FAC2
-    REAL(f8)  :: EB, EIM, EIN, R1, AA, VTS
-    ! New variables added (jaegle 5/11/11)
-    REAL(f8)  :: SW
-    REAL(f8)  :: SALT_MASS, SALT_MASS_TOTAL, VTS_WEIGHT, DMIDW ! for weighting the settling velocity
-    REAL(f8)  :: D0, D1  !lower and upper bounds of sea-salt dry diameter bins
-    REAL(f8)  :: DEDGE
-    REAL(f8)  :: DEN1, WTP
-    INTEGER   :: ID,NR
-    LOGICAL, SAVE          :: FIRST = .TRUE.
-
-    !increment of radius for integration of settling velocity (um)
-    REAL(f8), PARAMETER      :: DR    = 5.e-2_f8
+    REAL(f8), PARAMETER   :: C1       =  0.7674_f8
+    REAL(f8), PARAMETER   :: C2       =  3.079_f8
+    REAL(f8), PARAMETER   :: C3       =  2.573e-11_f8
+    REAL(f8), PARAMETER   :: C4       = -1.424_f8
+    REAL(f8), PARAMETER   :: E0       =  3.0_f8
 
     ! Parameters for polynomial coefficients to derive seawater
     ! density. From Tang et al. (1997) - jaegle 5/11/11
-    REAL(f8),  PARAMETER     :: A1 =  7.93e-3_f8
-    REAL(f8),  PARAMETER     :: A2 = -4.28e-5_f8
-    REAL(f8),  PARAMETER     :: A3 =  2.52e-6_f8
-    REAL(f8),  PARAMETER     :: A4 = -2.35e-8_f8
-    REAL(f8),  PARAMETER     :: EPSI = 1.0e-4_f8
+    REAL(f8),  PARAMETER  :: A1       =  7.93e-3_f8
+    REAL(f8),  PARAMETER  :: A2       = -4.28e-5_f8
+    REAL(f8),  PARAMETER  :: A3       =  2.52e-6_f8
+    REAL(f8),  PARAMETER  :: A4       = -2.35e-8_f8
+    REAL(f8),  PARAMETER  :: EPSI     =  1.0e-4_f8
 
     ! parameters for assumed size distribution of accumulation and coarse
     ! mode sea salt aerosols, as described in Jaegle et al. (ACP, 11, 2011)
     ! (jaegle, 5/11/11)
     ! 1) geometric dry mean diameters (microns)
-    REAL(f8),  PARAMETER     ::   RG_A = 0.085e+0_f8
-    REAL(f8),  PARAMETER     ::   RG_C = 0.4e+0_f8
+    REAL(f8),  PARAMETER  :: RG_A     =  0.085e+0_f8
+    REAL(f8),  PARAMETER  :: RG_C     =  0.4e+0_f8
     ! 2) sigma of the size distribution
-    REAL(f8),  PARAMETER     ::   SIG_A = 1.5e+0_f8
-    REAL(f8),  PARAMETER     ::   SIG_C = 1.8e+0_f8
+    REAL(f8),  PARAMETER  :: SIG_A    =  1.5e+0_f8
+    REAL(f8),  PARAMETER  :: SIG_C    =  1.8e+0_f8
+
+    !increment of radius for integration of settling velocity (um)
+    REAL(f8), PARAMETER   :: DR       =  5.0e-2_f8
+
+    ! Emerson et al. (2020) added parameters
+    REAL(f8), PARAMETER   :: UPSILON  =  0.8_f8
+    REAL(f8), PARAMETER   :: BETA     =  1.7_f8
+    REAL(f8), PARAMETER   :: CB       =  0.2_f8
+    REAL(f8), PARAMETER   :: CIN      =  2.5_f8
+    REAL(f8), PARAMETER   :: CIM      =  0.4_f8
+!
+! !LOCAL VARIABLES:
+!
+
+    ! SAVEd scalars
+    LOGICAL, SAVE :: FIRST = .TRUE.
+
+    !Scalars
+    INTEGER       :: N
+    REAL(f8)      :: AIRVS    ! kinematic viscosity of Air (m^2/s)
+    REAL(f8)      :: DP       ! Diameter of aerosol [um]
+    REAL(f8)      :: PDP      ! Press * Dp
+    REAL(f8)      :: CONST    ! Constant for settling velocity calculations
+    REAL(f8)      :: SLIP     ! Slip correction factor
+    REAL(f8)      :: VISC     ! Viscosity of air (Pa s)
+    REAL(f8)      :: DIFF     ! Brownian Diffusion constant for particles (m2/s)
+    REAL(f8)      :: SC, ST   ! Schmidt and Stokes number (nondim)
+    REAL(f8)      :: RHBL     ! Relative humidity local
+
+    REAL(f8)      :: DIAM, DEN, RATIO_R, RWET, RUM
+    REAL(f8)      :: FAC1, FAC2
+    REAL(f8)      :: EB, EIM, EIN, R1, AA, VTS
+
+    ! New variables added (jaegle 5/11/11)
+    REAL(f8)      :: SW
+    REAL(f8)      :: SALT_MASS, SALT_MASS_TOTAL, VTS_WEIGHT, DMIDW ! for weighting the settling velocity
+    REAL(f8)      :: D0, D1  !lower and upper bounds of sea-salt dry diameter bins
+    REAL(f8)      :: DEDGE
+    REAL(f8)      :: DEN1, WTP
+    INTEGER       :: ID,NR
 
     !=======================================================================
     !   #  LUC [Zhang et al., 2001]                GEOS-CHEM LUC (Corr. #)
@@ -2871,19 +3239,19 @@ CONTAINS
     DATA   A /  2.0e+0_f8,   5.0e+0_f8,   2.0e+0_f8,   5.0e+0_f8,  5.0e+0_f8, &
                 2.0e+0_f8,   2.0e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
                10.0e+0_f8, -999.e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
-               
+
                 2.0e+0_f8,   5.0e+0_f8,   2.0e+0_f8,   5.0e+0_f8,  5.0e+0_f8, &
                 2.0e+0_f8,   2.0e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
                10.0e+0_f8, -999.e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
-               
+
                 2.0e+0_f8,   5.0e+0_f8,   5.0e+0_f8,  10.0e+0_f8,  5.0e+0_f8, &
                 5.0e+0_f8,   5.0e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
                10.0e+0_f8, -999.e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
-               
+
                 2.0e+0_f8,   5.0e+0_f8,   5.0e+0_f8,  10.0e+0_f8,  5.0e+0_f8, &
                 5.0e+0_f8,   5.0e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
                10.0e+0_f8, -999.e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
-               
+
                 2.0e+0_f8,   5.0e+0_f8,   2.0e+0_f8,   5.0e+0_f8,  5.0e+0_f8, &
                 2.0e+0_f8,   2.0e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
                10.0e+0_f8, -999.e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8  /
@@ -3126,7 +3494,12 @@ CONTAINS
 
     ! Schmidt number
     SC   = AIRVS / DIFF
-    EB   = 1.e+0_f8/SC**(gamma(LUC))
+    !EB   = 1.e+0_f8/SC**(gamma(LUC))
+    !-------------------------------------------------------------
+    ! NOTE: This loses precision, use TWO_THIRDS parameter instead
+    !EB   = CB/SC**(0.6667e+0_f8) ! Emerson 2020 update JRP
+    !-------------------------------------------------------------
+    EB   = CB/SC**TWO_THIRDS      ! Emerson 2020 update JRP
 
     ! Stokes number
     IF ( AA < 0e+0_f8 ) then
@@ -3134,15 +3507,18 @@ CONTAINS
        EIN  = 0e+0_f8
     ELSE
        ST   = VTS   * USTAR / ( g0 * AA )          ! for vegetated surfaces
-       EIN  = 0.5e+0_f8 * ( DIAM / AA )**2
+       !EIN  = 0.5e+0_f8 * ( DIAM / AA )**2
+       EIN  = CIN * ( DIAM / AA )**(UPSILON) ! Emerson 2020 update JRP
     ENDIF
 
     ! Use the formulation of Slinn and Slinn (1980) for the impaction over
     ! water surfaces (jaegle 5/11/11)
     IF (LUC == 14) THEN
-       EIM  = 10.e+0_f8**( -3.e+0_f8/ ST )         ! for water surfaces
+       EIM  = 10.e+0_f8**( -3.e+0_f8/ ST )         ! for water surface
+       ! JRP: Emerson doesn't describe what to do here, so I'm leaving as is
     ELSE
-       EIM  = ( ST / ( ALPHA(LUC) + ST ) )**(BETA)
+       !EIM  = ( ST / ( ALPHA(LUC) + ST ) )**(BETA)
+       EIM  = CIM * ( ST / ( ALPHA(LUC) + ST ) )**(BETA) ! Emerson 2020 update
        EIM  = MIN( EIM, 0.6e+0_f8 )
     ENDIF
 
@@ -3310,15 +3686,18 @@ CONTAINS
 !------------------------------------------------------------------------------
 !BOC
 !
+! !DEFINED PARAMETERS:
+!
+    REAL(f8), PARAMETER   :: C1    =  0.7674_f8
+    REAL(f8), PARAMETER   :: C2    =  3.079_f8
+    REAL(f8), PARAMETER   :: C3    =  2.573e-11_f8
+    REAL(f8), PARAMETER   :: C4    = -1.424_f8
+    REAL(f8), PARAMETER   :: BETA  =  2.0_f8
+    REAL(f8), PARAMETER   :: E0    =  1.0_f8
+!
 ! !LOCAL VARIABLES:
 !
-    INTEGER               :: N
-    REAL(f8), PARAMETER   :: C1 = 0.7674e+0_f8
-    REAL(f8), PARAMETER   :: C2 = 3.079e+0_f8
-    REAL(f8), PARAMETER   :: C3 = 2.573e-11_f8
-    REAL(f8), PARAMETER   :: C4 = -1.424e+0_f8
-    REAL(f8), PARAMETER   :: BETA  = 2.e+0_f8
-    REAL(f8), PARAMETER   :: E0 = 1.e+0_f8
+    INTEGER   :: N
     REAL(f8)  :: AIRVS       ! kinematic viscosity of Air (m^2/s)
     REAL(f8)  :: DP          ! Diameter of aerosol [um]
     REAL(f8)  :: PDP         ! Press * Dp
@@ -3474,6 +3853,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 Apr 2004 - R. Yantosca - Initial version
+!  26 Jan 2021 - J. Pierce   - Update to Emerson et al. PNAS (2020) parameters
 !  See https://github.com/geoschem/geos-chem for complete history
 !EOP
 !------------------------------------------------------------------------------
@@ -3481,13 +3861,22 @@ CONTAINS
 !
 ! !LOCAL VARIABLES:
 !
-    INTEGER               :: N
-    REAL(f8), PARAMETER   :: C1 = 0.7674e+0_f8
-    REAL(f8), PARAMETER   :: C2 = 3.079e+0_f8
-    REAL(f8), PARAMETER   :: C3 = 2.573e-11_f8
-    REAL(f8), PARAMETER   :: C4 = -1.424e+0_f8
-    REAL(f8), PARAMETER   :: BETA  = 2.e+0_f8
-    REAL(f8), PARAMETER   :: E0 = 3.e+0_f8
+    REAL(f8), PARAMETER   :: C1       =  0.7674_f8
+    REAL(f8), PARAMETER   :: C2       =  3.079_f8
+    REAL(f8), PARAMETER   :: C3       =  2.573e-11_f8
+    REAL(f8), PARAMETER   :: C4       = -1.424_f8
+    REAL(f8), PARAMETER   :: E0       =  3.0_f8
+
+    ! Emerson et al. (2020) added parameters
+    REAL(f8), PARAMETER   :: UPSILON  =  0.8_f8
+    REAL(f8), PARAMETER   :: BETA     =  1.7_f8
+    REAL(f8), PARAMETER   :: CB       =  0.2_f8
+    REAL(f8), PARAMETER   :: CIN      =  2.5_f8
+    REAL(f8), PARAMETER   :: CIM      =  0.4_f8
+!
+! !LOCAL VARIABLES:
+!
+    INTEGER   :: N
     REAL(f8)  :: AIRVS       ! kinematic viscosity of Air (m^2/s)
     REAL(f8)  :: DP          ! Diameter of aerosol [um]
     REAL(f8)  :: PDP         ! Press * Dp
@@ -3497,6 +3886,7 @@ CONTAINS
     REAL(f8)  :: DIFF        ! Brownian Diffusion constant for particles (m2/s)
     REAL(f8)  :: SC, ST      ! Schmidt and Stokes number (nondim)
     REAL(f8)  :: DIAM, DEN
+
     REAL(f8)  :: EB, EIM, EIN, R1, AA, VTS
 
     !=======================================================================
@@ -3531,7 +3921,7 @@ CONTAINS
     !   alpha  50.0,  1,3,  2.0, 50.0,100.0,100.0,  1.5
     !   gamma  0.54, 0.54, 0.54, 0.54, 0.50, 0.50, 0.56
     !=======================================================================
-    REAL(f8)  :: ALPHA(15) = (/   1.0e+0_f8,   0.6e+0_f8,  1.1e+0_f8, & 
+    REAL(f8)  :: ALPHA(15) = (/   1.0e+0_f8,   0.6e+0_f8,  1.1e+0_f8, &
                                   0.8e+0_f8,   0.8e+0_f8,  1.2e+0_f8, &
                                   1.2e+0_f8,  50.0e+0_f8, 50.0e+0_f8, &
                                   1.3e+0_f8,   2.0e+0_f8, 50.0e+0_f8, &
@@ -3564,19 +3954,19 @@ CONTAINS
     DATA   A / 2.0e+0_f8,   5.0e+0_f8,   2.0e+0_f8,   5.0e+0_f8,  5.0e+0_f8, &
                2.0e+0_f8,   2.0e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
               10.0e+0_f8, -999.e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
-              
+
                2.0e+0_f8,   5.0e+0_f8,   2.0e+0_f8,   5.0e+0_f8,  5.0e+0_f8, &
                2.0e+0_f8,   2.0e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
               10.0e+0_f8, -999.e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
-              
+
                2.0e+0_f8,   5.0e+0_f8,   5.0e+0_f8,  10.0e+0_f8,  5.0e+0_f8, &
                5.0e+0_f8,   5.0e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
               10.0e+0_f8, -999.e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
-              
+
                2.0e+0_f8,   5.0e+0_f8,   5.0e+0_f8,  10.0e+0_f8,  5.0e+0_f8, &
                5.0e+0_f8,   5.0e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
               10.0e+0_f8, -999.e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
-              
+
                2.0e+0_f8,   5.0e+0_f8,   2.0e+0_f8,   5.0e+0_f8,  5.0e+0_f8, &
                2.0e+0_f8,   2.0e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
               10.0e+0_f8, -999.e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8  /
@@ -3684,7 +4074,14 @@ CONTAINS
 
     ! Schmidt number
     SC   = AIRVS / DIFF
-    EB   = 1.e+0_f8/SC**(gamma(LUC))
+    !EB   = 1.e+0_f8/SC**(gamma(LUC))
+
+    !--------------------------------------------------------------
+    ! NOTE: This loses precision, use TWO_THIRDS parameter instead
+    ! (bmy, 30 Sep 2021)
+    !EB   = CB/SC**(0.6667e+0_f8) ! Emerson 2020 update JRP
+    !--------------------------------------------------------------
+    EB   = CB/SC**TWO_THIRDS ! Emerson 2020 update JRP
 
     ! Stokes number
     IF ( AA < 0e+0_f8 ) then
@@ -3692,10 +4089,12 @@ CONTAINS
        EIN  = 0e+0_f8
     ELSE
        ST   = VTS   * USTAR / ( g0 * AA )          ! for vegetated surfaces
-       EIN  = 0.5e+0_f8 * ( DIAM / AA )**2
+       !EIN  = 0.5e+0_f8 * ( DIAM / AA )**2
+       EIN  = CIN * ( DIAM / AA )**(UPSILON) ! Emerson 2020 update JRP
     ENDIF
 
-    EIM  = ( ST / ( ALPHA(LUC) + ST ) )**(BETA)
+    !EIM  = ( ST / ( ALPHA(LUC) + ST ) )**(BETA)
+    EIM  = CIM * ( ST / ( ALPHA(LUC) + ST ) )**(BETA) ! Emerson 2020 update JRP
 
     EIM  = MIN( EIM, 0.6e+0_f8 )
 
@@ -3718,7 +4117,8 @@ CONTAINS
 ! !IROUTINE: dust_sfcrsii
 !
 ! !DESCRIPTION: Function DUST\_SFCRSII computes the aerodynamic resistance of
-!  dust aerosol species according to Zhang et al 2001.  We do not consider the
+!  dust aerosol species according to Zhang et al 2001 modified by Emerson et al.
+!  2020.  We do not consider the
 !  hygroscopic growth of the aerosol particles. (rjp, tdf, bec, bmy, 4/1/04,
 !  4/15/05)
 !\\
@@ -3745,20 +4145,30 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 Apr 2004 - R. Yantosca - Initial version
+!  26 Jan 2021 - J. Pierce   - Update to Emerson et al. PNAS (2020) parameters
 !  See https://github.com/geoschem/geos-chem for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
+! !DEFINED PARAMETERS
+!
+    REAL(f8), PARAMETER   :: C1       =  0.7674_f8
+    REAL(f8), PARAMETER   :: C2       =  3.079_f8
+    REAL(f8), PARAMETER   :: C3       =  2.573e-11_f8
+    REAL(f8), PARAMETER   :: C4       = -1.424_f8
+    REAL(f8), PARAMETER   :: E0       =  3.0_f8
+
+    ! Emerson et al. (2020) added parameters
+    REAL(f8), PARAMETER   :: UPSILON  =  0.8_f8
+    REAL(f8), PARAMETER   :: BETA     =  1.7_f8
+    REAL(f8), PARAMETER   :: CB       =  0.2_f8
+    REAL(f8), PARAMETER   :: CIN      =  2.5_f8
+    REAL(f8), PARAMETER   :: CIM      =  0.4_f8
+!
 ! !LOCAL VARIABLES:
 !
-    INTEGER               :: N
-    REAL(f8), PARAMETER   :: C1 = 0.7674e+0_f8
-    REAL(f8), PARAMETER   :: C2 = 3.079e+0_f8
-    REAL(f8), PARAMETER   :: C3 = 2.573e-11_f8
-    REAL(f8), PARAMETER   :: C4 = -1.424e+0_f8
-    REAL(f8), PARAMETER   :: BETA  = 2.e+0_f8
-    REAL(f8), PARAMETER   :: E0 = 3.e+0_f8
+    INTEGER   :: N
     REAL(f8)  :: AIRVS       ! kinematic viscosity of Air (m^2/s)
     REAL(f8)  :: DP          ! Diameter of aerosol [um]
     REAL(f8)  :: PDP         ! Press * Dp
@@ -3767,6 +4177,7 @@ CONTAINS
     REAL(f8)  :: VISC        ! Viscosity of air (Pa s)
     REAL(f8)  :: DIFF        ! Brownian Diffusion constant for particles (m2/s)
     REAL(f8)  :: SC, ST      ! Schmidt and Stokes number (nondim)
+
     REAL(f8)  :: EB, EIM, EIN, R1, AA, VTS
 
     !=======================================================================
@@ -3834,19 +4245,19 @@ CONTAINS
     DATA   A /  2.0e+0_f8,   5.0e+0_f8,   2.0e+0_f8,   5.0e+0_f8,  5.0e+0_f8, &
                 2.0e+0_f8,   2.0e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
                10.0e+0_f8, -999.e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
-               
+
                 2.0e+0_f8,   5.0e+0_f8,   2.0e+0_f8,   5.0e+0_f8,  5.0e+0_f8, &
                 2.0e+0_f8,   2.0e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
                10.0e+0_f8, -999.e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
-               
+
                 2.0e+0_f8,   5.0e+0_f8,   5.0e+0_f8,  10.0e+0_f8,  5.0e+0_f8, &
                 5.0e+0_f8,   5.0e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
                10.0e+0_f8, -999.e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
-               
+
                 2.0e+0_f8,   5.0e+0_f8,   5.0e+0_f8,  10.0e+0_f8,  5.0e+0_f8, &
                 5.0e+0_f8,   5.0e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
                10.0e+0_f8, -999.e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
-               
+
                 2.0e+0_f8,   5.0e+0_f8,   2.0e+0_f8,   5.0e+0_f8,  5.0e+0_f8, &
                 2.0e+0_f8,   2.0e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8, &
                10.0e+0_f8, -999.e+0_f8, -999.e+0_f8, -999.e+0_f8, 10.0e+0_f8  /
@@ -3948,7 +4359,13 @@ CONTAINS
 
     ! Schmidt number
     SC   = AIRVS / DIFF
-    EB   = 1.e+0_f8/SC**(gamma(LUC))
+    !EB   = 1.e+0_f8/SC**(gamma(LUC))
+    !---------------------------------------------------------------
+    ! NOTE: this loses precision, use TWO_THIRDS instead
+    ! (bmy, 30 Sep 2021)
+    !EB   = CB/SC**(0.6667e+0_f8) ! Emerson 2020 update JRP
+    !---------------------------------------------------------------
+    EB   = CB/SC**TWO_THIRDS  ! Emerson 2020 update JRP
 
     ! Stokes number
     IF ( AA < 0e+0_f8 ) then
@@ -3956,10 +4373,12 @@ CONTAINS
        EIN  = 0e+0_f8
     ELSE
        ST   = VTS   * USTAR / ( g0 * AA )          ! for vegetated surfaces
-       EIN  = 0.5e+0_f8 * ( DIAM / AA )**2
+       !EIN  = 0.5e+0_f8 * ( DIAM / AA )**2
+       EIN  = CIN * ( DIAM / AA )**(UPSILON) ! Emerson 2020 update JRP
     ENDIF
 
-    EIM  = ( ST / ( ALPHA(LUC) + ST ) )**(BETA)
+    !EIM  = ( ST / ( ALPHA(LUC) + ST ) )**(BETA)
+    EIM  = CIM * ( ST / ( ALPHA(LUC) + ST ) )**(BETA) ! Emerson 2020 update JRP
 
     EIM  = MIN( EIM, 0.6e+0_f8 )
 
@@ -4033,6 +4452,8 @@ CONTAINS
 !
     LOGICAL                :: LDRYD
     LOGICAL                :: IS_Hg
+    INTEGER                :: C
+    INTEGER                :: D
     INTEGER                :: N
 
     ! Strings
@@ -4047,7 +4468,6 @@ CONTAINS
 
     ! Initialize
     RC        = GC_SUCCESS
-
     ErrMsg    = ''
     ThisLoc   = ' -> at Init_Drydep (in module GeosCore/drydep_mod.F)'
 
@@ -4104,9 +4524,14 @@ CONTAINS
     id_ALD2   = 0
     id_MENO3  = 0
     id_ETNO3  = 0
-    id_HNO3   = IND_('HNO3'  )
-    id_PAN    = IND_('PAN'   )
-    id_IHN1   = IND_('IHN1'  )
+    id_MOH    = 0
+    id_Hg0    = 0
+    id_HNO3   = Ind_('HNO3'  )
+    id_PAN    = Ind_('PAN'   )
+    id_IHN1   = Ind_('IHN1'  )
+    id_H2O2   = Ind_('H2O2'  )
+    id_SO2    = Ind_('SO2'   )
+    id_NH3    = Ind_('NH3'   )
 
     !===================================================================
     ! Arrays that hold information about dry-depositing species
@@ -4190,7 +4615,7 @@ CONTAINS
     ! ----------------------------------------------------------------
     ! NUMDEP    Number of dry depositing species
     ! NTRAIND   GEOS-Chem species ID number (advected index)
-    ! NDVZIND   Coresponding index in the DVEL drydep velocity array
+    ! NDVZIND   Coresponding index in the drydep velocity array
     ! HSTAR     Henry's law solubility constant [M atm-1]
     ! F0        Reactivity (0.0 = not reactive, 1.0=very reactive)
     ! XMW       Molecular weight of species [kg mol-1]
@@ -4200,17 +4625,8 @@ CONTAINS
     ! KOA       POPs KOA parameter
     !
     ! NOTES:
-    ! (1) For XMW, we take the species emitted molecular weight
-    !      (EmMW_g * 1e-3).  Several hydrocarbons are transported
-    !      as equivalent molecules of carbon.  In this case the
-    !      EmMw_g will be 12.0.
-    ! (2) We have edited the molecular weights of some species to
-    !      match the prior code.  Some of these definitions are
-    !      inconsistent with the listed molecular weights. (e.g.
-    !      ACET is transported as 3 carbons, but we give it a
-    !      molecular weight of 58 instead of 12).  These will need
-    !      to be researched further.
-    ! (3) The deposition names of SO4s and NITs need to be in
+    ! (1) For XMW, we take the species molecular weight (MW_g * 1e-3).
+    ! (2) The deposition names of SO4s and NITs need to be in
     !      uppercase.  Therefore, we overwrite the values from
     !      the species database with SO4S, NITS.
     !=================================================================
@@ -4227,20 +4643,32 @@ CONTAINS
           NTRAIND(NUMDEP)   = SpcInfo%ModelID
           NDVZIND(NUMDEP)   = SpcInfo%DryDepID
           DEPNAME(NUMDEP)   = TRIM( SpcInfo%Name )
-          HSTAR(NUMDEP)     = DBLE( SpcInfo%DD_Hstar_old   )
-          F0(NUMDEP)        = DBLE( SpcInfo%DD_F0          )
-          KOA(NUMDEP)       = DBLE( SpcInfo%DD_KOA         )
           XMW(NUMDEP)       = DBLE( SpcInfo%MW_g * 1e-3_fp )
-          AIROSOL(NUMDEP)   = ( .not. SpcInfo%Is_Gas       )
+          AIROSOL(NUMDEP)   = ( SpcInfo%Is_Aerosol )
+
+          ! Only copy F0 if it's not a missing value
+          IF ( SpcInfo%DD_F0 > 0.0_fp ) THEN
+             F0(NUMDEP)     = DBLE( SpcInfo%DD_F0 )
+          ENDIF
+
+          ! Only copy HSTAR if it's not a missing value
+          IF ( SpcInfo%DD_Hstar > 0.0_fp ) THEN
+             HSTAR(NUMDEP)  = DBLE( SpcInfo%DD_HStar )
+          ENDIF
+
+          ! Only copy KOA if it's not a missing value
+          IF ( SpcInfo%DD_KOA > 0.0_fp ) THEN
+             KOA(NUMDEP)    = DBLE( SpcInfo%DD_KOA )
+          ENDIF
 
           ! Only copy DENSITY if it's not a missing value
           IF ( SpcInfo%Density > 0.0_fp ) THEN
-             A_DEN(NUMDEP)  = DBLE( SpcInfo%Density        )
+             A_DEN(NUMDEP)  = DBLE( SpcInfo%Density )
           ENDIF
 
           ! Only copy RADIUS if it's not a missing value
           IF ( SpcInfo%Radius > 0.0_fp ) THEN
-             A_RADI(NUMDEP) = DBLE( SpcInfo%Radius         )
+             A_RADI(NUMDEP) = DBLE( SpcInfo%Radius )
           ENDIF
 
           !-----------------------------------------------------
@@ -4248,71 +4676,79 @@ CONTAINS
           !-----------------------------------------------------
           SELECT CASE ( TRIM( SpcInfo%Name ) )
 
-          CASE( 'ACET' )
-             ! Flag the species ID of ACET for use above.
-             id_ACET = SpcInfo%ModelId
+             CASE( 'ACET' )
+                ! Flag the species ID of ACET for use above.
+                id_ACET = SpcInfo%ModelId
 
-          CASE( 'O3' )
-             ! Flag the species ID of O3 for use above
-             ID_O3 = SpcInfo%ModelId
+             CASE( 'O3' )
+                ! Flag the species ID of O3 for use above
+                ID_O3 = SpcInfo%ModelId
 
-          CASE( 'ALD2' )
-             ! Flag the species ID of ALD2 for use above.
-             id_ALD2 = SpcInfo%ModelId
+             CASE( 'ALD2' )
+                ! Flag the species ID of ALD2 for use above.
+                id_ALD2 = SpcInfo%ModelId
 
-          CASE( 'MENO3' )
-             ! Flag the species ID of MENO3 for use above.
-             id_MENO3 = SpcInfo%ModelId
+             CASE( 'MENO3' )
+                ! Flag the species ID of MENO3 for use above.
+                id_MENO3 = SpcInfo%ModelId
 
-          CASE( 'ETNO3' )
-             ! Flag the species ID of ETNO3 for use above.
-             id_ETNO3 = SpcInfo%ModelId
+             CASE( 'ETNO3' )
+                ! Flag the species ID of ETNO3 for use above.
+                id_ETNO3 = SpcInfo%ModelId
 
-          CASE( 'NITs', 'NITS' )
-             ! DEPNAME for NITs has to be in all caps, for
-             ! backwards compatibility with older code.
-             DEPNAME(NUMDEP) = 'NITS'
+             CASE( 'MOH' )
+                ! Flag the species ID of MOH for use above.
+                id_MOH = SpcInfo%ModelId
 
-          CASE( 'N2O5', 'HC187' )
-             ! These species scale to the Vd of HNO3. We will
-             ! explicitly compute the Vd of these species instead
-             ! of assigning the Vd of HNO3 from the DVEL array.
-             ! The scaling is applied in DO_DRYDEP using FLAG=1.
-             !
-             ! Make sure to set XMW to the MW of HNO3
-             ! for the computation of Vd to work properly.
-             XMW(NUMDEP)  = State_Chm%SpcData(id_HNO3)%Info%MW_g * 1e-3_fp
-             FLAG(NUMDEP) = 1
+             CASE( 'HG0', 'Hg0' )
+                ! for finding Hg0 drydep veloc
+                id_Hg0 = SpcInfo%ModelId
 
-          CASE(  'MPAN', 'PPN', 'R4N2' )
-             ! These specied scale to the Vd of PAN.  We will
-             ! explicitly compute the Vd of these species instead
-             ! of assigning the Vd of PAN from the DVEL array.
-             ! The scaling is applied in DO_DRYDEP using FLAG=2.
-             !
-             ! Make sure to set XMW to the MW of PAN
-             ! for the computation of Vd to work properly.
-             XMW(NUMDEP)  = State_Chm%SpcData(id_PAN)%Info%MW_g * 1e-3_fp
-             FLAG(NUMDEP) = 2
+             CASE( 'NITs', 'NITS' )
+                ! DEPNAME for NITs has to be in all caps, for
+                ! backwards compatibility with older code.
+                DEPNAME(NUMDEP) = 'NITS'
 
-          CASE( 'MONITS', 'MONITU', 'HONIT' )
-             ! These species scale to the Vd of ISOPN. We will
-             ! explicitly compute the Vd of these species instead
-             ! of assigning the Vd of ISOPN from the DVEL array.
-             ! The scaling is applied in DO_DRYDEP using FLAG=3.
-             !
-             ! Make sure to set XMW to the MW of ISOPN
-             ! for the computation of Vd to work properly.
-             XMW(NUMDEP)  = State_Chm%SpcData(id_IHN1)%Info%MW_g * 1e-3_fp
-             FLAG(NUMDEP) = 3
+             CASE( 'N2O5', 'HC187' )
+                ! These species scale to the Vd of HNO3. We will
+                ! explicitly compute the Vd of these species instead
+                ! of assigning the Vd of HNO3 from the drydep velocity array.
+                ! The scaling is applied in DO_DRYDEP using FLAG=1.
+                !
+                ! Make sure to set XMW to the MW of HNO3
+                ! for the computation of Vd to work properly.
+                XMW(NUMDEP)  = State_Chm%SpcData(id_HNO3)%Info%MW_g * 1e-3_fp
+                FLAG(NUMDEP) = 1
 
-          CASE( 'SO4s', 'SO4S' )
-             ! DEPNAME for SO4s has to be in all caps, for
-             ! backwards compatibility with older code
-             DEPNAME(NUMDEP) = 'SO4S'
+             CASE(  'MPAN', 'PPN', 'R4N2' )
+                ! These specied scale to the Vd of PAN.  We will
+                ! explicitly compute the Vd of these species instead
+                ! of assigning the Vd of PAN from the drydep velocity array.
+                ! The scaling is applied in DO_DRYDEP using FLAG=2.
+                !
+                ! Make sure to set XMW to the MW of PAN
+                ! for the computation of Vd to work properly.
+                XMW(NUMDEP)  = State_Chm%SpcData(id_PAN)%Info%MW_g * 1e-3_fp
+                FLAG(NUMDEP) = 2
 
-          CASE DEFAULT
-             ! Do nothing
+             CASE( 'MONITS', 'MONITU', 'HONIT' )
+                ! These species scale to the Vd of ISOPN. We will
+                ! explicitly compute the Vd of these species instead
+                ! of assigning the Vd of ISOPN from the drydep velocity array.
+                ! The scaling is applied in DO_DRYDEP using FLAG=3.
+                !
+                ! Make sure to set XMW to the MW of ISOPN
+                ! for the computation of Vd to work properly.
+                XMW(NUMDEP)  = State_Chm%SpcData(id_IHN1)%Info%MW_g * 1e-3_fp
+                FLAG(NUMDEP) = 3
+
+             CASE( 'SO4s', 'SO4S' )
+                ! DEPNAME for SO4s has to be in all caps, for
+                ! backwards compatibility with older code
+                DEPNAME(NUMDEP) = 'SO4S'
+
+             CASE DEFAULT
+                ! Do nothing
 
           END SELECT
 
@@ -4402,19 +4838,19 @@ CONTAINS
     !=================================================================
     ! CLEANUP_DRYDEP begins here!
     !=================================================================
-    IF ( ALLOCATED( A_DEN    ) ) DEALLOCATE( A_DEN    )
-    IF ( ALLOCATED( A_RADI   ) ) DEALLOCATE( A_RADI   )
-    IF ( ALLOCATED( AIROSOL  ) ) DEALLOCATE( AIROSOL  )
-    IF ( ALLOCATED( DEPNAME  ) ) DEALLOCATE( DEPNAME  )
-    IF ( ALLOCATED( DMID     ) ) DEALLOCATE( DMID     )
-    IF ( ALLOCATED( F0       ) ) DEALLOCATE( F0       )
-    IF ( ALLOCATED( FLAG     ) ) DEALLOCATE( FLAG     )
-    IF ( ALLOCATED( HSTAR    ) ) DEALLOCATE( HSTAR    )
-    IF ( ALLOCATED( KOA      ) ) DEALLOCATE( KOA      )
-    IF ( ALLOCATED( NDVZIND  ) ) DEALLOCATE( NDVZIND  )
-    IF ( ALLOCATED( NTRAIND  ) ) DEALLOCATE( NTRAIND  )
-    IF ( ALLOCATED( SALT_V   ) ) DEALLOCATE( SALT_V   )
-    IF ( ALLOCATED( XMW      ) ) DEALLOCATE( XMW      )
+    IF ( ALLOCATED( A_DEN     ) ) DEALLOCATE( A_DEN     )
+    IF ( ALLOCATED( A_RADI    ) ) DEALLOCATE( A_RADI    )
+    IF ( ALLOCATED( AIROSOL   ) ) DEALLOCATE( AIROSOL   )
+    IF ( ALLOCATED( DEPNAME   ) ) DEALLOCATE( DEPNAME   )
+    IF ( ALLOCATED( DMID      ) ) DEALLOCATE( DMID      )
+    IF ( ALLOCATED( F0        ) ) DEALLOCATE( F0        )
+    IF ( ALLOCATED( FLAG      ) ) DEALLOCATE( FLAG      )
+    IF ( ALLOCATED( HSTAR     ) ) DEALLOCATE( HSTAR     )
+    IF ( ALLOCATED( KOA       ) ) DEALLOCATE( KOA       )
+    IF ( ALLOCATED( NDVZIND   ) ) DEALLOCATE( NDVZIND   )
+    IF ( ALLOCATED( NTRAIND   ) ) DEALLOCATE( NTRAIND   )
+    IF ( ALLOCATED( SALT_V    ) ) DEALLOCATE( SALT_V    )
+    IF ( ALLOCATED( XMW       ) ) DEALLOCATE( XMW       )
 
   END SUBROUTINE CLEANUP_DRYDEP
 !EOC

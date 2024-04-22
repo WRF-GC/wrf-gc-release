@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -52,8 +52,7 @@ MODULE HCO_ReadList_Mod
 !
 ! !REVISION HISTORY:
 !  20 Apr 2013 - C. Keller   - Initial version
-!  01 Jul 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  01 Jul 2014 - R. Yantosca - Now use F90 free-format indentation
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !-----------------------------------------------------------------------------
 !BOC
@@ -63,7 +62,7 @@ MODULE HCO_ReadList_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -91,7 +90,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Apr 2013 - C. Keller - Initial version
-!  08 Aug 2018 - C. Keller - Add extra checks for 'exact' and 'range' fields.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -100,15 +99,19 @@ CONTAINS
 !
     INTEGER            :: intv
     LOGICAL            :: verb
-    CHARACTER(LEN=255) :: MSG
+    CHARACTER(LEN=255) :: MSG, LOC
 
     ! ================================================================
     ! ReadList_Set begins here
     ! ================================================================
+    LOC = 'ReadList_Set (HCO_READLIST_MOD.F90)'
 
     ! For error handling
-    CALL HCO_ENTER (HcoState%Config%Err,'ReadList_Set (hco_readlist_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER (HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Verbose mode
     verb = HCO_IsVerb( HcoState%Config%Err, 2 )
@@ -207,7 +210,7 @@ CONTAINS
   END SUBROUTINE ReadList_Set
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -242,6 +245,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Apr 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -257,11 +261,10 @@ CONTAINS
     ! ================================================================
 
     ! For error handling
-    CALL HCO_ENTER ( HcoState%Config%Err, &
-                    'ReadList_Read (hco_readlist_mod.F90)', RC )
+    CALL HCO_ENTER ( HcoState%Config%Err, LOC, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        MSG = 'Error in HCO_ENTER called from HEMCO ReadList_Read'
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC = LOC )
+       CALL HCO_ERROR( MSG, RC, THISLOC = LOC )
        RETURN
     ENDIF
 
@@ -285,7 +288,7 @@ CONTAINS
        CALL ReadList_Fill( HcoState, HcoState%ReadLists%Once, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           MSG = 'Error in ReadList_Fill (1) called from HEMCO ReadList_Read'
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC = LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC = LOC )
           RETURN
        ENDIF
     ENDIF
@@ -299,7 +302,7 @@ CONTAINS
        CALL ReadList_Fill( HcoState, HcoState%ReadLists%Year, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           MSG = 'Error in ReadList_Fill (2) called from HEMCO ReadList_Read'
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC = LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC = LOC )
           RETURN
        ENDIF
     ENDIF
@@ -313,7 +316,7 @@ CONTAINS
        CALL ReadList_Fill( HcoState, HcoState%ReadLists%Month, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           MSG = 'Error in ReadList_Fill (3) called from HEMCO ReadList_Read'
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC = LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC = LOC )
           RETURN
        ENDIF
     ENDIF
@@ -327,7 +330,7 @@ CONTAINS
        CALL ReadList_Fill( HcoState, HcoState%ReadLists%Day, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           MSG = 'Error in ReadList_Fill (4) called from HEMCO ReadList_Read'
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC = LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC = LOC )
           RETURN
        ENDIF
     ENDIF
@@ -341,7 +344,7 @@ CONTAINS
        CALL ReadList_Fill( HcoState, HcoState%ReadLists%Hour, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           MSG = 'Error in ReadList_Fill (5) called from HEMCO ReadList_Read'
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC = LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC = LOC )
           RETURN
        ENDIF
     ENDIF
@@ -355,7 +358,7 @@ CONTAINS
        CALL ReadList_Fill( HcoState, HcoState%ReadLists%Hour3, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           MSG = 'Error in ReadList_Fill (6) called from HEMCO ReadList_Read'
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC = LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC = LOC )
           RETURN
        ENDIF
     ENDIF
@@ -368,7 +371,7 @@ CONTAINS
     CALL ReadList_Fill( HcoState, HcoState%ReadLists%Always, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        MSG = 'Error in called ReadList_Fill (7) from HEMCO ReadList_Read'
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC = LOC )
+       CALL HCO_ERROR( MSG, RC, THISLOC = LOC )
        RETURN
     ENDIF
 
@@ -381,7 +384,7 @@ CONTAINS
   END SUBROUTINE ReadList_Read
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -408,9 +411,9 @@ CONTAINS
 !
 ! !USES:
 !
+    USE HCOIO_Util_Mod,     ONLY : HCOIO_ReadOther
+    USE HCOIO_Read_Mod,     ONLY : HCOIO_CloseAll
     USE HCOIO_DataRead_Mod, ONLY : HCOIO_DataRead
-    USE HCOIO_Read_Std_Mod, ONLY : HCOIO_ReadOther
-    USE HCOIO_Read_Std_Mod, ONLY : HCOIO_CloseAll
     USE HCO_FileData_Mod,   ONLY : FileData_ArrIsDefined
     USE HCO_FileData_Mod,   ONLY : FileData_ArrIsTouched
     USE HCO_EmisList_Mod,   ONLY : EmisList_Pass
@@ -429,17 +432,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Apr 2013 - C. Keller - Initial version
-!  23 Dec 2014 - C. Keller - Now pass container to EmisList immediately after
-!                            reading the data. Added second loop to remove
-!                            data arrays that are not used in EmisList.
-!  02 Feb 2015 - C. Keller - Now call tIDx_Assign here instead of in
-!                            hco_emislist_mod. This way, hco_emislist_mod
-!                            can also be used by hco_clock_mod.
-!  24 Mar 2015 - C. Keller - Now avoid closing/reopening the same file all
-!                            the time.
-!  24 Mar 2016 - C. Keller - Remove GetFileLUN and SaveFileLUN. This is now
-!                            handled in hcoio_read_std_mod.F90.
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -456,11 +449,10 @@ CONTAINS
     ! ================================================================
 
     ! For error handling
-    CALL HCO_ENTER (HcoState%Config%Err,&
-                   'ReadList_Fill (hco_readlist_mod.F90)', RC )
+    CALL HCO_ENTER (HcoState%Config%Err, LOC, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        MSG = 'Error in HCO_ENTER called from HEMCO ReadList_Fill'
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC = LOC )
+       CALL HCO_ERROR( MSG, RC, THISLOC = LOC )
        RETURN
     ENDIF
 
@@ -499,7 +491,7 @@ CONTAINS
              CALL HCOIO_ReadOther( HcoState, Lct, RC )
              IF ( RC /= HCO_SUCCESS ) THEN
                 MSG = 'Error in HCOIO_ReadOther called from HEMCO ReadList_Fill: ' // TRIM(Lct%Dct%cname)
-                CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC = LOC )
+                CALL HCO_ERROR( MSG, RC, THISLOC = LOC )
                 RETURN
              ENDIF
 
@@ -510,7 +502,7 @@ CONTAINS
              CALL HCOIO_DATAREAD( HcoState, Lct, RC )
              IF ( RC /= HCO_SUCCESS ) THEN
                 MSG = 'Error in HCOIO_DATAREAD called from HEMCO ReadList_Fill: ' // TRIM(Lct%Dct%cname)
-                CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC = LOC )
+                CALL HCO_ERROR( MSG, RC, THISLOC = LOC )
                 RETURN
              ENDIF
           ENDIF
@@ -533,7 +525,7 @@ CONTAINS
           CALL tIDx_Assign ( HcoState, Lct%Dct, RC )
           IF ( RC /= HCO_SUCCESS ) THEN
              MSG = 'Error in tIDx_Assign called from HEMCO ReadList_Fill: ' // TRIM(Lct%Dct%cname)
-             CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC = LOC )
+             CALL HCO_ERROR( MSG, RC, THISLOC = LOC )
              RETURN
           ENDIF
 
@@ -541,7 +533,7 @@ CONTAINS
           CALL EmisList_Pass( HcoState, Lct, RC )
           IF ( RC /= HCO_SUCCESS ) THEN
              MSG = 'Error in EmisList_Pass called from HEMCO ReadList_Fill: ' // TRIM(Lct%Dct%cname)
-             CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC = LOC )
+             CALL HCO_ERROR( MSG, RC, THISLOC = LOC )
              RETURN
           ENDIF
 
@@ -555,7 +547,7 @@ CONTAINS
     CALL HCOIO_CloseAll ( HcoState, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        MSG = 'Error in HCOIO_CloseAll called from HEMCO ReadList_Fill: ' // TRIM(Lct%Dct%cname)
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC = LOC )
+       CALL HCO_ERROR( MSG, RC, THISLOC = LOC )
        RETURN
     ENDIF
 
@@ -589,7 +581,7 @@ CONTAINS
   END SUBROUTINE ReadList_Fill
 !EOC
 !------------------------------------------------------------------------------
-!         Harvard-NASA Emissions Component (HEMCO)                   !
+!         Harmonized Emissions Component (HEMCO)                              !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -610,7 +602,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Apr 2013 - C. Keller - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -681,7 +673,7 @@ CONTAINS
   END SUBROUTINE DtCont_Add
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -701,39 +693,36 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Apr 2013 - C. Keller - Initial version
-!  07 Feb 2019 - C. Keller - Added counter
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
+
+    CHARACTER(LEN=255) :: errMsg, thisLoc
 
     ! ================================================================
     ! ReadList_Init begins here
     ! ================================================================
 
-    ! Allocate ReadList and all internal lists. Make sure all internal
-    ! lists are defined (nullified).
-    ALLOCATE ( ReadLists )
+    ! Initialize
+    RC = HCO_SUCCESS
 
-    ALLOCATE ( ReadLists%Once )
-    NULLIFY ( ReadLists%Once  )
+    ! Allocate the ReadLists object (which is really HcoState%ReadLists).
+    ALLOCATE( ReadLists, STAT=RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+       errMsg = 'Could not allocate ReadLists (=> HcoState%ReadLists)!'
+       CALL HCO_Error( errMsg, RC, thisLoc )
+       RETURN
+    ENDIF
 
-    ALLOCATE ( ReadLists%Year )
-    NULLIFY ( ReadLists%Year  )
-
-    ALLOCATE ( ReadLists%Month )
-    NULLIFY ( ReadLists%Month )
-
-    ALLOCATE ( ReadLists%Day )
-    NULLIFY ( ReadLists%Day   )
-
-    ALLOCATE ( ReadLists%Hour )
-    NULLIFY ( ReadLists%Hour  )
-
-    ALLOCATE ( ReadLists%Hour3 )
-    NULLIFY ( ReadLists%Hour3  )
-
-    ALLOCATE ( ReadLists%Always )
-    NULLIFY ( ReadLists%Always  )
+    ! Nullify pointer fields
+    ReadLists%Once          => NULL()
+    ReadLists%Year          => NULL()
+    ReadLists%Month         => NULL()
+    ReadLists%Day           => NULL()
+    ReadLists%Hour          => NULL()
+    ReadLists%Hour3         => NULL()
+    ReadLists%Always        => NULL()
 
     ! No file in buffer yet
     ReadLists%FileInArchive = ''
@@ -745,7 +734,7 @@ CONTAINS
   END SUBROUTINE ReadList_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -771,7 +760,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Apr 2013 - C. Keller - Initial version
-!  15 Mar 2015 - C. Keller - Added verbose number as input argument
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -824,7 +813,7 @@ CONTAINS
   END SUBROUTINE ReadList_Print
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -853,7 +842,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  13 Jan 2015 - C. Keller - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -922,7 +911,7 @@ CONTAINS
        IF ( This%Dct%DtaHome >= 0 ) THEN
           MSG = 'Cannot remove from ReadList. Data has already been read: ' // &
                 TRIM(This%Dct%cName)
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC = LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC = LOC )
        ENDIF
 
        ! Connect previous container to next container in list:
@@ -965,7 +954,7 @@ CONTAINS
   END SUBROUTINE ReadList_Remove
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -995,6 +984,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Apr 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC

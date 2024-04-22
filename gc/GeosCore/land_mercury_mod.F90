@@ -44,9 +44,6 @@ MODULE LAND_MERCURY_MOD
 !
 ! !PRIVATE TYPES:
 !
-  ! Keep a shadow variable of N_HG_CATS for backwards compatibility
-  INTEGER                :: N_HG_CATS
-
   ! Plant transpiration rate [m/s]
   REAL(fp),  ALLOCATABLE :: TRANSP(:,:)
 
@@ -83,7 +80,7 @@ CONTAINS
 ! !OUTPUT PARAMETERS:
 !
     ! Hg0 flux [kg/s]
-    REAL(fp),       INTENT(OUT) :: LFLUX(State_Grid%NX,State_Grid%NY,N_Hg_CATS)
+    REAL(fp),       INTENT(OUT) :: LFLUX(State_Grid%NX,State_Grid%NY)
 !
 ! !REVISION HISTORY:
 !  30 Aug 2010 - N. E. Selin, C. Holmes, B. Corbitt - Initial version
@@ -98,7 +95,7 @@ CONTAINS
     REAL(fp)              :: FRAC_SNOW_OR_ICE, FRAC_SNOWFREE_LAND
     LOGICAL               :: IS_LAND_OR_ICE
     REAL(fp), PARAMETER   :: SEC_PER_YR = 365.25e+0_fp * 86400e+0_fp
-    INTEGER               :: I,      J,      NN
+    INTEGER               :: I,      J
 
     !=================================================================
     ! LAND_MERCURY_FLUX begins here!
@@ -107,14 +104,13 @@ CONTAINS
     ! Emission timestep [s]
     DTSRCE = GET_TS_EMIS()
 
-    !$OMP PARALLEL DO       &
-    !$OMP DEFAULT( SHARED ) &
-    !$OMP PRIVATE( I,              J,                NN                 ) &
-    !$OMP PRIVATE( REEMFRAC,       FRAC_SNOW_OR_ICE, FRAC_SNOWFREE_LAND ) &
-    !$OMP PRIVATE( IS_LAND_OR_ICE                                       )
+    !$OMP PARALLEL DO                                                        &
+    !$OMP DEFAULT( SHARED                                                   )&
+    !$OMP PRIVATE( I,                J,                  REEMFRAC           )&
+    !$OMP PRIVATE( FRAC_SNOW_OR_ICE, FRAC_SNOWFREE_LAND, IS_LAND_OR_ICE     )&
+    !$OMP COLLAPSE( 2                                                       )
     DO J  = 1, State_Grid%NY
     DO I  = 1, State_Grid%NX
-    DO NN = 1, N_Hg_CATS
 
        ! Distinguish between ice/snow and snow-free land
        FRAC_SNOW_OR_ICE    = MIN( State_Met%FRSNO(I,J)     + &
@@ -125,6 +121,9 @@ CONTAINS
 
        IS_LAND_OR_ICE      = (( FRAC_SNOWFREE_LAND > 0e+0_fp ) .OR. &
                               ( FRAC_SNOW_OR_ICE   > 0e+0_fp ))
+
+       ! No flux from non-land surfaces (water, sea ice)
+       LFLUX(I,J) = 0e+0_fp
 
        ! If snow or ice on the ground, reemission fraction is 0.6,
        ! otherwise 0.2
@@ -138,20 +137,13 @@ CONTAINS
           ENDIF
 
           ! Mass of emitted Hg(0), kg
-          LFLUX(I,J,NN) = ( WD_HgP(I,J,NN) + WD_Hg2(I,J,NN) + &
-                            DD_HgP(I,J,NN) + DD_Hg2(I,J,NN) ) * REEMFRAC
+          LFLUX(I,J) = ( WD_HgP(I,J) + WD_Hg2(I,J) + &
+                         DD_HgP(I,J) + DD_Hg2(I,J) ) * REEMFRAC
 
           ! Emission rate of Hg(0). Convert kg /timestep -> kg/s
-          LFLUX(I,J,NN) = LFLUX(I,J,NN) / DTSRCE
-
-       ELSE
-
-          ! No flux from non-land surfaces (water, sea ice)
-          LFLUX(I,J,NN) = 0e+0_fp
-
+          LFLUX(I,J) = LFLUX(I,J) / DTSRCE
        ENDIF
 
-    ENDDO
     ENDDO
     ENDDO
     !$OMP END PARALLEL DO
@@ -172,20 +164,23 @@ CONTAINS
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE BIOMASSHG( Input_Opt, EHg0_bb, RC )
+  SUBROUTINE BIOMASSHG( Input_Opt, State_Grid, EHg0_bb, RC )
 !
 ! !USES:
 !
     USE ErrCode_Mod
     USE HCO_ERROR_MOD
-    USE HCO_STATE_MOD,      ONLY : HCO_STATE
-    USE HCO_INTERFACE_MOD,  ONLY : GetHcoDiagn
-    USE HCO_INTERFACE_MOD,  ONLY : HcoState
-    USE Input_Opt_Mod,      ONLY : OptInput
+    USE HCO_STATE_MOD,        ONLY : HCO_STATE
+    USE HCO_State_GC_Mod,     ONLY : HcoState, ExtState
+    USE HCO_Interface_Common, ONLY : GetHcoDiagn
+    USE HCO_Utilities_GC_Mod, ONLY : HCO_GC_GetDiagn
+    USE Input_Opt_Mod,        ONLY : OptInput
+    USE State_Grid_Mod,       ONLY : GrdState
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(OptInput),           INTENT(IN)  :: Input_Opt   ! Input Options
+    TYPE(GrdState),           INTENT(IN)  :: State_Grid
 !
 ! !OUTPUT PARAMETERS:
 !
@@ -248,7 +243,7 @@ CONTAINS
        ! by HEMCO automatically. Output unit is as specified when
        ! defining diagnostics (kg/m2/s).
        DgnName = 'BIOMASS_HG0'
-       CALL GetHcoDiagn( DgnName, .TRUE., RC, Ptr2D=Ptr2D )
+       CALL HCO_GC_GetDiagn( Input_Opt, State_Grid, DgnName, .TRUE., RC, Ptr2D=Ptr2D )
        IF ( RC /= HCO_SUCCESS ) THEN
           ErrMsg = 'Could not find HEMCO field ' // TRIM( DgnName )
           CALL GC_Error( ErrMsg, RC, ThisLoc )
@@ -480,17 +475,21 @@ CONTAINS
     ! SOILEMIS begins here!
     !=================================================================
 
-    !$OMP PARALLEL DO       &
-    !$OMP DEFAULT( SHARED ) &
-    !$OMP PRIVATE( I,          J,    SOIL_EMIS                       ) &
-    !$OMP PRIVATE( DRYSOIL_HG, TAUZ, LIGHTFRAC, AREA_M2, SUNCOSVALUE ) &
-    !$OMP PRIVATE( IS_SNOWFREE_LAND, FRAC_SNOWFREE_LAND              )
+    !$OMP PARALLEL DO                                                        &
+    !$OMP DEFAULT( SHARED                                                   )&
+    !$OMP PRIVATE( I,          J,    SOIL_EMIS                              )&
+    !$OMP PRIVATE( DRYSOIL_HG, TAUZ, LIGHTFRAC, AREA_M2, SUNCOSVALUE        )&
+    !$OMP PRIVATE( IS_SNOWFREE_LAND, FRAC_SNOWFREE_LAND                     )&
+    !$OMP COLLAPSE( 2                                                       )
     DO J=1, State_Grid%NY
     DO I=1, State_Grid%NX
 
        FRAC_SNOWFREE_LAND = MAX( State_Met%FRLAND(I,J) - &
                                  State_Met%FRSNO(I,J), 0e+0_fp )
        IS_SNOWFREE_LAND   = ( FRAC_SNOWFREE_LAND > 0e+0_fp )
+
+       ! First, assume no soil emissions (e.g. for snow/water/ice)
+       EHg0_so(I,J) = 0e+0_fp
 
        IF ( IS_SNOWFREE_LAND ) THEN
 
@@ -522,11 +521,6 @@ CONTAINS
 
           ! Multiply by fractional land area
           EHg0_so(I,J) = EHg0_so(I,J) * FRAC_SNOWFREE_LAND
-
-       ELSE
-
-          ! no soil emissions from water and ice
-          EHg0_so(I,J) = 0e+0_fp
 
        ENDIF
 
@@ -572,7 +566,7 @@ CONTAINS
 ! !OUTPUT PARAMETERS:
 !
     ! Hg0 flux [kg/s]
-    REAL(fp),       INTENT(OUT) :: FLUX(State_Grid%NX,State_Grid%NY,N_Hg_CATS)
+    REAL(fp),       INTENT(OUT) :: FLUX(State_Grid%NX,State_Grid%NY)
 !
 ! !REMARKS:
 !  Emissions are a linear function of Hg mass stored in the snowpack. The
@@ -598,7 +592,7 @@ CONTAINS
 !
 ! !LOCAL VARIABLES:
 !
-    INTEGER       :: I, J, NN, MONTH
+    INTEGER       :: I, J, MONTH
     REAL(fp)      :: DTSRCE, SNOW_HG_OC_NEW, K_EMIT, SWRAD
     REAL(fp)      :: SNOW_HG_LN_NEW, FLUX_TMP
 
@@ -609,8 +603,8 @@ CONTAINS
     REAL(fp), PARAMETER :: K_EMIT_0 = 2.5e-9_fp
 
     ! Pointers
-    REAL(fp), POINTER :: SNOW_HG_OC(:,:,:)
-    REAL(fp), POINTER :: SNOW_HG_LN(:,:,:)
+    REAL(fp), POINTER :: SNOW_HG_OC(:,:)
+    REAL(fp), POINTER :: SNOW_HG_LN(:,:)
 
     !=================================================================
     ! SNOWPACK_MERCURY_FLUX begins here!
@@ -629,11 +623,11 @@ CONTAINS
     ! Emission timestep [s]
     DTSRCE = GET_TS_EMIS()
 
-    !$OMP PARALLEL DO         &
-    !$OMP DEFAULT( SHARED )   &
-    !$OMP PRIVATE( I, J, NN ) &
-    !$OMP PRIVATE( SNOW_HG_OC_NEW, K_EMIT, SWRAD, SNOW_HG_LN_NEW ) &
-    !$OMP PRIVATE( FLUX_TMP )
+    !$OMP PARALLEL DO                                                        &
+    !$OMP DEFAULT( SHARED                                                   )&
+    !$OMP PRIVATE( I,     J,              SNOW_HG_OC_NEW, K_EMIT            )& 
+    !$OMP PRIVATE( SWRAD, SNOW_HG_LN_NEW, FLUX_TMP                          )&
+    !$OMP COLLAPSE( 2                                                       )
     DO J  = 1, State_Grid%NY
     DO I  = 1, State_Grid%NX
 
@@ -656,40 +650,36 @@ CONTAINS
        ! K_EMIT if it is >= K_EMIT_0 (jaf, 5/19/11)
        IF ( K_EMIT >= K_EMIT_0 ) THEN
 
-          ! Loop over # of categories
-          DO NN = 1, N_Hg_CATS
+          ! Zero temporary reservoir on each iteration
+          FLUX_TMP = 0D0
 
-             ! Zero temporary reservoir on each iteration
-             FLUX_TMP = 0D0
+          ! Check if there is Hg that could be emitted
+          IF ( SNOW_HG_OC(I,J) > 0e+0_fp ) THEN
 
-             ! Check if there is Hg that could be emitted
-             IF ( SNOW_HG_OC(I,J,NN) > 0e+0_fp ) THEN
+             ! New mass of snow in Hg
+             SNOW_HG_OC_NEW = SNOW_HG_OC(I,J) * EXP(-K_EMIT*DTSRCE)
 
-                ! New mass of snow in Hg
-                SNOW_HG_OC_NEW = SNOW_HG_OC(I,J,NN) * EXP(-K_EMIT*DTSRCE)
+             FLUX_TMP = MAX(SNOW_HG_OC(I,J) - SNOW_HG_OC_NEW, 0e+0_fp)
 
-                FLUX_TMP = MAX(SNOW_HG_OC(I,J,NN) - SNOW_HG_OC_NEW, 0e+0_fp)
+             SNOW_HG_OC(I,J) = SNOW_HG_OC_NEW
 
-                SNOW_HG_OC(I,J,NN) = SNOW_HG_OC_NEW
+          ENDIF !SNOW_HG_OC > 0
+             
+          ! Check if there is Hg in land snow that could be emitted
+          IF ( SNOW_HG_LN(I,J) > 0e+0_fp ) THEN
 
-             ENDIF !SNOW_HG_OC > 0
+             ! New mass of snow in Hg
+             SNOW_HG_LN_NEW = SNOW_HG_LN(I,J) * EXP(-K_EMIT*DTSRCE)
 
-             ! Check if there is Hg in land snow that could be emitted
-             IF ( SNOW_HG_LN(I,J,NN) > 0e+0_fp ) THEN
+             FLUX_TMP = FLUX_TMP + MAX(SNOW_HG_LN(I,J)-SNOW_HG_LN_NEW,0D0)
 
-                ! New mass of snow in Hg
-                SNOW_HG_LN_NEW = SNOW_HG_LN(I,J,NN) * EXP(-K_EMIT*DTSRCE)
+             SNOW_HG_LN(I,J) = SNOW_HG_LN_NEW
 
-                FLUX_TMP = FLUX_TMP + MAX(SNOW_HG_LN(I,J,NN)-SNOW_HG_LN_NEW,0D0)
+          ENDIF !SNOW_HG_LN > 0
 
-                SNOW_HG_LN(I,J,NN) = SNOW_HG_LN_NEW
+          ! Convert mass -> flux
+          FLUX(I,J) = FLUX_TMP / DTSRCE
 
-             ENDIF !SNOW_HG_LN > 0
-
-             ! Convert mass -> flux
-             FLUX(I,J,NN) = FLUX_TMP / DTSRCE
-
-          ENDDO !Loop over NN
        ENDIF !K_EMIT >= K_EMIT_0
 
     ENDDO
@@ -1000,9 +990,6 @@ CONTAINS
 
     ! Assume success
     RC = GC_SUCCESS
-
-    ! Save State_Chm%N_Hg_CATS in a shadow variable
-    N_Hg_CATS = State_Chm%N_Hg_CATS
 
   END SUBROUTINE INIT_LAND_MERCURY
 !EOC

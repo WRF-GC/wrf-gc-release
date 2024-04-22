@@ -58,7 +58,15 @@ CONTAINS
 !
 ! !USES:
 !
-    USE Charpak_Mod, ONLY : WordWrapPrint
+    USE Charpak_Mod,    ONLY : WordWrapPrint
+#if defined( MODEL_CESM )
+    USE CAM_ABORTUTILS, ONLY : ENDRUN
+#endif
+#if defined( ESMF_ )
+#include "MAPL_Generic.h"
+    USE ESMF
+    USE MAPL_Mod
+#endif
 !
 ! !INPUT PARAMETERS:
 !
@@ -78,10 +86,32 @@ CONTAINS
 !BOC
 
     CHARACTER(LEN=1000) :: Message
-
+#if defined( ESMF_)
+    INTEGER             :: localPET, STATUS
+    CHARACTER(4)        :: localPETchar
+    CHARACTER(LEN=1023) :: MSG, MSG1, MSG2
+    TYPE(ESMF_VM)       :: VM
+#endif
     !=======================================================================
     ! GC_ERROR begins here
     !=======================================================================
+
+    ! Construct error message
+#if defined( ESMF_ )
+    ! Get current thread number
+    CALL ESMF_VMGetCurrent(VM, RC=STATUS)
+    CALL ESMF_VmGet( VM, localPET=localPET, __RC__ )
+    WRITE(localPETchar,'(I4.4)') localPET
+    MSG1 = 'GEOS-Chem ERROR ['//TRIM(localPETchar)//']: '//TRIM(ErrMsg)
+    MSG2 = ''
+    IF ( PRESENT(THISLOC) ) THEN
+       MSG2 = NEW_LINE('a') // ' --> LOCATION: ' // TRIM( THISLOC )
+    ENDIF
+    MSG = NEW_LINE('a') // TRIM(MSG1) // TRIM(MSG2)
+
+    ! Print error message
+    WRITE(*,*) TRIM(MSG)
+#else
 
     ! Separator
     WRITE( 6, '(a)' ) REPEAT( '=', 79 )
@@ -105,9 +135,14 @@ CONTAINS
     ! Separators
     WRITE( 6, '(a)' ) REPEAT( '=', 79 )
     WRITE( 6, '(a)' ) ''
+#endif
 
     ! Force the message to be flushed to the log file
     CALL Flush( 6 )
+
+#if defined( MODEL_CESM )
+    CALL ENDRUN('GEOS-Chem failure!')
+#endif
 
     ! Return with failure, but preserve existing error code
     IF ( RC == GC_SUCCESS ) THEN

@@ -1,0 +1,48 @@
+#=============================================================================
+# Quick build pipeline:
+#
+# This pipeline checks that commits and open pull requests don't
+# introduce compiler errors. This is meant to be a quick and simple
+# check that runs frequently.
+#
+# This pipeline triggers on commits to development and bug-fix
+# branches. Commits to the main branch do not trigger this pipeline
+# because those are tested against the build matrix. Commits to
+# feature branches do not trigger this pipeline, but open pull requests
+# and commits to pull requests do.
+#=============================================================================
+trigger:
+  branches:
+    include:
+      - dev*
+      - patch*
+      - bugfix*
+pr:
+  branches:
+    include:
+      - '*'
+
+# Basic agent and container set up
+pool:
+  vmImage: 'ubuntu-latest'
+container: geoschem/buildmatrix:netcdf-ubuntu
+
+
+# Try building HEMCO
+steps:
+- checkout: self
+  submodules: true
+- script: |
+    . /opt/spack/share/spack/setup-env.sh
+    export CC=gcc
+    export CXX=g++
+    export FC=gfortran
+    set -x
+    spack load cmake
+    spack load netcdf-c
+    spack load netcdf-fortran
+    mkdir build
+    cd build
+    cmake -DCMAKE_COLOR_MAKEFILE=FALSE $(Build.Repository.LocalPath)
+    make -j
+  displayName: 'Building HEMCO'

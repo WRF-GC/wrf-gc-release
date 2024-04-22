@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -58,13 +58,7 @@ MODULE HCOX_GC_POPs_Mod
 !
 ! !REVISION HISTORY:
 !  20 Sep 2010 - N.E. Selin    - Initial Version
-!  04 Jan 2011 - C.L. Friedman - Expansion on initial version
-!  19 Aug 2014 - M. Sulprizio  - Now a HEMCO extension
-!  18 Aug 2015 - M. Sulprizio  - Add VEGEMISPOP, LAKEEMISPOP, and SOILEMISPOP
-!                                routines from new land_pops_mod.F written by
-!                                C.L. Friedman.
-!  24 Aug 2017 - M. Sulprizio  - Remove support for GCAP
-!  25 Jan 2019 - M. Sulprizio  - Add instance wrapper
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -120,7 +114,7 @@ MODULE HCOX_GC_POPs_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -154,6 +148,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Sep 2010 - N.E. Selin  - Initial Version based on EMISSMERCURY
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -193,7 +188,7 @@ CONTAINS
 !    LOGICAL, SAVE       :: FIRST = .TRUE.
     LOGICAL             :: aIR
     LOGICAL             :: IS_SNOW_OR_ICE,   IS_LAND_OR_ICE
-    CHARACTER(LEN=255)  :: MSG
+    CHARACTER(LEN=255)  :: MSG, LOC
 
     ! Delta H for POP [kJ/mol]. Delta H is enthalpy of phase transfer
     ! from gas phase to OC. For now we use Delta H for phase transfer
@@ -241,20 +236,24 @@ CONTAINS
     !=======================================================================
     ! HCOX_GC_POPs_RUN begins here!
     !=======================================================================
+    LOC = 'HCOX_GC_POPs_RUN (HCOX_GC_POPS_MOD.F90)'
 
     ! Return if extension not turned on
     IF ( ExtState%GC_POPs <= 0 ) RETURN
 
     ! Enter
-    CALL HCO_ENTER( HcoState%Config%Err, 'HCOX_GC_POPs_Run (hcox_gc_POPs_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Get instance
     Inst => NULL()
     CALL InstGet ( ExtState%GC_POPs, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        WRITE(MSG,*) 'Cannot find GC_POPs instance Nr. ', ExtState%GC_POPs
-       CALL HCO_ERROR(HcoState%Config%Err,MSG,RC)
+       CALL HCO_ERROR(MSG,RC)
        RETURN
     ENDIF
 
@@ -269,19 +268,34 @@ CONTAINS
     IF ( HcoClock_First(HcoState%Clock,.TRUE.) ) THEN
 
        CALL HCO_GetPtr( HcoState, 'TOT_POP',     Inst%POP_TOT_EM, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        CALL HCO_GetPtr( HcoState, 'GLOBAL_OC',   Inst%C_OC,       RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        CALL HCO_GetPtr( HcoState, 'GLOBAL_BC',   Inst%C_BC,       RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        CALL HCO_GetPtr( HcoState, 'SURF_POP',    Inst%POP_SURF,   RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 4', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        CALL HCO_GetPtr( HcoState, 'SOIL_CARBON', Inst%F_OC_SOIL,  RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 5', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        ! Convert F_OC_SOIL from kg/m2 to fraction
        DO J=1, HcoState%NY
@@ -302,7 +316,7 @@ CONTAINS
 
     ! Maximum extent of the PBL [model level]
     IF ( .NOT. ASSOCIATED(ExtState%PBL_MAX) ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'PBL_MAX not defined in ExtState!', RC )
+       CALL HCO_ERROR ( 'PBL_MAX not defined in ExtState!', RC )
        RETURN
     ELSE
        PBL_MAX = DBLE( ExtState%PBL_MAX )
@@ -463,7 +477,7 @@ CONTAINS
                          RC, ExtNr=Inst%ExtNr )
        Arr3D => NULL()
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'HCO_EmisAdd error: EmisPOPPOCPO', RC )
+          CALL HCO_ERROR( 'HCO_EmisAdd error: EmisPOPPOCPO', RC )
           RETURN
        ENDIF
     ENDIF
@@ -479,7 +493,7 @@ CONTAINS
                          RC, ExtNr=Inst%ExtNr )
        Arr3D => NULL()
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'HCO_EmisAdd error: EmisPOPPBCPO', RC )
+          CALL HCO_ERROR( 'HCO_EmisAdd error: EmisPOPPBCPO', RC )
           RETURN
        ENDIF
     ENDIF
@@ -495,7 +509,7 @@ CONTAINS
                          RC, ExtNr=Inst%ExtNr )
        Arr3D => NULL()
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'HCO_EmisAdd error: EmisPOPG', RC )
+          CALL HCO_ERROR( 'HCO_EmisAdd error: EmisPOPG', RC )
           RETURN
        ENDIF
 
@@ -538,6 +552,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  21 Aug 2012 - C.L. Friedman - Initial version based on LAND_MERCURY_MOD
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -848,6 +863,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  21 Aug 2012 - C.L. Friedman - Initial version based on LAND_MERCURY_MOD
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1172,6 +1188,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  21 Aug 2012 - C.L. Friedman - Initial version based on LAND_MERCURY_MOD
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1502,6 +1519,10 @@ CONTAINS
 !
       FUNCTION IS_LAND( I, J, ExtState ) RESULT ( LAND )
 !
+! !USES:
+!
+    USE HCO_GeoTools_Mod, ONLY : HCO_LANDTYPE
+!
 ! !INPUT PARAMETERS:
 !
       INTEGER,         INTENT(IN) :: I           ! Longitude index of grid box
@@ -1514,13 +1535,15 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  26 Jun 2000 - R. Yantosca - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
-
-      ! LWI=1 and ALBEDO less than 69.5% is a LAND box
-      LAND = ( NINT( ExtState%WLI%Arr%Val(I,J) ) == 1   .and. &
-                     ExtState%ALBD%Arr%Val(I,J)  <  0.695e+0_hp )
+      LAND = HCO_LANDTYPE( ExtState%FRLAND%Arr%Val(I,J),   &
+                           ExtState%FRLANDIC%Arr%Val(I,J), &
+                           ExtState%FROCEAN%Arr%Val(I,J),  &
+                           ExtState%FRSEAICE%Arr%Val(I,J), &
+                           ExtState%FRLAKE%Arr%Val(I,J) ) == 1
 
       END FUNCTION IS_LAND
 !EOC
@@ -1539,6 +1562,10 @@ CONTAINS
 !
       FUNCTION IS_ICE( I, J, ExtState ) RESULT ( ICE )
 !
+! !USES:
+!
+    USE HCO_GeoTools_Mod, ONLY : HCO_LANDTYPE
+!
 ! !INPUT PARAMETERS:
 !
       INTEGER,         INTENT(IN) :: I           ! Longitude index of grid box
@@ -1551,18 +1578,21 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  09 Aug 2005 - R. Yantosca - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 
-      ! LWI=2 or ALBEDO > 69.5% is ice
-      ICE = ( NINT( ExtState%WLI%Arr%Val(I,J) ) == 2       .or. &
-                    ExtState%ALBD%Arr%Val(I,J)  >= 0.695e+0_hp )
+      ICE = HCO_LANDTYPE( ExtState%FRLAND%Arr%Val(I,J),   &
+                          ExtState%FRLANDIC%Arr%Val(I,J), &
+                          ExtState%FROCEAN%Arr%Val(I,J),  &
+                          ExtState%FRSEAICE%Arr%Val(I,J), &
+                          ExtState%FRLAKE%Arr%Val(I,J) ) == 2
 
       END FUNCTION IS_ICE
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1593,6 +1623,7 @@ CONTAINS
 
 ! !REVISION HISTORY:
 !  19 Aug 2014 - M. Sulprizio- Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1601,7 +1632,7 @@ CONTAINS
 !
     ! Scalars
     INTEGER                        :: I, N, nSpc, ExtNr
-    CHARACTER(LEN=255)             :: MSG
+    CHARACTER(LEN=255)             :: MSG, LOC
     CHARACTER(LEN=255)             :: DiagnName
     CHARACTER(LEN=255)             :: OutUnit
 
@@ -1616,20 +1647,24 @@ CONTAINS
     !=======================================================================
     ! HCOX_GC_POPs_INIT begins here!
     !=======================================================================
+    LOC = 'HCOX_GC_POPs_INIT (HCOX_GC_POPS_MOD.F90)'
 
     ! Get the extension number
     ExtNr = GetExtNr( HcoState%Config%ExtList, TRIM(ExtName) )
     IF ( ExtNr <= 0 ) RETURN
 
     ! Enter HEMCO
-    CALL HCO_ENTER( HcoState%Config%Err, 'HcoX_GC_POPs_Init (hcox_gc_POPs_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 6', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Create Instance
     Inst => NULL()
     CALL InstCreate ( ExtNr, ExtState%GC_POPs, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot create GC_POPs instance', RC )
+       CALL HCO_ERROR ( 'Cannot create GC_POPs instance', RC )
        RETURN
     ENDIF
     ! Also fill ExtNrSS - this is the same as the parent ExtNr
@@ -1637,7 +1672,10 @@ CONTAINS
 
     ! Set species IDs
     CALL HCO_GetExtHcoID( HcoState, Inst%ExtNr, HcoIDs, SpcNames, nSpc, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 7', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Verbose mode
     IF ( HcoState%amIRoot ) THEN
@@ -1655,11 +1693,11 @@ CONTAINS
     ! Set up tracer indices
     DO N = 1, nSpc
        SELECT CASE( TRIM( SpcNames(N) ) )
-          CASE( 'POPG' )
-             Inst%IDTPOPG     = HcoIDs(N)
-          CASE( 'POPPOCPO' )
-             Inst%IDTPOPPOCPO = HcoIDs(N)
-          CASE( 'POPPBCPO' )
+          CASE( 'POPG', 'POPG_BaP', 'POPG_PHE', 'POPG_PYR' )
+              Inst%IDTPOPG     = HcoIDs(N)
+          CASE( 'POPPOCPO', 'POPPOCPO_BaP', 'POPPOCPO_PHE', 'POPPOCPO_PYR' )
+              Inst%IDTPOPPOCPO = HcoIDs(N)
+          CASE( 'POPPBCPO', 'POPPBCPO_BaP', 'POPPBCPO_PHE', 'POPPBCPO_PYR' )
              Inst%IDTPOPPBCPO = HcoIDs(N)
           CASE DEFAULT
              ! Do nothing
@@ -1669,21 +1707,21 @@ CONTAINS
     ! ERROR: POPG tracer is not found!
     IF ( Inst%IDTPOPG <= 0 ) THEN
        RC = HCO_FAIL
-       CALL HCO_ERROR( HcoState%Config%Err, 'Cannot find POPG tracer in list of species!', RC )
+       CALL HCO_ERROR( 'Cannot find POPG tracer in list of species!', RC )
        RETURN
     ENDIF
 
     ! ERROR! POPPOCPO tracer is not found
     IF ( Inst%IDTPOPPOCPO <= 0 ) THEN
        RC = HCO_FAIL
-       CALL HCO_ERROR( HcoState%Config%Err, 'Cannot find POPPOCPO tracer in list of species!', RC )
+       CALL HCO_ERROR( 'Cannot find POPPOCPO tracer in list of species!', RC )
        RETURN
     ENDIF
 
     ! ERROR! POPPBCPO tracer is not found
     IF ( Inst%IDTPOPPBCPO <= 0 ) THEN
        RC = HCO_FAIL
-       CALL HCO_ERROR( HcoState%Config%Err, 'Cannot find POPPBCPO tracer in list of species!', RC )
+       CALL HCO_ERROR( 'Cannot find POPPBCPO tracer in list of species!', RC )
        RETURN
     ENDIF
 
@@ -1693,11 +1731,9 @@ CONTAINS
 
     ! Activate met fields required by this extension
     ExtState%POPG%DoUse        = .TRUE.
-    ExtState%ALBD%DoUse        = .TRUE.
     ExtState%AIRVOL%DoUse      = .TRUE.
     ExtState%AIRDEN%DoUse      = .TRUE.
     ExtState%FRAC_OF_PBL%DoUse = .TRUE.
-    ExtState%FRLAKE%DoUse      = .TRUE.
     ExtState%LAI%DoUse         = .TRUE.
     ExtState%PSC2_WET%DoUse    = .TRUE.
     ExtState%SNOWHGT%DoUse     = .TRUE.
@@ -1705,7 +1741,11 @@ CONTAINS
     ExtState%TSKIN%DoUse       = .TRUE.
     ExtState%U10M%DoUse        = .TRUE.
     ExtState%V10M%DoUse        = .TRUE.
-    ExtState%WLI%DoUse         = .TRUE.
+    ExtState%FRLAND%DoUse      = .TRUE.
+    ExtState%FRLANDIC%DoUse    = .TRUE.
+    ExtState%FROCEAN%DoUse     = .TRUE.
+    ExtState%FRSEAICE%DoUse    = .TRUE.
+    ExtState%FRLAKE%DoUse      = .TRUE.
 
     !=======================================================================
     ! Initialize data arrays
@@ -1713,119 +1753,119 @@ CONTAINS
 
     ALLOCATE( Inst%EmisPOPG( HcoState%NX, HcoState%NY, HcoState%NZ ), STAT=RC )
     IF ( RC /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate EmisPOPG', RC )
+       CALL HCO_ERROR ( 'Cannot allocate EmisPOPG', RC )
        RETURN
     ENDIF
     Inst%EmisPOPG = 0.0e0_hp
 
     ALLOCATE( Inst%EmisPOPPOCPO( HcoState%NX, HcoState%NY, HcoState%NZ ), STAT=RC )
     IF ( RC /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate EmisPOPPOCPO', RC )
+       CALL HCO_ERROR ( 'Cannot allocate EmisPOPPOCPO', RC )
        RETURN
     ENDIF
     Inst%EmisPOPPOCPO = 0.0e0_hp
 
     ALLOCATE( Inst%EmisPOPPBCPO( HcoState%NX, HcoState%NY, HcoState%NZ ), STAT=RC )
     IF ( RC /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate EmisPOPPBCPO', RC )
+       CALL HCO_ERROR ( 'Cannot allocate EmisPOPPBCPO', RC )
        RETURN
     ENDIF
     Inst%EmisPOPPBCPO = 0.0e0_hp
 
     ALLOCATE( Inst%EmisPOPGfromSoil( HcoState%NX, HcoState%NY ), STAT=RC )
     IF ( RC /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate EmisPOPGfromSoil', RC )
+       CALL HCO_ERROR ( 'Cannot allocate EmisPOPGfromSoil', RC )
        RETURN
     ENDIF
     Inst%EmisPOPGfromSoil = 0.0e0_hp
 
     ALLOCATE( Inst%EmisPOPGfromLake( HcoState%NX, HcoState%NY ), STAT=RC )
     IF ( RC /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate EmisPOPGfromLake', RC )
+       CALL HCO_ERROR ( 'Cannot allocate EmisPOPGfromLake', RC )
        RETURN
     ENDIF
     Inst%EmisPOPGfromLake = 0.0e0_hp
 
     ALLOCATE( Inst%EmisPOPGfromLeaf( HcoState%NX, HcoState%NY ), STAT=RC )
     IF ( RC /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate EmisPOPGfromLeaf', RC )
+       CALL HCO_ERROR ( 'Cannot allocate EmisPOPGfromLeaf', RC )
        RETURN
     ENDIF
     Inst%EmisPOPGfromLeaf = 0.0e0_hp
 
     ALLOCATE( Inst%EmisPOPGfromSnow( HcoState%NX, HcoState%NY ), STAT=RC )
     IF ( RC /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate EmisPOPGfromSnow', RC )
+       CALL HCO_ERROR ( 'Cannot allocate EmisPOPGfromSnow', RC )
        RETURN
     ENDIF
     Inst%EmisPOPGfromSnow = 0.0e0_hp
 
     ALLOCATE( Inst%EmisPOPGfromOcean( HcoState%NX, HcoState%NY ), STAT=RC )
     IF ( RC /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate EmisPOPGfromOcean', RC )
+       CALL HCO_ERROR ( 'Cannot allocate EmisPOPGfromOcean', RC )
        RETURN
     ENDIF
     Inst%EmisPOPGfromOcean = 0.0e0_hp
 
     ALLOCATE( Inst%FluxPOPGfromSoilToAir( HcoState%NX, HcoState%NY ), STAT=RC )
     IF ( RC /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate FluxPOPGfromSoilToAir', RC )
+       CALL HCO_ERROR ( 'Cannot allocate FluxPOPGfromSoilToAir', RC )
        RETURN
     ENDIF
     Inst%FluxPOPGfromSoilToAir = 0.0e0_hp
 
     ALLOCATE( Inst%FluxPOPGfromAirToSoil( HcoState%NX, HcoState%NY ), STAT=RC )
     IF ( RC /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate FluxPOPGfromAirToSoil', RC )
+       CALL HCO_ERROR ( 'Cannot allocate FluxPOPGfromAirToSoil', RC )
        RETURN
     ENDIF
     Inst%FluxPOPGfromAirToSoil = 0.0e0_hp
 
     ALLOCATE( Inst%FluxPOPGfromLakeToAir( HcoState%NX, HcoState%NY ), STAT=RC )
     IF ( RC /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate FluxPOPGfromLakeToAir', RC )
+       CALL HCO_ERROR ( 'Cannot allocate FluxPOPGfromLakeToAir', RC )
        RETURN
     ENDIF
     Inst%FluxPOPGfromLakeToAir = 0.0e0_hp
 
     ALLOCATE( Inst%FluxPOPGfromAirToLake( HcoState%NX, HcoState%NY ), STAT=RC )
     IF ( RC /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate FluxPOPGfromAirToLake', RC )
+       CALL HCO_ERROR ( 'Cannot allocate FluxPOPGfromAirToLake', RC )
        RETURN
     ENDIF
     Inst%FluxPOPGfromAirToLake = 0.0e0_hp
 
     ALLOCATE( Inst%FluxPOPGfromLeafToAir( HcoState%NX, HcoState%NY ), STAT=RC )
     IF ( RC /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate FluxPOPGfromLeafToAir', RC )
+       CALL HCO_ERROR ( 'Cannot allocate FluxPOPGfromLeafToAir', RC )
        RETURN
     ENDIF
     Inst%FluxPOPGfromLeafToAir = 0.0e0_hp
 
     ALLOCATE( Inst%FluxPOPGfromAirToLeaf( HcoState%NX, HcoState%NY ), STAT=RC )
     IF ( RC /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate FluxPOPGfromAirToLeaf', RC )
+       CALL HCO_ERROR ( 'Cannot allocate FluxPOPGfromAirToLeaf', RC )
        RETURN
     ENDIF
     Inst%FluxPOPGfromAirToLeaf = 0.0e0_hp
 
     ALLOCATE( Inst%FugacitySoilToAir( HcoState%NX, HcoState%NY ), STAT=RC )
     IF ( RC /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate FugacitySoilToAir', RC )
+       CALL HCO_ERROR ( 'Cannot allocate FugacitySoilToAir', RC )
        RETURN
     ENDIF
     Inst%FugacitySoilToAir = 0.0e0_hp
 
     ALLOCATE( Inst%FugacityLakeToAir( HcoState%NX, HcoState%NY ), STAT=RC )
     IF ( RC /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate FugacityLakeToAir', RC )
+       CALL HCO_ERROR ( 'Cannot allocate FugacityLakeToAir', RC )
        RETURN
     ENDIF
     Inst%FugacityLakeToAir = 0.0e0_hp
 
     ALLOCATE( Inst%FugacityLeafToAir( HcoState%NX, HcoState%NY ), STAT=RC )
     IF ( RC /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate FugacityLeafToAir', RC )
+       CALL HCO_ERROR ( 'Cannot allocate FugacityLeafToAir', RC )
        RETURN
     ENDIF
     Inst%FugacityLeafToAir = 0.0e0_hp
@@ -1899,7 +1939,10 @@ CONTAINS
                           AutoFill  = 0,                 &
                           Trgt2D    = Target2D,          &
                           RC        = RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 8', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
        Target2D => NULL()
 
     ENDDO
@@ -1918,7 +1961,7 @@ CONTAINS
   END SUBROUTINE HCOX_GC_POPs_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1939,6 +1982,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Aug 2014 - M. Sulprizio- Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1952,7 +1996,7 @@ CONTAINS
   END SUBROUTINE HCOX_GC_POPs_Final
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1974,6 +2018,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2006,7 +2051,7 @@ CONTAINS
   END SUBROUTINE InstGet
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2034,6 +2079,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2081,7 +2127,7 @@ CONTAINS
   END SUBROUTINE InstCreate
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2100,6 +2146,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2121,51 +2168,109 @@ CONTAINS
     ! Instance-specific deallocation
     IF ( ASSOCIATED(Inst) ) THEN
 
+       !---------------------------------------------------------------------
+       ! Deallocate fields of Inst before popping off from the list
+       ! in order to avoid memory leaks (Bob Yantosca (17 Aug 2022)
+       !---------------------------------------------------------------------
+       IF ( ASSOCIATED( Inst%EmisPOPPOCPO ) ) THEN
+          DEALLOCATE( Inst%EmisPOPPOCPO )
+       ENDIF
+       Inst%EmisPOPPOCPO => NULL()
+
+       IF ( ASSOCIATED( Inst%EmisPOPPBCPO ) ) THEN
+          DEALLOCATE( Inst%EmisPOPPBCPO )
+       ENDIF
+       Inst%EmisPOPPBCPO => NULL()
+
+       IF ( ASSOCIATED( Inst%EmisPOPG ) ) THEN
+          DEALLOCATE( Inst%EmisPOPG )
+       ENDIF
+       Inst%EmisPOPG => NULL()
+
+       IF ( ASSOCIATED( Inst%EmisPOPGfromSoil ) ) THEN
+          DEALLOCATE( Inst%EmisPOPGfromSoil )
+       ENDIF
+       Inst%EmisPOPGfromSoil => NULL()
+
+       IF ( ASSOCIATED( Inst%EmisPOPGfromLake ) ) THEN
+          DEALLOCATE( Inst%EmisPOPGfromLake )
+       ENDIF
+       Inst%EmisPOPGfromLake => NULL()
+
+       IF ( ASSOCIATED( Inst%EmisPOPGfromLeaf ) ) THEN
+          DEALLOCATE( Inst%EmisPOPGfromLeaf )
+       ENDIF
+       Inst%EmisPOPGfromLeaf => NULL()
+
+       IF ( ASSOCIATED( Inst%EmisPOPGfromSnow  ) ) THEN
+          DEALLOCATE( Inst%EmisPOPGfromSnow  )
+       ENDIF
+       Inst%EmisPOPGfromSnow => NULL()
+
+       IF ( ASSOCIATED( Inst%EmisPOPGfromOcean ) ) THEN
+          DEALLOCATE( Inst%EmisPOPGfromOcean    )
+       ENDIF
+       Inst%EmisPOPGfromOcean => NULL()
+
+       IF ( ASSOCIATED( Inst%FluxPOPGfromSoilToAir ) ) THEN
+          DEALLOCATE( Inst%FluxPOPGfromSoilToAir )
+       ENDIF
+       Inst%FluxPOPGfromSoilToAir => NULL()
+
+       IF ( ASSOCIATED( Inst%FluxPOPGfromAirToSoil ) ) THEN
+          DEALLOCATE( Inst%FluxPOPGfromAirToSoil )
+       ENDIF
+       Inst%FluxPOPGfromAirToSoil => NULL()
+
+       IF ( ASSOCIATED( Inst%FluxPOPGfromLakeToAir ) ) THEN
+          DEALLOCATE( Inst%FluxPOPGfromLakeToAir )
+       ENDIF
+       Inst%FluxPOPGfromLakeToAir => NULL()
+
+       IF ( ASSOCIATED( Inst%FluxPOPGfromAirToLake ) ) THEN
+          DEALLOCATE( Inst%FluxPOPGfromAirToLake )
+       ENDIF
+       Inst%FluxPOPGfromAirToLake => NULL()
+
+       IF ( ASSOCIATED( Inst%FluxPOPGfromLeafToAir ) ) THEN
+          DEALLOCATE( Inst%FluxPOPGfromLeafToAir )
+       ENDIF
+       Inst%FluxPOPGfromLeafToAir => NULL()
+
+       IF ( ASSOCIATED( Inst%FluxPOPGfromAirtoLeaf ) ) THEN
+          DEALLOCATE( Inst%FluxPOPGfromAirtoLeaf )
+       ENDIF
+       Inst%FluxPOPGfromAirtoLeaf => NULL() 
+
+       IF ( ASSOCIATED( Inst%FugacitySoilToAir ) ) THEN
+          DEALLOCATE( Inst%FugacitySoilToAir )
+       ENDIF
+       Inst%FugacitySoilToAir => NULL()
+
+       IF ( ASSOCIATED( Inst%FugacityLakeToAir ) ) THEN
+          DEALLOCATE( Inst%FugacityLakeToAir )
+       ENDIF
+       Inst%FugacityLakeToAir => NULL()
+
+       IF ( ASSOCIATED( Inst%FugacityLeafToAir ) ) THEN
+          DEALLOCATE( Inst%FugacityLeafToAir )
+       ENDIF
+       Inst%FugacityLeafToAir => NULL()
+       
+       !---------------------------------------------------------------------
        ! Pop off instance from list
+       !---------------------------------------------------------------------
        IF ( ASSOCIATED(PrevInst) ) THEN
-
-          IF ( ASSOCIATED(Inst%EmisPOPPOCPO         ) ) &
-               DEALLOCATE(Inst%EmisPOPPOCPO         )
-          IF ( ASSOCIATED(Inst%EmisPOPPBCPO         ) ) &
-               DEALLOCATE(Inst%EmisPOPPBCPO         )
-          IF ( ASSOCIATED(Inst%EmisPOPG             ) ) &
-               DEALLOCATE(Inst%EmisPOPG             )
-          IF ( ASSOCIATED(Inst%EmisPOPGfromSoil     ) ) &
-               DEALLOCATE(Inst%EmisPOPGfromSoil     )
-          IF ( ASSOCIATED(Inst%EmisPOPGfromLake     ) ) &
-               DEALLOCATE(Inst%EmisPOPGfromLake     )
-          IF ( ASSOCIATED(Inst%EmisPOPGfromLeaf     ) ) &
-               DEALLOCATE(Inst%EmisPOPGfromLeaf     )
-          IF ( ASSOCIATED(Inst%EmisPOPGfromSnow     ) ) &
-               DEALLOCATE(Inst%EmisPOPGfromSnow     )
-          IF ( ASSOCIATED(Inst%EmisPOPGfromOcean    ) ) &
-               DEALLOCATE(Inst%EmisPOPGfromOcean    )
-          IF ( ASSOCIATED(Inst%FluxPOPGfromSoilToAir) ) &
-               DEALLOCATE(Inst%FluxPOPGfromSoilToAir)
-          IF ( ASSOCIATED(Inst%FluxPOPGfromAirToSoil) ) &
-               DEALLOCATE(Inst%FluxPOPGfromAirToSoil)
-          IF ( ASSOCIATED(Inst%FluxPOPGfromLakeToAir) ) &
-               DEALLOCATE(Inst%FluxPOPGfromLakeToAir)
-          IF ( ASSOCIATED(Inst%FluxPOPGfromAirToLake) ) &
-               DEALLOCATE(Inst%FluxPOPGfromAirToLake)
-          IF ( ASSOCIATED(Inst%FluxPOPGfromLeafToAir) ) &
-               DEALLOCATE(Inst%FluxPOPGfromLeafToAir)
-          IF ( ASSOCIATED(Inst%FluxPOPGfromAirtoLeaf) ) &
-               DEALLOCATE(Inst%FluxPOPGfromAirtoLeaf)
-          IF ( ASSOCIATED(Inst%FugacitySoilToAir    ) ) &
-               DEALLOCATE(Inst%FugacitySoilToAir    )
-          IF ( ASSOCIATED(Inst%FugacityLakeToAir    ) ) &
-               DEALLOCATE(Inst%FugacityLakeToAir    )
-          IF ( ASSOCIATED(Inst%FugacityLeafToAir    ) ) &
-               DEALLOCATE(Inst%FugacityLeafToAir    )
-
           PrevInst%NextInst => Inst%NextInst
        ELSE
           AllInst => Inst%NextInst
        ENDIF
        DEALLOCATE(Inst)
-       Inst => NULL()
     ENDIF
+
+    ! Free pointers before exiting
+    PrevInst => NULL()
+    Inst     => NULL()
 
    END SUBROUTINE InstRemove
 !EOC

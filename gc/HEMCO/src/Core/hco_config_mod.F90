@@ -1,3 +1,6 @@
+!------------------------------------------------------------------------------
+!                   Harmonized Emissions Component (HEMCO)                    !
+!------------------------------------------------------------------------------
 !BOP
 !
 ! !MODULE: hco_config_mod.F90
@@ -59,7 +62,7 @@ MODULE HCO_Config_Mod
   PUBLIC  :: Config_GetSpecNames
   PUBLIC  :: ConfigInit
 !
-! !PRIVATE:
+! !PRIVATE MEMBER FUNCTIONS:
 !
   PRIVATE :: ReadSettings
   PRIVATE :: ExtSwitch2Buffer
@@ -81,15 +84,7 @@ MODULE HCO_Config_Mod
 !
 ! !REVISION HISTORY:
 !  18 Jun 2013 - C. Keller   -  Initialization
-!  08 Jul 2014 - R. Yantosca - Now use F90 free-format indentation
-!  08 Jul 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  15 Feb 2015 - C. Keller   - Added BracketCheck, AddZeroScal, AddShadowFields
-!  15 Feb 2016 - C. Keller   - Update to v2.0: ConfigList now sits in HcoConfig
-!  23 Oct 2018 - M. Sulprizio- Make routine ConfigInit public to allow for
-!                              initialization of HcoConfig%ModelSpc from the
-!                              external model. Also add routine Hco_GetTagInfo
-!                              to get information for wildcard strings (e.g.
-!                              ?ALL?) used in HEMCO_Config.rc.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -104,7 +99,7 @@ MODULE HCO_Config_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -130,8 +125,8 @@ CONTAINS
 !
 ! !USES:
 !
-    USE inquireMod,        ONLY : findFreeLUN
-    USE CharPak_Mod,       ONLY : STRREPL
+    USE HCO_inquireMod,    ONLY : findFreeLUN
+    USE HCO_CharPak_Mod,   ONLY : STRREPL
     USE HCO_EXTLIST_MOD,   ONLY : AddExt, CoreNr, ExtNrInUse
 !
 ! !INPUT PARAMETERS:
@@ -151,14 +146,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  17 Sep 2012 - C. Keller   - Initialization
-!  03 Jan 2014 - C. Keller   - Now use Config_ReadCont calls.
-!  30 Sep 2014 - R. Yantosca - Now declare LINE w/ 2047 characters.  This lets
-!                              us handle extra-long species lists
-!  13 Feb 2015 - C. Keller   - Removed section extension data: these are now
-!                              listed in section base emissions.
-!  11 Dec 2015 - C. Keller   - Read settings and extension switches even for
-!                              nested configuration files.
-!  15 Feb 2016 - C. Keller   - Now pass HcoConfig argument.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -172,7 +160,8 @@ CONTAINS
     INTEGER              :: IU_HCO, IOS
 
     ! Strings
-    CHARACTER(LEN=255)   :: MSG,    LOC,  FileMsg
+    CHARACTER(LEN=255)   :: loc,  fileMsg
+    CHARACTER(LEN=512)   :: msg
     CHARACTER(LEN=2047)  :: CFDIR
     CHARACTER(LEN=2047)  :: LINE
 
@@ -182,7 +171,8 @@ CONTAINS
 
     ! Enter
     RC  = HCO_SUCCESS
-    LOC = 'Config_ReadFile (hco_config_mod.F90)'
+    msg = ''
+    loc = 'Config_ReadFile (hco_config_mod.F90)'
 
     ! Initialize config object if not already initialized
     IF ( .NOT. ASSOCIATED(HcoConfig) ) THEN
@@ -258,11 +248,15 @@ CONTAINS
        ENDIF
     ENDIF
 
-    ! Extract configuration file directory. This is the directory containing the
-    ! configuration file. Any tokens $CFDIR in the given configuration file will
-    ! be replaced with the configuration file directory
+    ! Extract configuration file directory. This is the directory containing
+    ! the configuration file. Any tokens $CFDIR in the given configuration
+    ! file will be replaced with the configuration file directory
     CALL HCO_GetBase( ConfigFile, CFDIR, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+       msg = 'Could not replace $CFDIR token in: ' // TRIM( ConfigFile )
+       CALL HCO_Error( msg, RC, thisLoc=LOC )
+       RETURN
+    ENDIF
 
     ! Find free LUN
     IU_HCO = findFreeLUN()
@@ -294,7 +288,8 @@ CONTAINS
     IF ( .NOT. ExtNrInUse( HcoConfig%ExtList, CoreNr ) ) THEN
        CALL AddExt( HcoConfig, 'CORE', CoreNr, .TRUE., 'all', RC )
        IF ( RC /= HCO_SUCCESS ) THEN
-          WRITE(*,*) 'Error adding CORE extension'
+          msg = 'Error adding CORE extension'
+          CALL HCO_Error( msg, RC, thisLoc=loc )
           RC = HCO_FAIL
           RETURN
        ENDIF
@@ -308,7 +303,11 @@ CONTAINS
 
        ! Read a line from the file, exit if EOF
        CALL HCO_ReadLine ( IU_HCO, LINE, EOF, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+          msg = 'Error in HEMCO_Config.rc @ line: ' // TRIM( Line )
+          CALL HCO_Error( msg, RC, thisLoc=loc )
+          RETURN
+       ENDIF
        IF ( EOF ) EXIT
 
        ! Replace tab characters in LINE (if any) w/ spaces
@@ -321,7 +320,11 @@ CONTAINS
 
           IF ( PHASE < 2 ) THEN
              CALL ReadSettings( HcoConfig, IU_HCO, EOF, RC )
-             IF ( RC /= HCO_SUCCESS ) RETURN
+             IF ( RC /= HCO_SUCCESS ) THEN
+                msg = 'Error in HEMCO_Config.rc @ section ' // TRIM( line )
+                CALL HCO_Error( msg, RC, thisLoc=loc )
+                RETURN
+             ENDIF
              IF ( EOF ) EXIT
 
              ! Increase counter
@@ -337,7 +340,11 @@ CONTAINS
 
           IF ( PHASE < 2 ) THEN
              CALL ExtSwitch2Buffer( HcoConfig, IU_HCO, EOF, RC )
-             IF ( RC /= HCO_SUCCESS ) RETURN
+             IF ( RC /= HCO_SUCCESS ) THEN
+                msg = 'Error in HEMCO_Config,rc @ section: ' // TRIM( line )
+                CALL HCO_Error( msg, RC, thisLoc=loc )
+                RETURN
+             ENDIF
              IF ( EOF ) EXIT
 
              ! Increase counter
@@ -358,7 +365,11 @@ CONTAINS
              CALL Config_ReadCont( HcoConfig,        IU_HCO, CFDIR,          &
                                    HCO_DCTTYPE_BASE, EOF,    RC,             &
                                    IsDryRun=IsDryRun                        )
-             IF ( RC /= HCO_SUCCESS ) RETURN
+             IF ( RC /= HCO_SUCCESS ) THEN
+                msg = 'Error in HEMCO_Config.rc @ section: ' // TRIM( Line )
+                CALL HCO_Error( msg, RC, thisLoc=loc )
+                RETURN
+             ENDIF
              IF ( EOF ) EXIT
 
              ! Increase counter
@@ -371,7 +382,11 @@ CONTAINS
 
           CALL Config_ReadCont( HcoConfig, IU_HCO, CFDIR, &
                                 HCO_DCTTYPE_SCAL, EOF, RC )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+          IF ( RC /= HCO_SUCCESS ) THEN
+             msg= 'Error in HEMCO_Config.rc @ section: ' // TRIM( Line )
+             CALL HCO_Error( msg, RC, thisLoc=loc )
+             RETURN
+          ENDIF
           IF ( EOF ) EXIT
 
        ! Read masks. This creates a new data container for each mask
@@ -380,7 +395,11 @@ CONTAINS
           IF ( PHASE == 0 .OR. PHASE == 2 ) THEN
              CALL Config_ReadCont( HcoConfig, IU_HCO, CFDIR, &
                                    HCO_DCTTYPE_MASK, EOF, RC )
-             IF ( RC /= HCO_SUCCESS ) RETURN
+             IF ( RC /= HCO_SUCCESS ) THEN
+                msg = 'Error in HEMCO_Config.rc @ line: ' // TRIM( Line )
+                CALL HCO_Error( msg, RC, thisLoc=LOC )
+                RETURN
+             ENDIF
              IF ( EOF ) EXIT
 
              ! Increase counter
@@ -402,7 +421,8 @@ CONTAINS
     ! Close file
     CLOSE( UNIT=IU_HCO, IOSTAT=IOS )
     IF ( IOS /= 0 ) THEN
-       WRITE(*,*) 'Error closing ' // TRIM(ConfigFile)
+       msg = 'Error closing ' // TRIM(ConfigFile)
+       CALL HCO_Error( msg, RC, thisLoc=loc )
        RC = HCO_FAIL
        RETURN
     ENDIF
@@ -420,7 +440,7 @@ CONTAINS
   END SUBROUTINE Config_ReadFile
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -450,31 +470,37 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Jun 2013 - C. Keller: Initialization
-!  17 Sep 2013 - C. Keller: Now get data from buffer
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 
-    CHARACTER(LEN=255)  :: MSG
+    CHARACTER(LEN=255) :: loc
+    CHARACTER(LEN=512) :: msg
 
     !======================================================================
     ! SetReadList begins here
     !======================================================================
+    msg = ''
+    loc = 'SetReadList (HCO_CONFIG_MOD.F90)'
 
     ! Init
-    CALL HCO_ENTER ( HcoState%Config%Err, 'SetReadList (hco_config_mod.F90)', RC )
+    CALL HCO_ENTER ( HcoState%Config%Err, LOC, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
-       PRINT *,'Error in HCO_ENTER called from HEMCO SetReadList'
+       msg = 'Error encountered in routine "HCO_Enter"!'
+       CALL HCO_Error( msg, RC, thisLoc=loc )
        RETURN
     ENDIF
 
     ! Return w/ error if configuration file hasn't been read yet!
     IF ( .NOT. ASSOCIATED(HcoState%Config) ) THEN
-       PRINT *,'HEMCO configuration object in HEMCO state is empty! Error in HEMCO SetReadList.'
+       msg = 'HEMCO configuration object in HEMCO state is empty!'
+       CALL HCO_Error( msg, RC, thisLoc=loc )
        RETURN
     ENDIF
     IF ( .NOT. HcoState%Config%ConfigFileRead ) THEN
-       PRINT *,'HEMCO configuration file not read! Error in HEMCO SetReadList.'
+       msg = 'HEMCO configuration file not read!'
+       CALL HCO_Error( msg, RC, thisLoc=loc )
        RETURN
     ENDIF
 
@@ -484,7 +510,7 @@ CONTAINS
        ! Initialize ReadList
        CALL ReadList_Init ( HcoState%ReadLists, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
-          PRINT *,'Error in HCO_ENTER called from HEMCO SetReadList'
+          PRINT *,'Error in ReadList_Init called from HEMCO SetReadList'
           RETURN
        ENDIF
 
@@ -542,7 +568,7 @@ CONTAINS
   END SUBROUTINE SetReadList
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -560,7 +586,7 @@ CONTAINS
 !
 ! !USES:
 !
-    USE CHARPAK_MOD,      ONLY : StrSplit
+    USE HCO_CHARPAK_MOD,  ONLY : StrSplit
     USE HCO_EXTLIST_MOD,  ONLY : ExtNrInUse, HCO_GetOpt
     USE HCO_TIDX_Mod,     ONLY : HCO_ExtractTime
     USE HCO_FILEDATA_Mod, ONLY : FileData_Init
@@ -584,30 +610,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  03 Jan 2014 - C. Keller - Initial version
-!  29 Dec 2014 - C. Keller - Added optional 11th element for scale factors. This
-!                            value will be interpreted as mask field (applied to
-!                            this scale factor only).
-!  27 Feb 2015 - C. Keller - Added CycleFlag 'I' (interpolation)
-!  13 Mar 2015 - C. Keller - Added include files (nested configuration files)
-!                            and CFDIR argument.
-!  23 Sep 2015 - C. Keller - Added cycle flags 'A' and 'RA' (for averaging).
-!  06 Oct 2015 - C. Keller - Added cycle flags 'EF' and 'RF' (fields must be
-!                            found).
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
-!  20 Jul 2018 - C. Keller   - Return error if duplicate container name
-!  05 Oct 2018 - R. Yantosca - Cycle flag "E" now will read the target file
-!                              only once (e.g. use for restart files).
-!                              Cycle flag "EC" will now continously attempt
-!                              to read/query from the target file.
-!  23 Oct 2018 - M. Sulprizio- Add option to use wildcard (e.g. ?ALL?) in
-!                              variable name to simplify reading all species
-!                              concentration fields from the GEOS-Chem restart
-!                              file, but may be expanded for other purposes
-!  02 Nov 2018 - M. Sulprizio- Add cycle flag "CS" to skip fields not found
-!  08 Mar 2019 - M. Sulprizio- Add "*Y" options to TmCycle to force always using
-!                              simulation year (eg, instead of emissions year)
-!  23 Oct 2019 - M. Sulprizio- Added cycle flag "ID" to denote when dataset is
-!                              discontinous and needs to be interpolated
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -642,13 +645,13 @@ CONTAINS
     CHARACTER(LEN= 31)        :: SpcName
     CHARACTER(LEN=255)        :: Char1
     CHARACTER(LEN=255)        :: Char2
-    CHARACTER(LEN=255)        :: LOC, MSG
+    CHARACTER(LEN=255)        :: loc
     CHARACTER(LEN=255)        :: LINE
     CHARACTER(LEN=255)        :: tagId
     CHARACTER(LEN=255)        :: tagName
     CHARACTER(LEN=255)        :: tagcName
     CHARACTER(LEN=255)        :: ItemPrefix
-    CHARACTER(LEN=255)        :: ErrMsg
+    CHARACTER(LEN=512)        :: msg
 
     ! Arrays
     INTEGER                   :: SplitInts(255)
@@ -664,7 +667,7 @@ CONTAINS
     !=================================================================
 
     ! Enter
-    LOC = 'Config_ReadCont (hco_config_mod.F90)'
+    loc = 'Config_ReadCont (hco_config_mod.F90)'
 
     ! Initialize
     SKIP           = .FALSE.
@@ -679,6 +682,20 @@ CONTAINS
 
     ! Repeat until end of the given section is found
     DO
+
+       ! Zero loop variables for safety's sake (bmy, 07 Mar 2022)
+       srcFile = ''
+       srcVar  = ''
+       srcTime = ''
+       tmCycle = ''
+       srcDim  = ''
+       srcUnit = ''
+       spcName = ''
+       char1   = ''
+       char2   = ''
+       int1    = 0
+       int2    = 0
+       int3    = 0
 
        !==============================================================
        ! Read line and get desired character strings
@@ -742,7 +759,8 @@ CONTAINS
 
        ! Error if not enough entries found
        IF ( STAT == 100 ) THEN
-          CALL HCO_ERROR ( HcoConfig%Err, 'STAT == 100', RC, THISLOC=LOC )
+          msg = 'STAT == 100; not enough entries found!'
+          CALL HCO_Error( msg, RC, thisLoc=loc )
           RETURN
        ENDIF
 
@@ -751,7 +769,11 @@ CONTAINS
        ! 'collections'.
        ! -------------------------------------------------------------
        CALL BracketCheck( HcoConfig, STAT, LINE, SKIP, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+          msg = 'Bracket error in HEMCO_Config.rc @ line ' // TRIM( line )
+          CALL HCO_ERROR( msg, RC, thisLoc=loc )
+          RETURN
+       ENDIF
 
        ! Skip if needed
        IF ( SKIP ) CYCLE
@@ -770,11 +792,19 @@ CONTAINS
           ! will be evaluated properly. The configuration file must not
           ! contain any data tokens ($YR, $MM, etc.).
           CALL HCO_CharParse ( HcoConfig, LINE, 0, 0, 0, 0, 0, RC )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+          IF ( RC /= HCO_SUCCESS ) THEN
+             msg = 'Parse error in HEMCO_Config.rc @ line: ' // TRIM( line )
+             CALL HCO_Error( msg, RC, thisLoc=LOC )
+             RETURN
+          ENDIF
 
           CALL Config_ReadFile( HcoConfig%amIRoot, HcoConfig, LINE, 0, RC,  &
                                 IsNest=.TRUE., IsDryRun=IsDryRun            )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+          IF ( RC /= HCO_SUCCESS ) THEN
+             msg = 'Error reading HEMCO_Config.rc @ line: ' // TRIM( line )
+             CALL HCO_Error( msg, RC, thisLoc=loc )
+             RETURN
+          ENDIF
 
           ! All done with this line
           CYCLE
@@ -782,7 +812,8 @@ CONTAINS
 
        ! Output status should be 0 if none of the statuses above applies
        IF ( STAT /= 0 ) THEN
-          CALL HCO_ERROR ( HcoConfig%Err, 'STAT /= 0', RC, THISLOC=LOC )
+          msg = 'STAT /= 0; indicates I/O error!'
+          CALL HCO_Error( msg, RC, thisLoc=loc )
           RETURN
        ENDIF
 
@@ -817,9 +848,9 @@ CONTAINS
              CALL Hco_GetTagInfo( tagId, HcoConfig, Found, RC, N=N, &
                                   tagName=tagName )
              IF ( RC /= HCO_SUCCESS ) THEN
-                ErrMsg = 'Error retrieving tag name for' //            &
-                         ' wildcard ' // TRIM(tagId)
-                CALL HCO_Error( HcoConfig%Err, ErrMsg, RC )
+                msg = 'Error retrieving tag name for' //            &
+                      ' wildcard ' // TRIM(tagId)
+                CALL HCO_Error( msg, RC, thisLoc=loc )
                 RETURN
              ENDIF
 
@@ -834,29 +865,37 @@ CONTAINS
              ! Fill data container
              ! -------------------------------------------------------------
 
-             ! Add blank list container to ConfigList list. The container
-             ! is placed at the beginning of the list.
+             ! Add blank list container (ListCont object) to ConfigList.
+             ! The container is placed at the beginning of the list.
              CALL ConfigList_AddCont ( Lct, HcoConfig%ConfigList )
 
              ! Check if name exists already
              CALL CheckForDuplicateName( HcoConfig, tagcName, RC )
-             IF ( RC /= HCO_SUCCESS ) RETURN
+             IF ( RC /= HCO_SUCCESS ) THEN
+                msg = 'Duplicate container name: ' // TRIM( tagcName )
+                CALL HCO_ERROR( msg, RC, thisLoc=loc )
+                RETURN
+             ENDIF
 
              ! Attributes used by all data types: data type number and
              ! container name.
-             Lct%Dct%DctType      = DctType
-             Lct%Dct%cName        = ADJUSTL(tagcName)
+             Lct%Dct%DctType = DctType
+             Lct%Dct%cName   = ADJUSTL( tagcName )
 
              ! Set species name, extension number, emission category,
              ! hierarchy
-             Lct%Dct%SpcName       = ADJUSTL(SpcName)
-             Lct%Dct%Hier          = Int2
-             Lct%Dct%ExtNr         = Int3
+             Lct%Dct%SpcName = ADJUSTL( SpcName )
+             Lct%Dct%Hier    = Int2
+             Lct%Dct%ExtNr   = Int3
 
              ! Extract category from character 2. This can be up to
              ! CatMax integers, or empty.
              CALL HCO_CharSplit( Char2, Separator, Wildcard, Cats, nCat, RC )
-             IF ( RC /= HCO_SUCCESS ) RETURN
+             IF ( RC /= HCO_SUCCESS ) THEN
+                msg = 'Could not extract category at line: ' // TRIM( char2 )
+                CALL HCO_Error( msg, RC, thisLoc=LOC )
+                RETURN
+             ENDIF
              IF ( nCat == 0 ) THEN
                 Lct%Dct%Cat = -999
              ELSE
@@ -867,7 +906,12 @@ CONTAINS
              ! replaced lateron with the container IDs (in register_base)!
              CALL HCO_CharSplit( Char1, Separator, Wildcard, &
                                  SplitInts, nScl, RC )
-             IF ( RC /= HCO_SUCCESS ) RETURN
+             IF ( RC /= HCO_SUCCESS ) THEN
+                msg = 'Could not get scale factor ID''s in line: '        // &
+                      TRIM( char1 )
+                CALL HCO_Error( msg, RC, thisLoc=loc )
+                RETURN
+             ENDIF
              IF ( nScl > 0 ) THEN
                 ALLOCATE ( Lct%Dct%Scal_cID(nScl) )
                 Lct%Dct%Scal_cID(1:nScl) = SplitInts(1:nScl)
@@ -878,7 +922,11 @@ CONTAINS
              ! returned to the atmospheric model to match HEMCO species
              ! with model species (see Config\_GetSpecNames).
              CALL SpecName_Register ( HcoConfig, ADJUSTL(SpcName), RC )
-             IF ( RC /= HCO_SUCCESS ) RETURN
+             IF ( RC /= HCO_SUCCESS ) THEN
+                msg = 'Could not register species name: ' // TRIM(SpcName)
+                CALL HCO_Error( msg, RC, thisLoc=loc )
+                RETURN
+             ENDIF
 
              ! -------------------------------------------------------------
              ! Create and fill file data object. Use previous file data
@@ -894,31 +942,46 @@ CONTAINS
              ! default value of -999 to be able to identify data objects
              ! used by multiple containers.
              ! -------------------------------------------------------------
-             IF ( TRIM(srcFile) == '-' ) THEN
-                IF ( .NOT. ASSOCIATED(Dta) ) THEN
+             IF ( TRIM( srcFile ) == '-' ) THEN
+
+                ! The current entry of the configuration file specifies that
+                ! we will get data from the file listed immediately above it.
+                ! Thus we have to reuse a previously-defined FileData object
+                ! (aka Dta).  Stop if Dta is not initialized.
+                IF ( .not. ASSOCIATED( Dta ) ) THEN
                    MSG = 'Cannot use previous data container: '//TRIM(tagcName)
-                   CALL HCO_ERROR ( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+                   CALL HCO_Error( msg, RC, thisLoc=loc )
                    RETURN
                 ENDIF
+
+                ! Reuse the file metadata specified in PrevDta for
+                ! this entry of the HEMCO configuration file.
                 Lct%Dct%DtaHome = Lct%Dct%DtaHome - 1
+
              ELSE
-                Dta => NULL()
-                CALL FileData_Init ( Dta )
+
+                ! The current entry of the configuration file specifies that
+                ! we will read data from a file.  We thus need to initialize
+                ! a new FileData object to keep track of the file metadata.
+                !
+                ! >>> NOTE: This seems to cause a memory leak! <<<
+                ! >>> We will look into this at a later date.  <<<
+                CALL FileData_Init( Dta )
 
                 ! Set source file name. Check if the read file name starts
                 ! with the configuration file token '$CFDIR', in which case
                 ! we replace this value with the passed CFDIR value.
-                STRLEN = LEN(srcFile)
+                STRLEN = LEN( srcFile )
                 IF ( STRLEN > 6 ) THEN
                    IF ( srcFile(1:6) == '$CFDIR' ) THEN
-                      srcFile = TRIM(CFDIR) // TRIM(srcFile(7:STRLEN))
+                      srcFile = TRIM( CFDIR ) // TRIM( srcFile(7:STRLEN) )
                    ENDIF
                 ENDIF
-                Dta%ncFile    = srcFile
+                Dta%ncFile   = srcFile
 
                 ! Set source variable and original data unit.
-                Dta%ncPara    = ADJUSTL(srcVar)
-                Dta%OrigUnit  = ADJUStL(srcUnit)
+                Dta%ncPara   = ADJUSTL( srcVar )
+                Dta%OrigUnit = ADJUSTL( srcUnit )
 
                 ! If the parameter ncPara is not defined, attempt to read data
                 ! directly from configuration file instead of netCDF.
@@ -927,7 +990,7 @@ CONTAINS
                 ! data that is treated in local time. The corresponding
                 ! IsLocTime flag is updated when reading the data (see
                 ! hcoio_dataread_mod.F90).
-                IF ( TRIM(Dta%ncPara) == '-' ) THEN
+                IF ( TRIM( Dta%ncPara ) == '-' ) THEN
                    Dta%ncRead    = .FALSE.
                    Dta%IsLocTime = .TRUE.
                 ENDIF
@@ -937,166 +1000,50 @@ CONTAINS
                 ! defined, keep default values (-1 for all of them)
                 IF ( TRIM(srcTime) /= '-' ) THEN
                    CALL HCO_ExtractTime( HcoConfig, srcTime, Dta, RC )
-                   IF ( RC /= HCO_SUCCESS ) RETURN
+                   IF ( RC /= HCO_SUCCESS ) THEN
+                      msg = 'Could not extract time cycle information!'
+                      CALL HCO_Error( msg, RC, thisLoc=loc )
+                      RETURN
+                   ENDIF
                 ENDIF
 
+#if defined(ESMF_)
                 ! In an ESMF environment, the source data will be imported
                 ! through ExtData by name, hence need to set ncFile equal to
                 ! container name!
-#if defined(ESMF_)
                 IF ( Dta%ncRead ) THEN
-                   Dta%ncFile = ADJUSTL(tagcName)
+                   Dta%ncFile = ADJUSTL( tagcName )
                 ENDIF
 #endif
 
-                ! Set time cycling behaviour. Possible values are:
-                ! - "C"  : cycling <-- DEFAULT
-                ! - "CS" : cycling, skip if not exist
-                ! - "CY" : cycling, always use simulation year
-                ! - "CYS": cycling, always use simulation yr, skip if not exist
-                ! - "R"  : range
-                ! - "RA" : range, average outside
-                ! - "RF" : range, forced (error if not in range)
-                ! - "RFY": range, forced, always use simulation year
-                ! - "RFY3: range, forced, always use simulation year, 3-hourly
-                ! - "RY" : range, always use simulation year
-                ! - "E"  : exact (read file once)
-                ! - "EF" : exact, forced (error if not exist, read/query once)
-                ! - "EC" : exact (read/query continuously, e.g. for ESMF interface)
-                ! - "ECF": exact, forced (error if not exist, read/query continuously)
-                ! - "EY" : exact, always use simulation year
-                ! - "A"  : average
-                ! - "I"  : interpolate
-                ! - "ID" : interpolate, discontinuous dataset
-                Dta%MustFind  = .FALSE.
-                Dta%UseSimYear= .FALSE.
-                Dta%Discontinuous = .FALSE.
-                IF ( TRIM(TmCycle) == "C" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_CYCLE
-                   Dta%MustFind  = .TRUE.
-                ELSEIF ( TRIM(TmCycle) == "CS" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_CYCLE
-                   Dta%MustFind  = .FALSE.
-                ELSEIF ( TRIM(TmCycle) == "CY" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_CYCLE
-                   Dta%MustFind  = .TRUE.
-                   Dta%UseSimYear= .TRUE.
-                ELSEIF ( TRIM(TmCycle) == "CYS" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_CYCLE
-                   Dta%MustFind  = .FALSE.
-                   Dta%UseSimYear= .TRUE.
-                ELSEIF ( TRIM(TmCycle) == "R" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_RANGE
-                ELSEIF ( TRIM(TmCycle) == "RA" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_RANGEAVG
-                ELSEIF ( TRIM(TmCycle) == "RF" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_RANGE
-                   Dta%MustFind  = .TRUE.
-                ELSEIF ( TRIM(TmCycle) == "RFY" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_RANGE
-                   Dta%MustFind  = .TRUE.
-                   Dta%UseSimYear= .TRUE.
-                ELSEIF ( TRIM(TmCycle) == "RFY3" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_RANGE
-                   Dta%MustFind  = .TRUE.
-                   Dta%UseSimYear= .TRUE.
-                   Dta%UpdtFlag  = HCO_UFLAG_3HR
-                ELSEIF ( TRIM(TmCycle) == "RY" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_RANGE
-                   Dta%UseSimYear= .TRUE.
-                ELSEIF ( TRIM(TmCycle) == "E" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_EXACT
-                   Dta%UpdtFlag  = HCO_UFLAG_ONCE
-                ELSEIF ( TRIM(TmCycle) == "EF" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_EXACT
-                   Dta%UpdtFlag  = HCO_UFLAG_ONCE
-                   Dta%MustFind  = .TRUE.
-                ELSEIF ( TRIM(TmCycle) == "EC" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_EXACT
-                ELSEIF ( TRIM(TmCycle) == "ECF" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_EXACT
-                   Dta%MustFind  = .TRUE.
-                ELSEIF ( TRIM(TmCycle) == "EY" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_EXACT
-                   Dta%UpdtFlag  = HCO_UFLAG_ONCE
-                   Dta%UseSimYear=.TRUE.
-                ELSEIF ( TRIM(TmCycle) == "A" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_AVERG
-                ELSEIF ( TRIM(TmCycle) == "I" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_INTER
-                ELSEIF ( TRIM(TmCycle) == "ID" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_INTER
-                   Dta%Discontinuous = .TRUE.
-                ELSEIF ( TRIM(TmCycle) == "-" ) THEN
-                   Dta%CycleFlag = HCO_CFLAG_CYCLE
-                ELSE
-                   MSG = 'Invalid time cycling attribute: ' // &
-                         TRIM(TmCycle) // ' - in ' // TRIM(tagcName)
-                   CALL HCO_ERROR ( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+                ! Update the properties of the data container
+                ! NOTE: This routine abstracts the big IF/ELSE block that
+                ! processes the time cycle information (bmy, 07 Mar 2022)
+                CALL UpdateDtaProperties(                                    &
+                     dctType   = dctType,                                    &
+                     int3      = int3,                                       &
+                     char1     = TRIM( char1     ),                          &
+                     char2     = char2(1:1),                                 &
+                     tagCName  = TRIM( tagCName  ),                          &
+                     tmCycle   = TRIM( tmCycle   ),                          &
+                     separator = TRIM( separator ),                          &
+                     srcDim    = TRIM( srcDim    ),                          &
+                     wildCard  = TRIM( wildCard  ),                          &
+                     HcoConfig = HcoConfig,                                  &
+                     Lct       = Lct,                                        &
+                     Dta       = Dta,                                        &
+                     RC        = RC                                         )
+
+                ! Trap potential errors
+                IF ( RC /= HCO_Success ) THEN
+                   MSG = 'Error encountered in routine "UpdateDtaProperties"'
+                   CALL HCO_Error( MSG, RC, thisLoc=loc )
                    RETURN
                 ENDIF
 
-                ! Set space dimension. This will determine the dimension of the
-                ! data array vector, i.e. 3D or 2D. Different time slices will
-                ! be stored as different vector elements.
-                ! For 3D data, it is now possible to explicitly set the number
-                ! of vertical levels to be used, as well as the 'reading
-                ! direction' (up or down). These information is also extracted
-                ! from srcDim and will be stored in variable Dta%Levels.
-                ! (ckeller, 5/20/15)
-                ! ExtractSrcDim now also returns possible scale factors for the
-                ! injection level, which will be stored in container variable
-                ! levScalID1 (bottom level) and levScalID2 (top level).
-                CALL ExtractSrcDim( HcoConfig, srcDim, Dta, &
-                                    levScal1,  levScal2,  RC )
-                IF ( RC /= HCO_SUCCESS ) RETURN
-
-                ! Set level scale factor index
-                IF ( levScal1 > 0 ) Lct%Dct%levScalID1 = levScal1
-                IF ( levScal2 > 0 ) Lct%Dct%levScalID2 = levScal2
-
-                ! For scale factors: check if a mask is assigned to this scale
-                ! factor. In this case, pass mask ID to first slot of Scal_cID
-                ! vector. This value will be set to the container ID of the
-                ! corresponding mask field lateron.
-                IF ( DctType == HCO_DCTTYPE_SCAL .AND. Int3 > 0 ) THEN
-                   ALLOCATE ( Lct%Dct%Scal_cID(1) )
-                   Lct%Dct%Scal_cID(1) = Int3
-                   Lct%Dct%nScalID     = 1
-                ENDIF
-
-                ! For masks: extract grid box edges. These will be used later
-                ! on to determine if emissions have to be considered by this
-                ! CPU.
-                IF ( DctType == HCO_DCTTYPE_MASK ) THEN
-
-                   ! Extract grid box edges. Need to be four values.
-                   CALL HCO_CharSplit ( Char1, Separator, Wildcard, &
-                                        SplitInts, nEdges, RC )
-                   IF ( RC /= HCO_SUCCESS ) RETURN
-                   IF ( nEdges /= 4 ) THEN
-                      MSG = 'Cannot properly read mask coverage: ' // &
-                           TRIM(Lct%Dct%cName)
-                      CALL HCO_ERROR ( HcoConfig%Err, MSG, RC, THISLOC=LOC )
-                      RETURN
-                   ENDIF
-
-                   ! Save temporarily in year and month range. Will be
-                   ! reset lateron.
-                   Dta%ncYrs(1) = SplitInts(1)
-                   Dta%ncYrs(2) = SplitInts(2)
-                   Dta%ncMts(1) = SplitInts(3)
-                   Dta%ncMts(2) = SplitInts(4)
-
-                   ! Make sure that masks are always being read if specified so.
-                   IF ( Char2(1:1) == 'y' .OR. Char2(1:1) == 'Y' ) THEN
-                      CALL ScalID2List( HcoConfig%ScalIDList, Lct%Dct%ScalID, RC )
-                      IF ( RC /= HCO_SUCCESS ) RETURN
-                   ENDIF
-                ENDIF
              ENDIF
 
-             ! Connect file data object of this data container.
+             ! Connect this FileData object to the HcoState%HcoConfigList.
              Lct%Dct%Dta => Dta
 
              ! Free list container for next cycle
@@ -1111,13 +1058,17 @@ CONTAINS
           ! Fill data container
           ! -------------------------------------------------------------
 
-          ! Add blank list container to ConfigList list. The container
-          ! is placed at the beginning of the list.
+          ! Add blank list container (ListCont object) to ConfigList.
+          ! The container is placed at the beginning of the list.
           CALL ConfigList_AddCont ( Lct, HcoConfig%ConfigList )
 
           ! Check if name exists already
           CALL CheckForDuplicateName( HcoConfig, cName, RC )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+          IF ( RC /= HCO_SUCCESS ) THEN
+             msg = 'Duplicate name: ' // TRIM( cName )
+             CALL HCO_Error( msg, RC, thisLoc=loc )
+             RETURN
+          ENDIF
 
           ! Attributes used by all data types: data type number and
           ! container name.
@@ -1129,14 +1080,18 @@ CONTAINS
 
              ! Set species name, extension number, emission category,
              ! hierarchy
-             Lct%Dct%SpcName       = ADJUSTL(SpcName)
-             Lct%Dct%Hier          = Int2
-             Lct%Dct%ExtNr         = Int3
+             Lct%Dct%SpcName = ADJUSTL( SpcName )
+             Lct%Dct%Hier    = Int2
+             Lct%Dct%ExtNr   = Int3
 
              ! Extract category from character 2. This can be up to
              ! CatMax integers, or empty.
              CALL HCO_CharSplit( Char2, Separator, Wildcard, Cats, nCat, RC )
-             IF ( RC /= HCO_SUCCESS ) RETURN
+             IF ( RC /= HCO_SUCCESS ) THEN
+                msg = 'Could not extract category from: ' // TRIM( char2 )
+                 CALL HCO_Error( msg, RC, thisLoc=loc )
+                 RETURN
+             ENDIF
              IF ( nCat == 0 ) THEN
                 Lct%Dct%Cat = -999
              ELSE
@@ -1147,7 +1102,11 @@ CONTAINS
              ! replaced lateron with the container IDs (in register_base)!
              CALL HCO_CharSplit( Char1, Separator, Wildcard, &
                                  SplitInts, nScl, RC )
-             IF ( RC /= HCO_SUCCESS ) RETURN
+             IF ( RC /= HCO_SUCCESS ) THEN
+                msg = 'Could not get scale factor IDs from: ' // TRIM( char1 )
+                CALL HCO_Error( msg, RC, thisLoc=loc )
+                RETURN
+             ENDIF
              IF ( nScl > 0 ) THEN
                 ALLOCATE ( Lct%Dct%Scal_cID(nScl) )
                 Lct%Dct%Scal_cID(1:nScl) = SplitInts(1:nScl)
@@ -1158,7 +1117,11 @@ CONTAINS
              ! returned to the atmospheric model to match HEMCO species
              ! with model species (see Config\_GetSpecNames).
              CALL SpecName_Register ( HcoConfig, ADJUSTL(SpcName), RC )
-             IF ( RC /= HCO_SUCCESS ) RETURN
+             IF ( RC /= HCO_SUCCESS ) THEN
+                msg = 'Could not register species: ' // TRIM( SpcName )
+                CALL HCO_ERROR( msg, RC, thisLoc=loc )
+                RETURN
+             ENDIF
 
           ! Scale factor & mask specific attributes
           ELSE IF ( DctType == HCO_DCTTYPE_SCAL .OR. &
@@ -1171,12 +1134,17 @@ CONTAINS
              ! Make sure that negative scale factors are always read
              IF ( Lct%Dct%ScalID < 0 ) THEN
                 CALL ScalID2List( HcoConfig%ScalIDList, Lct%Dct%ScalID, RC )
-                IF ( RC /= HCO_SUCCESS ) RETURN
+                IF ( RC /= HCO_SUCCESS ) THEN
+                   msg = 'Could not make sure that negative scale '       // &
+                         'are always read!'
+                   CALL HCO_Error( msg, RC, thisLoc=loc )
+                   RETURN
+                ENDIF
              ENDIF
 
           ELSE
-             CALL HCO_ERROR ( HcoConfig%Err, 'Invalid data type!', RC, &
-                              THISLOC=LOC )
+             msg = 'Invalid data type!'
+             CALL HCO_Error( msg, RC, thisLoc=loc )
              RETURN
           ENDIF
 
@@ -1194,31 +1162,46 @@ CONTAINS
           ! default value of -999 to be able to identify data objects
           ! used by multiple containers.
           ! -------------------------------------------------------------
-          IF ( TRIM(srcFile) == '-' ) THEN
+          IF ( TRIM( srcFile ) == '-' ) THEN
+
+             ! The current entry of the configuration file specifies that
+             ! we will get data from the file listed immediately above it.
+             ! Thus we have to reuse a previously-defined FileData object
+             ! (aka Dta).  Stop if Dta is not initialized.
              IF ( .NOT. ASSOCIATED(Dta) ) THEN
                 MSG = 'Cannot use previous data container: '//TRIM(cName)
-                CALL HCO_ERROR ( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+                CALL HCO_Error( msg, RC, thisLoc=loc)
                 RETURN
              ENDIF
+
+             ! Reuse the file metadata specified in Dta for
+             ! this entry of the HEMCO configuration file.
              Lct%Dct%DtaHome = Lct%Dct%DtaHome - 1
+
           ELSE
-             Dta => NULL()
-             CALL FileData_Init ( Dta )
+
+             ! The current entry of the configuration file specifies that
+             ! we will read data from a file.  We thus need to initialize
+             ! a new FileData object to keep track of the file metadata.
+             !
+             ! >>> NOTE: This seems to cause a memory leak; <<<
+             ! >>> We will look into this at a later date   <<<
+             CALL FileData_Init( Dta )
 
              ! Set source file name. Check if the read file name starts
              ! with the configuration file token '$CFDIR', in which case
              ! we replace this value with the passed CFDIR value.
-             STRLEN = LEN(srcFile)
+             STRLEN = LEN( srcFile )
              IF ( STRLEN > 6 ) THEN
                 IF ( srcFile(1:6) == '$CFDIR' ) THEN
-                   srcFile = TRIM(CFDIR) // TRIM(srcFile(7:STRLEN))
+                   srcFile = TRIM( CFDIR ) // TRIM( srcFile(7:STRLEN) )
                 ENDIF
              ENDIF
-             Dta%ncFile    = srcFile
+             Dta%ncFile   = srcFile
 
              ! Set source variable and original data unit.
-             Dta%ncPara    = ADJUSTL(srcVar)
-             Dta%OrigUnit  = ADJUStL(srcUnit)
+             Dta%ncPara   = ADJUSTL( srcVar  )
+             Dta%OrigUnit = ADJUSTL( srcUnit )
 
              ! If the parameter ncPara is not defined, attempt to read data
              ! directly from configuration file instead of netCDF.
@@ -1227,7 +1210,7 @@ CONTAINS
              ! data that is treated in local time. The corresponding
              ! IsLocTime flag is updated when reading the data (see
              ! hcoio_dataread_mod.F90).
-             IF ( TRIM(Dta%ncPara) == '-' ) THEN
+             IF ( TRIM( Dta%ncPara ) == '-' ) THEN
                 Dta%ncRead    = .FALSE.
                 Dta%IsLocTime = .TRUE.
              ENDIF
@@ -1237,161 +1220,50 @@ CONTAINS
              ! defined, keep default values (-1 for all of them)
              IF ( TRIM(srcTime) /= '-' ) THEN
                 CALL HCO_ExtractTime( HcoConfig, srcTime, Dta, RC )
-                IF ( RC /= HCO_SUCCESS ) RETURN
+                IF ( RC /= HCO_SUCCESS ) THEN
+                   msg = 'Could not extract time information!'
+                   CALL HCO_Error( msg, RC, thisLoc=loc )
+                   RETURN
+                ENDIF
              ENDIF
 
+#if defined(ESMF_)
              ! In an ESMF environment, the source data will be imported
              ! through ExtData by name, hence need to set ncFile equal to
              ! container name!
-#if defined(ESMF_)
              IF ( Dta%ncRead ) THEN
-                Dta%ncFile = ADJUSTL(cName)
+                Dta%ncFile = ADJUSTL( cName )
              ENDIF
 #endif
 
-             ! Set time cycling behaviour. Possible values are:
-             ! - "C"  : cycling <-- DEFAULT
-             ! - "CS" : cycling, skip if not exist
-             ! - "CY" : cycling, always use simulation year
-             ! - "CYS": cycling, always use simulation yr, skip if not exist
-             ! - "R"  : range
-             ! - "RA" : range, average outside
-             ! - "RF" : range, forced (error if not in range)
-             ! - "RFY": range, forced, always use simulation year
-             ! - "RFY3: range, forced, always use simulation year, 3-hourly
-             ! - "RY" : range, always use simulation year
-             ! - "E"  : exact (read file once)
-             ! - "EF" : exact, forced (error if not exist, read/query once)
-             ! - "EC" : exact (read/query continuously, e.g. for ESMF interface)
-             ! - "ECF": exact, forced (error if not exist, read/query continuously)
-             ! - "EY" : exact, always use simulation year
-             ! - "A"  : average
-             ! - "I"  : interpolate
-             Dta%MustFind  = .FALSE.
-             Dta%UseSimYear= .FALSE.
-             IF ( TRIM(TmCycle) == "C" ) THEN
-                Dta%CycleFlag = HCO_CFLAG_CYCLE
-                Dta%MustFind  = .TRUE.
-             ELSEIF ( TRIM(TmCycle) == "CS" ) THEN
-                Dta%CycleFlag = HCO_CFLAG_CYCLE
-                Dta%MustFind  = .FALSE.
-             ELSEIF ( TRIM(TmCycle) == "CY" ) THEN
-                Dta%CycleFlag = HCO_CFLAG_CYCLE
-                Dta%MustFind  = .TRUE.
-                Dta%UseSimYear= .TRUE.
-             ELSEIF ( TRIM(TmCycle) == "CYS" ) THEN
-                Dta%CycleFlag = HCO_CFLAG_CYCLE
-                Dta%MustFind  = .FALSE.
-                Dta%UseSimYear= .TRUE.
-             ELSEIF ( TRIM(TmCycle) == "R" ) THEN
-                Dta%CycleFlag = HCO_CFLAG_RANGE
-             ELSEIF ( TRIM(TmCycle) == "RA" ) THEN
-                Dta%CycleFlag = HCO_CFLAG_RANGEAVG
-             ELSEIF ( TRIM(TmCycle) == "RF" ) THEN
-                Dta%CycleFlag = HCO_CFLAG_RANGE
-                Dta%MustFind  = .TRUE.
-             ELSEIF ( TRIM(TmCycle) == "RFY" ) THEN
-                Dta%CycleFlag = HCO_CFLAG_RANGE
-                Dta%MustFind  = .TRUE.
-                Dta%UseSimYear= .TRUE.
-             ELSEIF ( TRIM(TmCycle) == "RFY3" ) THEN
-                Dta%CycleFlag = HCO_CFLAG_RANGE
-                Dta%MustFind  = .TRUE.
-                Dta%UseSimYear= .TRUE.
-                Dta%UpdtFlag  = HCO_UFLAG_3HR
-             ELSEIF ( TRIM(TmCycle) == "RY" ) THEN
-                Dta%CycleFlag = HCO_CFLAG_RANGE
-                Dta%UseSimYear= .TRUE.
-             ELSEIF ( TRIM(TmCycle) == "E" ) THEN
-                Dta%CycleFlag = HCO_CFLAG_EXACT
-                Dta%UpdtFlag  = HCO_UFLAG_ONCE
-             ELSEIF ( TRIM(TmCycle) == "EF" ) THEN
-                Dta%CycleFlag = HCO_CFLAG_EXACT
-                Dta%UpdtFlag  = HCO_UFLAG_ONCE
-                Dta%MustFind  = .TRUE.
-             ELSEIF ( TRIM(TmCycle) == "EC" ) THEN
-                Dta%CycleFlag = HCO_CFLAG_EXACT
-             ELSEIF ( TRIM(TmCycle) == "ECF" ) THEN
-                Dta%CycleFlag = HCO_CFLAG_EXACT
-                Dta%MustFind  = .TRUE.
-             ELSEIF ( TRIM(TmCycle) == "EY" ) THEN
-                Dta%CycleFlag = HCO_CFLAG_EXACT
-                Dta%UpdtFlag  = HCO_UFLAG_ONCE
-                Dta%UseSimYear=.TRUE.
-             ELSEIF ( TRIM(TmCycle) == "A" ) THEN
-                Dta%CycleFlag = HCO_CFLAG_AVERG
-             ELSEIF ( TRIM(TmCycle) == "I" ) THEN
-                Dta%CycleFlag = HCO_CFLAG_INTER
-             ELSEIF ( TRIM(TmCycle) == "-" ) THEN
-                Dta%CycleFlag = HCO_CFLAG_CYCLE
-             ELSE
-                MSG = 'Invalid time cycling attribute: ' // &
-                     TRIM(TmCycle) // ' - in ' // TRIM(tagcName)
-                CALL HCO_ERROR ( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+             ! Update the properties of the data container
+             ! NOTE: This routine abstracts the big IF/ELSE block that
+             ! processes the time cycle information (bmy, 07 Mar 2022)
+             CALL UpdateDtaProperties(                                    &
+                  dctType   = dctType,                                    &
+                  int3      = int3,                                       &
+                  char1     = TRIM( char1     ),                          &
+                  char2     = char2(1:1),                                 &
+                  tagCName  = TRIM( tagCName  ),                          &
+                  tmCycle   = TRIM( tmCycle   ),                          &
+                  separator = TRIM( separator ),                          &
+                  srcDim    = TRIM( srcDim    ),                          &
+                  wildCard  = TRIM( wildCard  ),                          &
+                  HcoConfig = HcoConfig,                                  &
+                  Lct       = Lct,                                        &
+                  Dta       = Dta,                                        &
+                  RC        = RC                                         )
+
+             ! Trap potential errors
+             IF ( RC /= HCO_Success ) THEN
+                MSG = 'Error encountered in routine "UpdateDtaProperties"'
+                CALL HCO_Error( MSG, RC, thisLoc=loc )
                 RETURN
              ENDIF
 
-             ! Set space dimension. This will determine the dimension of the
-             ! data array vector, i.e. 3D or 2D. Different time slices will
-             ! be stored as different vector elements.
-             ! For 3D data, it is now possible to explicitly set the number
-             ! of vertical levels to be used, as well as the 'reading
-             ! direction' (up or down). These information is also extracted
-             ! from srcDim and will be stored in variable Dta%Levels.
-             ! (ckeller, 5/20/15)
-             ! ExtractSrcDim now also returns possible scale factors for the
-             ! injection level, which will be stored in container variable
-             ! levScalID1 (bottom level) and levScalID2 (top level).
-             CALL ExtractSrcDim( HcoConfig, srcDim, Dta, &
-                                 levScal1,  levScal2,  RC )
-             IF ( RC /= HCO_SUCCESS ) RETURN
-
-             ! Set level scale factor index
-             IF ( levScal1 > 0 ) Lct%Dct%levScalID1 = levScal1
-             IF ( levScal2 > 0 ) Lct%Dct%levScalID2 = levScal2
-
-             ! For scale factors: check if a mask is assigned to this scale
-             ! factor. In this case, pass mask ID to first slot of Scal_cID
-             ! vector. This value will be set to the container ID of the
-             ! corresponding mask field lateron.
-             IF ( DctType == HCO_DCTTYPE_SCAL .AND. Int3 > 0 ) THEN
-                ALLOCATE ( Lct%Dct%Scal_cID(1) )
-                Lct%Dct%Scal_cID(1) = Int3
-                Lct%Dct%nScalID     = 1
-             ENDIF
-
-             ! For masks: extract grid box edges. These will be used later
-             ! on to determine if emissions have to be considered by this
-             ! CPU.
-             IF ( DctType == HCO_DCTTYPE_MASK ) THEN
-
-                ! Extract grid box edges. Need to be four values.
-                CALL HCO_CharSplit ( Char1, Separator, Wildcard, &
-                                     SplitInts, nEdges, RC )
-                IF ( RC /= HCO_SUCCESS ) RETURN
-                IF ( nEdges /= 4 ) THEN
-                   MSG = 'Cannot properly read mask coverage: ' // &
-                         TRIM(Lct%Dct%cName)
-                   CALL HCO_ERROR ( HcoConfig%Err, MSG, RC, THISLOC=LOC )
-                   RETURN
-                ENDIF
-
-                ! Save temporarily in year and month range. Will be
-                ! reset lateron.
-                Dta%ncYrs(1) = SplitInts(1)
-                Dta%ncYrs(2) = SplitInts(2)
-                Dta%ncMts(1) = SplitInts(3)
-                Dta%ncMts(2) = SplitInts(4)
-
-                ! Make sure that masks are always being read if specified so.
-                IF ( Char2(1:1) == 'y' .OR. Char2(1:1) == 'Y' ) THEN
-                   CALL ScalID2List( HcoConfig%ScalIDList, Lct%Dct%ScalID, RC )
-                   IF ( RC /= HCO_SUCCESS ) RETURN
-                ENDIF
-             ENDIF
           ENDIF
 
-          ! Connect file data object of this data container.
+          ! Connect FileData object to the HcoState%HcoConfigList
           Lct%Dct%Dta => Dta
 
           ! If a base emission field covers multiple emission categories,
@@ -1407,13 +1279,17 @@ CONTAINS
 
              ! nCat cannot exceed CatMax
              IF ( nCat > CatMax ) THEN
-                MSG = 'Category max exceeded'
-                CALL HCO_ERROR ( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+                MSG = 'Exceeded maximum number of categories!'
+                CALL HCO_Error( msg, RC, thisLoc=loc )
                 RETURN
              ENDIF
 
              CALL AddShadowFields( HcoConfig, Lct, Cats, nCat, RC )
-             IF ( RC /= HCO_SUCCESS ) RETURN
+             IF ( RC /= HCO_SUCCESS ) THEN
+                msg = 'Could not create shadow emission container!'
+                CALL HCO_ERROR( msg, RC, thisLoc=loc )
+                RETURN
+             ENDIF
 
              ! Reset nCat
              nCat = -1
@@ -1433,7 +1309,7 @@ CONTAINS
   END SUBROUTINE Config_ReadCont
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1482,7 +1358,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  15 Feb 2015 - C. Keller   - Initial version.
-!  12 Mar 2015 - C. Keller   - Added 'mirror' option.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1500,7 +1376,7 @@ CONTAINS
     INTEGER, SAVE                 :: SKIPLEVEL = 0
     CHARACTER(LEN=255), SAVE      :: AllBrackets(MAXBRACKNEST) = ''
     CHARACTER(LEN=255)            :: TmpBracket, CheckBracket, ThisBracket
-    CHARACTER(LEN=255)            :: MSG
+    CHARACTER(LEN=512)            :: msg
 
     CHARACTER(LEN=255), PARAMETER :: LOC = 'BracketCheck (hco_config_mod.F90)'
 
@@ -1515,9 +1391,8 @@ CONTAINS
     IF ( STAT == 5 .OR. STAT == 6 ) THEN
        STRLEN     = LEN(LINE)
        IF ( STRLEN < 4 ) THEN
-          CALL HCO_ERROR ( HcoConfig%Err, &
-                          'Illegal bracket length: '//TRIM(LINE), &
-                           RC, THISLOC=LOC )
+          msg = 'Illegal bracket length: ' // TRIM(line)
+          CALL HCO_ERROR ( msg, RC, thisLoc=loc )
           RETURN
        ELSE
           TmpBracket = TRIM(LINE(4:STRLEN))
@@ -1534,7 +1409,7 @@ CONTAINS
        NEST = NEST + 1
        IF ( NEST > MAXBRACKNEST ) THEN
           MSG = 'Too many nested brackets'
-          CALL HCO_ERROR( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_Error( msg, RC, thisLoc=LOC )
           RETURN
        ENDIF
        AllBrackets(NEST) = TmpBracket
@@ -1596,7 +1471,11 @@ CONTAINS
              ! Scan all extensions, including the core one.
              CALL GetExtOpt( HcoConfig, -999, TRIM(ThisBracket), &
                 OptValBool=UseThis, FOUND=FOUND, RC=RC )
-             IF ( RC /= HCO_SUCCESS ) RETURN
+             IF ( RC /= HCO_SUCCESS ) THEN
+                msg = 'Error when checking '// TRIM( thisBracket ) // '!'
+                CALL HCO_Error( msg, RC, thisLoc=loc )
+                RETURN
+             ENDIF
 
              ! If bracket name was found in options, update the UseBracket
              ! variable accordingly.
@@ -1638,9 +1517,9 @@ CONTAINS
        ! Verbose mode
        IF ( verb ) THEN
           MSG = 'Opened shortcut bracket: '//TRIM(TmpBracket)
-          CALL HCO_MSG( HcoConfig%Err, MSG )
+          CALL HCO_MSG( HcoConfig%Err, msg )
           WRITE(MSG,*) ' - Skip content of this bracket: ', SKIP
-          CALL HCO_MSG( HcoConfig%Err, MSG )
+          CALL HCO_MSG( HcoConfig%Err, msg )
        ENDIF
     ENDIF
 
@@ -1651,7 +1530,7 @@ CONTAINS
        IF ( TRIM(TmpBracket) /= TRIM(AllBrackets(NEST)) ) THEN
           MSG = 'Closing bracket does not match opening bracket: '// &
              TRIM(TmpBracket)//', expected: '//TRIM(AllBrackets(NEST))
-          CALL HCO_ERROR( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_Error( msg, RC, thisLoc=LOC )
           RETURN
        ENDIF
 
@@ -1667,9 +1546,9 @@ CONTAINS
        ! Verbose mode
        IF ( verb ) THEN
           MSG = 'Closed shortcut bracket: '//TRIM(TmpBracket)
-          CALL HCO_MSG( HcoConfig%Err, MSG )
+          CALL HCO_MSG( HcoConfig%Err, msg )
           WRITE(MSG,*) ' - Skip following lines: ', SKIP
-          CALL HCO_MSG( HcoConfig%Err, MSG )
+          CALL HCO_MSG( HcoConfig%Err, msg )
        ENDIF
     ENDIF
 
@@ -1679,7 +1558,7 @@ CONTAINS
   END SUBROUTINE BracketCheck
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1713,7 +1592,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  15 Feb 2015 - C. Keller   - Initial version.
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1723,7 +1602,7 @@ CONTAINS
     LOGICAL                       :: verb
     INTEGER                       :: I, N
     TYPE(ListCont), POINTER       :: Shd
-    CHARACTER(LEN=255)            :: MSG
+    CHARACTER(LEN=512)            :: msg
     CHARACTER(LEN=5)              :: C5
 
     CHARACTER(LEN=255), PARAMETER :: LOC   = 'AddShadowFields (hco_config_mod.F90)'
@@ -1766,7 +1645,7 @@ CONTAINS
     ! Add scale factor zero to it, so that emissions will all be zero.
     DO I = 2, nCat
 
-       ! Create new data container
+       ! Create new data container (ListCont object)
        CALL ConfigList_AddCont ( Shd, HcoConfig%ConfigList )
 
        ! Character of category
@@ -1797,7 +1676,7 @@ CONTAINS
        ! verbose mode
        IF ( verb ) THEN
           MSG = 'Created shadow base emission field: ' // TRIM(Shd%Dct%cName)
-          CALL HCO_MSG(HcoConfig%Err,MSG)
+          CALL HCO_MSG( HcoConfig%Err, msg )
        ENDIF
 
        ! Cleanup
@@ -1806,7 +1685,11 @@ CONTAINS
 
     ! Add zero scale factor container
     CALL AddZeroScal( HcoConfig, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+       msg = 'Call to AddZeroScal could not add zero scale factor container!'
+       CALL HCO_Error( msg, RC, thisLoc=loc )
+       RETURN
+    ENDIF
 
     ! Return w/ success
     RC = HCO_SUCCESS
@@ -1814,7 +1697,7 @@ CONTAINS
   END SUBROUTINE AddShadowFields
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1848,7 +1731,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  15 Feb 2015 - C. Keller   - Initial version.
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1917,7 +1800,7 @@ CONTAINS
   END SUBROUTINE AddZeroScal
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1933,7 +1816,7 @@ CONTAINS
 !
 ! !USES:
 !
-    USE CHARPAK_Mod,        ONLY : STRREPL, STRSPLIT, TRANLC
+    USE HCO_CHARPAK_Mod,    ONLY : STRREPL, STRSPLIT, TRANLC
     USE HCO_EXTLIST_MOD,    ONLY : AddExt, AddExtOpt, HCO_GetOpt
     USE HCO_EXTLIST_MOD,    ONLY : GetExtNr
 !
@@ -1949,14 +1832,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  17 Sep 2013 - C. Keller   - Initialization (update)
-!  30 Sep 2014 - R. Yantosca - Declare SUBSTR and SPECS w/ 2047 characters,
-!                              which lets us handle extra-long species lists
-!  21 Apr 2015 - R. Yantosca - Bug fix: now look for END_SECTION before
-!                              testing if the line is a comment.  This will
-!                              allow for tags labeled "### END SECTION".
-!  12 Dec 2015 - C. Keller   - Added argument IgnoreIfExist to AddExtOpt to
-!                              make sure that nested configuration files do
-!                              use the settings set at highest level.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1965,7 +1841,8 @@ CONTAINS
 !
     INTEGER               :: I, N, Idx, ExtNr
     LOGICAL               :: Enabled, NewExt
-    CHARACTER(LEN=255)    :: LOC
+    CHARACTER(LEN=255)    :: loc
+    CHARACTER(LEN=512)    :: msg
     CHARACTER(LEN=1023)   :: OPTS
     CHARACTER(LEN=2047)   :: LINE
     CHARACTER(LEN=2047)   :: SUBSTR(255), SPECS(255)
@@ -1975,8 +1852,9 @@ CONTAINS
     !======================================================================
 
     ! Enter
-    LOC   = 'ExtSwitch2Buffer (hco_config_mod.F90)'
     RC    = HCO_SUCCESS
+    msg   = ''
+    loc   = 'ExtSwitch2Buffer (hco_config_mod.F90)'
     ExtNr = -1
 
     ! Do until exit
@@ -1984,7 +1862,11 @@ CONTAINS
 
        ! Read line
        CALL HCO_ReadLine ( IU_HCO, LINE, EOF, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+          msg = 'Error in HEMCO_Config.rc @ line: ' // TRIM( line )
+          CALL HCO_Error( msg, RC, thisLoc=loc )
+          RETURN
+       ENDIF
 
        ! Return if EOF
        IF ( EOF ) RETURN
@@ -2002,7 +1884,11 @@ CONTAINS
           IF ( ExtNr >= 0 .AND. Enabled ) THEN
              CALL AddExtOpt( HcoConfig, TRIM(LINE), &
                              ExtNr, RC, IgnoreIfExist=.TRUE. )
-             IF ( RC /= HCO_SUCCESS ) RETURN
+             IF ( RC /= HCO_SUCCESS ) THEN
+                msg = 'Error in HEMCO_Config.rc @ line: ' // TRIM( line )
+                CALL HCO_ERROR( msg, RC, thisLoc=loc )
+                RETURN
+             ENDIF
           ENDIF
           CYCLE
        ENDIF
@@ -2062,7 +1948,10 @@ CONTAINS
           READ( SUBSTR(1), * ) ExtNr
           CALL AddExt ( HcoConfig, TRIM(SUBSTR(2)), &
                         ExtNr, Enabled, SUBSTR(idx), RC )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+          IF ( RC /= HCO_SUCCESS ) THEN
+              CALL HCO_ERROR( 'ERROR 32', RC, THISLOC=LOC )
+              RETURN
+          ENDIF
 
           ! Register species (specNames)
           IF ( Enabled ) THEN
@@ -2070,12 +1959,16 @@ CONTAINS
              CALL STRSPLIT( SUBSTR(idx), &
                      HCO_GetOpt(HcoConfig%ExtList,'Separator'), SPECS, N )
              IF ( N < 1 ) THEN
-                CALL HCO_ERROR ( HcoConfig%Err, 'No species defined', RC, THISLOC=LOC )
+                CALL HCO_ERROR ( 'No species defined', RC, THISLOC=LOC )
                 RETURN
              ENDIF
              DO I = 1, N
                 CALL SpecName_Register ( HcoConfig, SPECS(I), RC )
-                IF ( RC /= HCO_SUCCESS ) RETURN
+                IF ( RC /= HCO_SUCCESS ) THEN
+                   msg = 'Error encountered in "SpecName_Register"!'
+                   CALL HCO_ERROR( msg, RC, thisLoc=LOC )
+                   RETURN
+                ENDIF
              ENDDO
           ENDIF
        ENDIF ! NextExt
@@ -2087,7 +1980,7 @@ CONTAINS
   END SUBROUTINE ExtSwitch2Buffer
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2107,7 +2000,7 @@ CONTAINS
     USE HCO_EXTLIST_MOD,    ONLY : AddExtOpt, GetExtOpt, CoreNr
     USE HCO_EXTLIST_MOD,    ONLY : HCO_SetDefaultToken
     USE HCO_EXTLIST_MOD,    ONLY : HCO_GetOpt
-    USE CHARPAK_MOD,        ONLY : STRREPL, STRSPLIT, TRANLC
+    USE HCO_CHARPAK_MOD,    ONLY : STRREPL, STRSPLIT, TRANLC
 !
 ! !INPUT PARAMETERS:
 !
@@ -2121,12 +2014,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  17 Sep 2013 - C. Keller   - Initialization (update)
-!  21 Apr 2015 - R. Yantosca - Bug fix: now look for END_SECTION before
-!                              testing if the line is a comment.  This will
-!                              allow for tags labeled "### END SECTION".
-!  12 Dec 2015 - C. Keller   - Added argument IgnoreIfExist to AddExtOpt to
-!                              make sure that nested configuration files do
-!                              use the settings set at highest level.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2141,12 +2029,12 @@ CONTAINS
 
     ! Strings
     CHARACTER(LEN=255)    :: Line
-    CHARACTER(LEN=255)    :: Loc
-    CHARACTER(LEN=255)    :: Msg
+    CHARACTER(LEN=255)    :: loc
     CHARACTER(LEN=255)    :: LogFile
     CHARACTER(LEN=255)    :: DiagnPrefix
     CHARACTER(LEN=255)    :: MetField
     CHARACTER(LEN=255)    :: GridRes
+    CHARACTER(LEN=512)    :: msg
 
     !======================================================================
     ! ReadSettings begins here
@@ -2164,7 +2052,11 @@ CONTAINS
 
        ! Read line
        CALL HCO_ReadLine ( IU_HCO, LINE, EOF, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+          msg = 'Error in HEMCO_Config.rc @ line: ' // TRIM( Line )
+          CALL HCO_Error( msg, RC, thisLoc=loc )
+          RETURN
+       ENDIF
 
        ! Return if EOF
        IF ( EOF ) EXIT
@@ -2181,61 +2073,13 @@ CONTAINS
        ! Add this option to HEMCO core
        CALL AddExtOpt ( HcoConfig, TRIM(LINE), &
                         CoreNr, RC, IgnoreIfExist=.TRUE. )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+          msg = 'Error in HEMCO_Config.rc @ line: ' // TRIM( Line )
+          CALL HCO_Error( msg, RC, thisLoc=loc )
+          RETURN
+       ENDIF
 
     ENDDO
-
-    !-----------------------------------------------------------------------
-    ! Initialize error object if needed.
-    ! Extract values to initialize error module and set some further
-    ! HEMCO variables. Only the first time the settings are read (settings
-    ! can be read multiple times if nested HEMCO configuration files are
-    ! used)
-    !-----------------------------------------------------------------------
-    IF ( .NOT. ASSOCIATED(HcoConfig%Err) ) THEN
-
-       ! Verbose mode?
-       CALL GetExtOpt( HcoConfig, CoreNr, 'Verbose', &
-                       OptValInt=verb, FOUND=FOUND, RC=RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
-       IF ( .NOT. FOUND ) THEN
-          verb = 3
-          WRITE(*,*) 'Setting `Verbose` not found in HEMCO logfile - use 3'
-       ENDIF
-
-       ! Logfile to write into
-       CALL GetExtOpt( HcoConfig, CoreNr, 'Logfile', &
-                       OptValChar=Logfile, FOUND=FOUND, RC=RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
-       IF ( .NOT. FOUND ) THEN
-          LogFile = 'HEMCO.log'
-          WRITE(*,*) 'Setting `Logfile` not found in HEMCO logfile - use `HEMCO.log`'
-       ENDIF
-
-       ! Prompt warnings to logfile?
-       CALL GetExtOpt( HcoConfig, CoreNr, 'Warnings', &
-                       OptValInt=warn, FOUND=FOUND, RC=RC  )
-       IF ( RC /= HCO_SUCCESS ) RETURN
-       IF ( .NOT. FOUND ) THEN
-          warn = 3
-          WRITE(*,*) 'Setting `Warnings` not found in HEMCO logfile - use 3'
-       ENDIF
-
-       ! Initialize (standard) HEMCO tokens
-       CALL HCO_SetDefaultToken( HcoConfig, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
-
-       ! If LogFile is equal to wildcard character, set LogFile to asterik
-       ! character. This will ensure that all output is written to standard
-       ! output!
-       IF ( TRIM(LogFile) == HCO_GetOpt(HcoConfig%ExtList,'Wildcard') ) LogFile = '*'
-
-       ! We should now have everything to define the HEMCO error settings
-       CALL HCO_ERROR_SET( HcoConfig%amIRoot, HcoConfig%Err, LogFile, &
-                           verb, warn, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
-
-    ENDIF
 
 #ifndef MODEL_GEOS
 #ifndef MODEL_WRF
@@ -2267,13 +2111,13 @@ CONTAINS
              GridRes = '4.0x5.0'
           CASE( '2x25', '2x2.5' )
              GridRes = '2.0x2.5'
-          CASE( '05x0625' )
+          CASE( '05x0625', '0.5x0.625' )
              GridRes = '0.5x0.625'
-          CASE( '025x03125' )
+          CASE( '025x03125', '0.25x0.3125' )
              GridRes = '0.25x0.3125'
           CASE DEFAULT
              Msg = 'Improperly formatted grid resolution: ' // TRIM( GridRes )
-             CALL HCO_Error( HcoConfig%Err, Msg, RC, Loc )
+             CALL HCO_Error( Msg, RC, Loc )
              RETURN
        END SELECT
        HcoConfig%GridRes = TRIM( GridRes )
@@ -2283,13 +2127,86 @@ CONTAINS
 #endif
 #endif
 
+    !-----------------------------------------------------------------------
+    ! Initialize error object if needed.
+    ! Extract values to initialize error module and set some further
+    ! HEMCO variables. Only the first time the settings are read (settings
+    ! can be read multiple times if nested HEMCO configuration files are
+    ! used)
+    !-----------------------------------------------------------------------
+    IF ( .NOT. ASSOCIATED(HcoConfig%Err) ) THEN
+
+       ! Verbose mode?
+       CALL GetExtOpt( HcoConfig, CoreNr, 'Verbose', &
+                       OptValInt=verb, FOUND=FOUND, RC=RC )
+       IF ( RC /= HCO_SUCCESS ) THEN
+          msg = 'Error looking for "Verbose" HEMCO_Config.rc!'
+          CALL HCO_Error( msg, RC, thisLoc=loc )
+          RETURN
+       ENDIF
+       IF ( .NOT. FOUND ) THEN
+          verb = 3
+          WRITE(*,*) 'Setting `Verbose` not found in HEMCO logfile - use 3'
+       ENDIF
+
+       ! Logfile to write into
+       CALL GetExtOpt( HcoConfig, CoreNr, 'Logfile', &
+                       OptValChar=Logfile, FOUND=FOUND, RC=RC )
+       IF ( RC /= HCO_SUCCESS ) THEN
+          msg = 'Error looking for "Logfile" in HEMCO_Config.rc!'
+          CALL HCO_Error( msg, RC, thisLoc=loc )
+          RETURN
+       ENDIF
+       IF ( .NOT. FOUND ) THEN
+          LogFile = 'HEMCO.log'
+          WRITE(*,*) 'Setting `Logfile` not found in HEMCO logfile - use `HEMCO.log`'
+       ENDIF
+
+       ! Prompt warnings to logfile?
+       CALL GetExtOpt( HcoConfig, CoreNr, 'Warnings', &
+                       OptValInt=warn, FOUND=FOUND, RC=RC  )
+       IF ( RC /= HCO_SUCCESS ) THEN
+          msg = 'Error looking for "Warnings" in HEMCO_Config.rc!'
+          CALL HCO_Error( msg, RC, thisLoc=loc )
+          RETURN
+       ENDIF
+       IF ( .NOT. FOUND ) THEN
+          warn = 3
+          WRITE(*,*) 'Setting `Warnings` not found in HEMCO logfile - use 3'
+       ENDIF
+
+       ! Initialize (standard) HEMCO tokens
+       CALL HCO_SetDefaultToken( HcoConfig, RC )
+       IF ( RC /= HCO_SUCCESS ) THEN
+          msg = 'Error encountered in routine "HCO_SetDefaultToken"!'
+          CALL HCO_Error( msg, RC, thisLoc=loc )
+          RETURN
+       ENDIF
+
+       ! If LogFile is equal to wildcard character, set LogFile to asterik
+       ! character. This will ensure that all output is written to standard
+       ! output!
+       IF ( TRIM(LogFile) == HCO_GetOpt(HcoConfig%ExtList,'Wildcard') )      &
+            LogFile = '*'
+
+       ! We should now have everything to define the HEMCO error settings
+       CALL HCO_ERROR_SET( HcoConfig%amIRoot, HcoConfig%Err, LogFile, &
+                           verb, warn, RC )
+       IF ( RC /= HCO_SUCCESS ) THEN
+          msg = 'Error encountered in routine "Hco_Error_Set"!'
+          CALL HCO_Error( msg, RC, thisLoc=loc )
+          RETURN
+       ENDIF
+
+    ENDIF
+
     ! Leave w/ success
     RC = HCO_SUCCESS
 
   END SUBROUTINE ReadSettings
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2329,7 +2246,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Sep 2013 - C. Keller - Initial version (update)
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2340,15 +2257,21 @@ CONTAINS
     INTEGER                      :: ThisCover, ThisHcoID, FLAG
     INTEGER                      :: lon1, lon2, lat1, lat2
     INTEGER                      :: cpux1, cpux2, cpuy1, cpuy2
-    CHARACTER(LEN=255)           :: MSG
+    CHARACTER(LEN=255)           :: loc
+    CHARACTER(LEN=512)           :: msg
 
     !=================================================================
     ! RegisterPrepare begins here!
     !=================================================================
+    loc = 'RegisterPrepare (HCO_CONFIG_MOD.F90)'
 
     ! Enter
-    CALL HCO_ENTER ( HcoState%Config%Err, 'RegisterPrepare', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER ( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+       msg = 'Error encountered in routine "HCO_Enter"!'
+       CALL HCO_Error( msg, RC, thisLoc=loc )
+       RETURN
+    ENDIF
 
     ! Initialize
     Lct => NULL()
@@ -2423,29 +2346,65 @@ CONTAINS
        ELSE IF ( Lct%Dct%DctType   == HCO_DCTTYPE_MASK .AND. &
                  Lct%Dct%Dta%Cover == -999                   ) THEN
 
-          If (HcoState%Options%isESMF) Then
-             ThisCover = -1
-          Else
-             ! Get mask edges
-             lon1 = Lct%Dct%Dta%ncYrs(1)
-             lat1 = Lct%Dct%Dta%ncYrs(2)
-             lon2 = Lct%Dct%Dta%ncMts(1)
-             lat2 = Lct%Dct%Dta%ncMts(2)
+          ! The mask coverage calculation (which only has three values)
+          ! is used to simplify I/O and CPU operations in code below.
+          !
+          ! However, there are two distinct bugs related to this:
+          !
+          ! (1)
+          ! There appear to be some issues with full masks coverages
+          ! when working in an MPI environment. Specifically, masks
+          ! can be seen as fully covering a given CPU even though in
+          ! reality it may only cover parts of it. Thus, in ESMF mode
+          ! always set coverage to zero or partial (ckeller, 3/17/16).
+          !
+          ! This appears to be related to masking for two inventories
+          ! with overlapping temporal coverage. For example, if inventory
+          ! A is 2013-2015, and B is 2010-2018 with higher hierarchy,
+          ! but not the same mask (maybe A covers regions that B does not).
+          ! If both masks are set to ThisCover == 1 (full coverage), because
+          ! a certain CPU might be overlapped by lon1/lat1/lon2/lat2 even
+          ! though the actual netCDF shape of the mask is different,
+          ! then a simulation running 2013-2015 will see inventory B on that CPU
+          ! decide it has full coverage (only through lon1/..), and skip
+          ! inventory A altogether, resulting in missing emissions.
+          ! This behavior is in the line
+          ! IF ( (tmpLct%Dct%Hier > Hier) .AND. (tmpCov==1) ) THEN below.
+          !
+          ! (2)
+          ! Another artifact caused by MPI environments:
+          ! where lon1/lat1/... is set too small, resulting in certain CPUs not
+          ! having overlap (defined by cpux/y) with lon1/lat1/..., and thus
+          ! skipping the base inventory as a bug. This behavior is in the line
+          ! IF ( (mskLct%Dct%DctType  == HCO_DCTTYPE_MASK ) .AND. &
+          ! (mskLct%Dct%Dta%Cover == 0 )        ) THEN
+          !
+          ! Because the code only distinguishes between full/partial and zero
+          ! coverage, and skips reading the base field if coverage is zero,
+          ! this may cause issues with MPI environments in WRF and CESM where
+          ! the mask lon1/lat1/lon2/lat2 boundaries are set too small compared
+          ! to the mask, and result in the base field being skipped over small
+          ! CPU decompositions where it should not have been. The above fix
+          ! does not fix the issue where ThisCover == 0, which is the root
+          ! cause in WRF and CESM. Thus, always set to partial coverage
+          ! (hplin, 8/19/22)
+          !
+          ! Thus, the following fix needs to be applied for ESMF environments,
+          ! skipping a lot of the calculations below.
+#if defined ( ESMF_ ) || defined( MODEL_WRF ) || defined( MODEL_CESM )
+          ThisCover = -1
+#else
+          ! Get mask edges
+          lon1 = Lct%Dct%Dta%ncYrs(1)
+          lat1 = Lct%Dct%Dta%ncYrs(2)
+          lon2 = Lct%Dct%Dta%ncMts(1)
+          lat2 = Lct%Dct%Dta%ncMts(2)
 
-             ThisCover = CALC_COVERAGE( lon1,  lon2,  &
-                                        lat1,  lat2,  &
-                                        cpux1, cpux2, &
-                                        cpuy1, cpuy2   )
-
-             ! There appear to be some issues with full masks coverages
-             ! when working in an MPI environment. Specifically, masks
-             ! can be seen as fully covering a given CPU even though in
-             ! reality it may only cover parts of it. Thus, in ESMF mode
-             ! always set coverage to zero or partial (ckeller, 3/17/16).
-#if defined ( MODEL_WRF ) || defined ( ESMF_ )
-             IF ( ThisCover == 1 ) ThisCover = -1
+          ThisCover = CALC_COVERAGE( lon1,  lon2,  &
+                                     lat1,  lat2,  &
+                                     cpux1, cpux2, &
+                                     cpuy1, cpuy2   )
 #endif
-          ENDIF
 
           ! Update container information
           Lct%Dct%Dta%Cover    = ThisCover
@@ -2454,7 +2413,7 @@ CONTAINS
 
           IF ( HCO_IsVerb(HcoSTate%Config%Err,3) ) THEN
              WRITE(MSG,*) 'Coverage: ', Lct%Dct%Dta%Cover
-             CALL HCO_MSG(HcoState%Config%Err,MSG)
+             CALL HCO_MSG( HcoState%Config%Err, msg )
           ENDIF
        ENDIF
 
@@ -2471,7 +2430,7 @@ CONTAINS
   END SUBROUTINE RegisterPrepare
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2501,7 +2460,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Jun 2013 - C. Keller: Initialization
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2515,16 +2474,19 @@ CONTAINS
     INTEGER               :: N, cID, HcoID
     INTEGER               :: targetID, FLAG
     LOGICAL               :: Ignore, Add
-    CHARACTER(LEN=255)    :: MSG
+    CHARACTER(LEN=255)    :: LOC
+    CHARACTER(LEN=512)    :: msg
 
     !======================================================================
     ! Register_Base begins here
     !======================================================================
+    loc = 'Register_Base (HCO_CONFIG_MOD.F90)'
 
     ! Enter
-    CALL HCO_ENTER ( HcoState%Config%Err, 'Register_Base (hco_config_mod.F90)', RC )
+    CALL HCO_ENTER ( HcoState%Config%Err, loc, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
-       PRINT *,'Error in HCO_ENTER called from Register_Base'
+       msg = 'Error encountered in routine "HCO_Enter"!'
+       CALL HCO_Error( msg, RC, thisLoc=loc )
        RETURN
     ENDIF
 
@@ -2621,9 +2583,9 @@ CONTAINS
        ! verbose
        IF ( HCO_IsVerb(HcoState%Config%Err,3) ) THEN
           WRITE(MSG,*) 'Container ID     : ', Lct%Dct%cID
-          CALL HCO_MSG(HcoState%Config%Err,MSG)
+          CALL HCO_MSG( HcoState%Config%Err, msg )
           WRITE(MSG,*) 'Assigned targetID: ', targetID
-          CALL HCO_MSG(HcoState%Config%Err,MSG)
+          CALL HCO_MSG( HcoState%Config%Err, msg )
        ENDIF
 
        ! Negative targetID is assigned to base data that doesn't need
@@ -2646,14 +2608,15 @@ CONTAINS
        ! in the reading lists sorted by cID.
        CALL ReadList_Set( HcoState, Lct%Dct, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
-          PRINT *,'Error in ReadList_Set called from Register_Base'
+          msg = 'Error encountered in routine "ReadList_Set"!'
+          CALL HCO_Error( msg, RC, thisLoc=loc )
           RETURN
        ENDIF
 
        ! Print some information if verbose mode is on
        IF ( HCO_IsVerb(HcoState%Config%Err,2) ) THEN
           WRITE(MSG,*) 'Base field registered: ', TRIM(Lct%Dct%cName)
-          CALL HCO_MSG(HcoState%Config%Err,MSG)
+          CALL HCO_MSG( HcoState%Config%Err, msg )
        ENDIF
 
        ! Advance to next line
@@ -2669,7 +2632,7 @@ CONTAINS
   END SUBROUTINE Register_Base
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2698,8 +2661,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Jun 2013 - C. Keller - Initialization
-!  29 Dec 2014 - C. Keller - Now check for masks assigned to scale factors.
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2712,17 +2674,23 @@ CONTAINS
 
     ! Scalars
     INTEGER                   :: cID, FLAG
-    CHARACTER(LEN=255)        :: MSG
+    CHARACTER(LEN=255)        :: LOC
+    CHARACTER(LEN=512)        :: msg
     CHARACTER(LEN=  5)        :: strID
     INTEGER                   :: ThisScalID
 
     !======================================================================
     ! Register_Scal begins here
     !======================================================================
+    loc = 'Register_Scal (HCO_CONFIG_MOD.F90)'
 
     ! Enter
-    CALL HCO_ENTER ( HcoState%Config%Err, 'Register_Scal (hco_config_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER ( HcoState%Config%Err, loc, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+       msg = 'Error encountered in routine "HCO_Enter"!'
+       CALL HCO_Error( msg, RC, thisLoc=loc )
+       RETURN
+    ENDIF
 
     ! Loop over all scale factor ids
     Lct           => NULL()
@@ -2752,8 +2720,8 @@ CONTAINS
        ! Return error if scale factor ID not found
        IF ( .NOT. ASSOCIATED(Lct) ) THEN
           WRITE ( strID, * ) ThisScalID
-          MSG = 'Container ID not found: ' // strID
-          CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC)
+          msg = 'Container ID not found: ' // strID
+          CALL HCO_Error( msg, RC, thisLoc=loc )
           RETURN
        ENDIF
 
@@ -2761,7 +2729,7 @@ CONTAINS
        IF ( Lct%Dct%DctType == HCO_DCTTYPE_BASE ) THEN
           WRITE ( strID, * ) ThisScalID
           MSG = 'Container ID belongs to base field: ' // strID
-          CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC)
+          CALL HCO_Error( msg, RC, thisLoc=loc )
           RETURN
        ENDIF
 
@@ -2773,18 +2741,26 @@ CONTAINS
        ! added to the end of the list.
        IF ( Lct%Dct%nScalID > 0 ) THEN
           CALL ScalID_Register ( Lct%Dct, HcoState%Config, RC )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+          IF ( RC /= HCO_SUCCESS ) THEN
+             msg = 'Error encountered in routine "ScalID_Register"!'
+             CALL HCO_Error( msg, RC, thisLoc=loc )
+             RETURN
+          ENDIF
        ENDIF
 
        ! Register container in ReadList. Containers will be listed
        ! in the reading lists sorted by cID.
        CALL ReadList_Set( HcoState, Lct%Dct, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+          msg = 'Error encountered in "ReadList_Set"!'
+          CALL HCO_Error( msg, RC, thisLoc=loc )
+          RETURN
+       ENDIF
 
        ! Print some information if verbose mode is on
        IF ( HCO_IsVerb(HcoState%Config%Err,2) ) THEN
           WRITE(MSG,*) 'Scale field registered: ', TRIM(Lct%Dct%cName)
-          CALL HCO_MSG(HcoState%Config%Err,MSG)
+          CALL HCO_MSG( HcoState%Config%Err, msg )
        ENDIF
 
        ! Advance
@@ -2802,7 +2778,7 @@ CONTAINS
   END SUBROUTINE Register_Scal
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2852,9 +2828,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2013 - C. Keller - Initialization
-!  07 Dec 2015 - C. Keller - Make sure emissions with limited time range do
-!                            never erase lower hierarchy base emissions.
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2870,16 +2844,22 @@ CONTAINS
     INTEGER                   :: tmpID
     INTEGER                   :: I, J, FLAG1, tmpCov
     LOGICAL                   :: found, sameCont
-    CHARACTER(LEN=255)        :: MSG
+    CHARACTER(LEN=255)        :: loc
+    CHARACTER(LEN=512)        :: msg
     CHARACTER(LEN=  7)        :: strID
 
     !======================================================================
     ! Get_targetID begins here
     !======================================================================
+    loc = 'Get_targetID (HCO_CONFIG_MOD.F90)'
 
     ! Enter
-    CALL HCO_ENTER ( HcoState%Config%Err, 'Get_targetID (hco_config_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER ( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+       msg = 'Error encountered in routine "HCO_Enter"!'
+       CALL HCO_ERROR( msg, RC, thisLoc=LOC )
+       RETURN
+    ENDIF
 
     ! Initialize
     tmpLct => NULL()
@@ -2937,8 +2917,8 @@ CONTAINS
           ! Error if scale factor not found
           IF ( .NOT. FOUND ) THEN
              WRITE ( strID, * ) Lct%Dct%Scal_cID(I)
-             MSG = 'No scale factor with cID: ' // TRIM(strID)
-             CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC)
+             msg = 'No scale factor with cID: ' // TRIM(strID)
+             CALL HCO_Error( msg, RC, thisLoc=loc )
              RETURN
           ENDIF
 
@@ -2950,7 +2930,7 @@ CONTAINS
              IF ( HCO_IsVerb(HcoState%Config%Err,1) ) THEN
                 WRITE(MSG,*) 'Data not defined over this CPU, skip ' // &
                      TRIM(Lct%Dct%cName)
-                CALL HCO_MSG(HcoState%Config%Err,MSG)
+                CALL HCO_MSG( HcoState%Config%Err, msg )
              ENDIF
 
              ! Return
@@ -3051,7 +3031,7 @@ CONTAINS
              ! Error if container not found
              IF ( .NOT. FOUND ) THEN
                 WRITE(MSG,*) 'No scale factor with ID: ', tmpID
-                CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC)
+                CALL HCO_Error( msg, RC, thisLoc=loc )
                 RETURN
              ENDIF
 
@@ -3089,7 +3069,7 @@ CONTAINS
           IF ( HCO_IsVerb(HcoState%Config%Err,1) ) THEN
              WRITE(MSG,*) 'Skip container ', TRIM(Lct%Dct%cName), &
                           ' because of ', TRIM(tmpLct%Dct%cName)
-             CALL HCO_MSG(HcoState%Config%Err,MSG)
+             CALL HCO_MSG( HcoState%Config%Err, msg )
           ENDIF
 
           ! Return
@@ -3191,7 +3171,7 @@ CONTAINS
   END SUBROUTINE Get_targetID
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3225,6 +3205,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2013 - C. Keller: Initialization
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -3250,7 +3231,7 @@ CONTAINS
   END FUNCTION Calc_Coverage
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3289,7 +3270,7 @@ CONTAINS
 !
 ! !USES:
 !
-    USE CHARPAK_Mod,        ONLY : STRREPL, STRSPLIT
+    USE HCO_CHARPAK_Mod,    ONLY : STRREPL, STRSPLIT
 !
 ! !INPUT PARAMETERS:
 !
@@ -3334,10 +3315,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  28 Aug 2013 - C. Keller - Initial version
-!  11 Dec 2013 - C. Keller - Added optional arguments inLine and outLine
-!  29 Dec 2014 - C. Keller - Added optional argument optcl. Now use wrapper
-!                            routines READCHAR and READINT.
-!  13 Mar 2015 - C. Keller - Added check for include files.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -3476,7 +3454,7 @@ CONTAINS
   END SUBROUTINE ReadAndSplit_Line
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3505,6 +3483,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  29 Dec 2014 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -3527,7 +3506,7 @@ CONTAINS
   END SUBROUTINE READCHAR
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3561,6 +3540,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  29 Dec 2014 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -3587,7 +3567,7 @@ CONTAINS
   END SUBROUTINE READINT
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3616,7 +3596,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Sep 2013 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -3672,7 +3652,7 @@ CONTAINS
   END SUBROUTINE Get_cID
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3698,15 +3678,14 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  17 Sep 2013 - C. Keller: Initialization (update)
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
 ! !LOCAL VARIABLES:
 !
-    TYPE(ListCont), POINTER :: NewLct
-    INTEGER                 :: cID
+    INTEGER :: cID
 
     !======================================================================
     ! ConfigList_AddCont begins here
@@ -3716,27 +3695,25 @@ CONTAINS
     ! The DataCont_Init call creates a new data container (type DataCont)
     ! All HEMCO lists (ConfigList, ReadList, EmisList) point to this
     ! container!
-    ALLOCATE ( NewLct )
-    NewLct%Dct      => NULL()
-    NewLct%NextCont => NULL()
+    ALLOCATE ( Lct )
+    Lct%Dct      => NULL()
+    Lct%NextCont => NULL()
 
     ! Get # of containers in list. Set new container ID (cID) to # of
     ! containers + 1.
     cID = ListCont_Length( List )
     cID = cID + 1
-    CALL DataCont_Init ( NewLct%Dct, cID )
+    CALL DataCont_Init ( Lct%Dct, cID )
 
     ! Connect blank container with ConfigList list.
-    NewLct%NextCont => List
-    List            => NewLct
+    Lct%NextCont => List
+    List         => Lct
 
-    ! Output pointer points to the new container
-    Lct => NewLct
 
   END SUBROUTINE ConfigList_AddCont
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3761,8 +3738,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Jan 2014 - C. Keller: Initialization (update)
-!  29 Dec 2014 - C. Keller: Now add new container to end of list to allow
-!                           list being updated while calling Register_Scal.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -3786,7 +3762,7 @@ CONTAINS
           PRINT *,'Error in ScaleID2List called from HEMCO ScalID_Register (1)'
           RETURN
        ENDIF
- 
+
        ! Replace scale factor ID with container ID.
        CALL Get_cID ( Dct%Scal_cID(N), HcoConfig, cID, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
@@ -3834,7 +3810,7 @@ CONTAINS
   END SUBROUTINE ScalID_Register
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3859,9 +3835,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Jan 2014 - C. Keller: Initialization (update)
-!  29 Dec 2014 - C. Keller: Now add new container to end of list to allow
-!                           list being updated while calling Register_Scal.
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -3925,7 +3899,7 @@ CONTAINS
   END SUBROUTINE ScalID2List
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3945,7 +3919,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Jan 2014 - C. Keller: Initialization (update)
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -3980,7 +3954,7 @@ CONTAINS
   END SUBROUTINE ScalID_Cleanup
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4009,7 +3983,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Jan 2014 - C. Keller: Initialization (update)
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4063,7 +4037,7 @@ CONTAINS
   END SUBROUTINE SpecName_Register
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4083,7 +4057,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Jan 2014 - C. Keller: Initialization (update)
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4121,7 +4095,7 @@ CONTAINS
   END SUBROUTINE SpecName_Cleanup
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4145,6 +4119,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Jan 2014 - C. Keller: Initialization (update)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4162,7 +4137,7 @@ CONTAINS
   END FUNCTION Config_GetnSpecies
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4191,6 +4166,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Jan 2014 - C. Keller: Initialization (update)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4203,7 +4179,7 @@ CONTAINS
   END SUBROUTINE Config_GetSpecNames
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4238,7 +4214,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Jan 2014 - C. Keller: Initialization (update)
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4249,6 +4225,7 @@ CONTAINS
     INTEGER                       :: AS
     CHARACTER(LEN=255), PARAMETER :: &
          LOC = 'Config_GetSpecAttr (hco_config_mod.F90)'
+    CHARACTER(LEN=512)            :: errMsg
 
     !======================================================================
     ! Config_GetSpecAttr begins here
@@ -4261,20 +4238,20 @@ CONTAINS
     IF ( PRESENT(SpecNames) ) THEN
        IF ( .NOT. ASSOCIATED(SpecNames) ) THEN
           IF ( N <= 0 ) THEN
-             CALL HCO_ERROR ( HcoConfig%Err, &
-                'Cannot allocate SpecNames - N is size 0 or smaller', RC, THISLOC=LOC )
+             errMsg = 'Cannot allocate SpecNames - N is size 0 or smaller'
+             CALL HCO_Error( errMsg, RC, thisLoc=LOC )
              RETURN
           ENDIF
           ALLOCATE(SpecNames(N), STAT=AS )
           IF ( AS/= 0 ) THEN
-             CALL HCO_ERROR ( HcoConfig%Err, &
-                'SpecNames allocation error', RC, THISLOC=LOC )
+             errMsg = 'Could not allocate the SpcNames array!'
+             CALL HCO_Error( errMsg, RC, thisLoc=LOC )
              RETURN
           ENDIF
           SpecNames(:) = ''
        ELSEIF ( SIZE(SpecNames) /= N ) THEN
-          CALL HCO_ERROR ( HcoConfig%Err, &
-             'SpecNames size error', RC, THISLOC=LOC )
+          errMsg = 'Size(SpecNames) does not match the passed N argument!'
+          CALL HCO_Error( errMsg, RC, thisLoc=LOC )
           RETURN
        ENDIF
     ENDIF
@@ -4301,7 +4278,7 @@ CONTAINS
   END SUBROUTINE Config_GetSpecAttr
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4329,6 +4306,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Jan 2014 - C. Keller: Initialization (update)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4369,7 +4347,7 @@ CONTAINS
   END FUNCTION Check_ContNames
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4407,9 +4385,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 May 2015 - C. Keller   - Initial version
-!  22 Jan 2016 - R. Yantosca - Bug fix, removed & in the middle of the line
-!                              since the PGI compiler chokes on it.
-!  26 Jan 2018 - C. Keller   - Add L1 & L2
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4428,7 +4404,7 @@ CONTAINS
     ! ExtractSrcDim begins here
     !======================================================================
 
-    MSG = 'Illegal source dimension ' // TRIM(srcDim) // &
+    msg = 'Illegal source dimension ' // TRIM(srcDim) // &
           ' for file ' // TRIM(Dta%ncFile) // &
           '. Valid entries are e.g. xy or xyz.'
 
@@ -4458,13 +4434,13 @@ CONTAINS
 
        ! There must be at least 3 characters (e.g. xyz)
        IF ( strLen < 3 ) THEN
-          CALL HCO_ERROR ( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_Error( msg, RC, thisLoc=LOC )
           RETURN
        ENDIF
 
        ! First two entries must be xy
        IF ( str1(1:2) /= 'xy' ) THEN
-          CALL HCO_ERROR ( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_Error( msg, RC, thisLoc=LOC )
           RETURN
        ENDIF
 
@@ -4473,10 +4449,12 @@ CONTAINS
        ! emitted into level 4.
        IF ( str1(3:3) == 'L' .OR. str1(3:3) == 'l' ) THEN
           IF ( strLen < 4 ) THEN
-             CALL HCO_ERROR ( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+             CALL HCO_Error( msg, RC, thisLoc=LOC )
              RETURN
           ENDIF
           Dta%SpaceDim = 2
+          Dta%EmisLmode  = 1 ! Dilute emissions vertically
+
           ! Read levels to put emissions into:
           i=4
           IF ( str1(i:i) == '=' ) i = i + 1
@@ -4484,10 +4462,10 @@ CONTAINS
           ! Reduce to data to be read
           tmpstr = str1(i:strLen)
 
-          ! check if range of levels is provided, i.e. xyL=1:5
+          ! Check if range of levels is provided, i.e. xyL=1:5
           idx = INDEX( TRIM(tmpstr), ':' )
 
-          ! if multiple levels are provided (e.g. xyL=1:5)
+          ! If multiple levels are provided (e.g. xyL=1:5)
           IF ( idx > 0 ) THEN
 
              ! Check for PBL flag. It is possible to emit stuff
@@ -4501,15 +4479,36 @@ CONTAINS
              CALL ParseEmisL( tmpstr((idx+1):LEN(tmpstr)), EmisL, EmisUnit, Lscal2 )
              Dta%EmisL2     = EmisL
              Dta%EmisL2Unit = EmisUnit
+             Dta%EmisLmode  = 1
 
-          ! if only one level is provided (e.g. xyL=5)
+          ! If only one value is provided (e.g. xyL5, xyL=5, xyL*)
           ELSE
-             CALL ParseEmisL( tmpstr, EmisL, EmisUnit, Lscal1 )
-             Dta%EmisL1     = EmisL
-             Dta%EmisL1Unit = EmisUnit
-             Lscal2         = Lscal1
-             Dta%EmisL2     = Dta%EmisL1
-             Dta%EmisL2Unit = Dta%EmisL1Unit
+
+             ! Check if wildcard provided, i.e. xyL*
+             idx = INDEX( TRIM(tmpstr), '*' )
+
+             ! Wildcard tells HEMCO to emit same value to all emission levels
+             ! A scale factor should be applied to distribute the emissions
+             ! vertically
+             IF ( idx > 0 ) THEN
+
+                Dta%EmisL1     = 1.0_hp
+                Dta%EmisL1Unit = HCO_EMISL_LEV
+                Dta%EmisL2     = 0.0_hp
+                Dta%EmisL2Unit = HCO_EMISL_TOP
+                Dta%EmisLmode  = 2 ! Copy data to all levels
+
+             ! Emissions are allocated to one level
+             ELSE
+
+                CALL ParseEmisL( tmpstr, EmisL, EmisUnit, Lscal1 )
+                Dta%EmisL1     = EmisL
+                Dta%EmisL1Unit = EmisUnit
+                Lscal2         = Lscal1
+                Dta%EmisL2     = Dta%EmisL1
+                Dta%EmisL2Unit = Dta%EmisL1Unit
+
+             ENDIF
           ENDIF
        ELSE
 
@@ -4533,7 +4532,7 @@ CONTAINS
            // 'and contain the name/value pair, e.g. xyz+"ens"=3'
        idx = INDEX( TRIM(str2), '=' )
        IF ( idx <= 0 ) THEN
-          CALL HCO_ERROR( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_Error( msg, RC, thisLoc=LOC )
           RETURN
        ENDIF
 
@@ -4562,7 +4561,7 @@ CONTAINS
           WRITE(MSG,*) 'Will use additional dimension on file ', &
              TRIM(Dta%ncFile), ': ', TRIM(Dta%ArbDimName), ' = ', &
              TRIM(Dta%ArbDimVal)
-          CALL HCO_MSG(HcoConfig%Err,MSG)
+          CALL HCO_Msg( HcoConfig%Err, msg )
        ENDIF
     ENDIF
 
@@ -4572,7 +4571,7 @@ CONTAINS
   END SUBROUTINE ExtractSrcDim
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4597,8 +4596,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  16 Feb 2016 - C. Keller: Initialization (update)
-!  23 Oct 2018 - M. Sulprizio- Add nModelSpecies to represent all species from
-!                              external model (i.e. advected+chemical species)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4606,6 +4604,8 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     INTEGER            :: I, AS
+    CHARACTER(LEN=255) :: thisLoc
+    CHARACTER(LEN=512) :: errMsg
 
     !=====================================================================
     ! ConfigInit begins here!
@@ -4623,12 +4623,17 @@ CONTAINS
 
     IF ( PRESENT( nModelSpecies ) ) THEN
 
+       ! Initialize strings
+       errMsg  = ''
+       thisLoc = 'ConfigInit (in module hco_config_mod.F90)'
+
        ! Initialize vector w/ species information
        HcoConfig%nModelSpc = nModelSpecies
        IF ( nModelSpecies > 0 ) THEN
           ALLOCATE ( HcoConfig%ModelSpc( nModelSpecies ), STAT=AS )
           IF ( AS /= 0 ) THEN
-             CALL HCO_ERROR( HcoConfig%Err, 'ModelSpecies', RC )
+             errMsg = 'Could not allocate "ModelSpecies" array!'
+             CALL HCO_Error( errMsg, RC, thisLoc )
              RETURN
           ENDIF
 
@@ -4647,7 +4652,7 @@ CONTAINS
   END SUBROUTINE ConfigInit
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4672,6 +4677,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  09 May 2016 - C. Keller: Intial version.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4689,8 +4695,8 @@ CONTAINS
     ScalID   = -1
 
     IF ( TRIM(str) == 'PBL' ) THEN
-      EmisL    = 0.0_hp
-      EmisUnit = HCO_EMISL_PBL
+       EmisL    = 0.0_hp
+       EmisUnit = HCO_EMISL_PBL
     ELSE
        ! extract scale factor if string starts with 'SCAL' or 'scal'
        nchar = LEN(str)
@@ -4717,7 +4723,7 @@ CONTAINS
   END SUBROUTINE ParseEmisL
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4743,6 +4749,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Jul 2018 - C. Keller: Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4751,14 +4758,17 @@ CONTAINS
 !
     TYPE(ListCont), POINTER :: ThisLct => NULL()
     LOGICAL                 :: Duplicate
-    CHARACTER(LEN=255)      :: tmpName, MSG
+    CHARACTER(LEN=255)      :: tmpName, thisLoc
+    CHARACTER(LEN=512)      :: errMsg
 
     !======================================================================
     ! CheckForDuplicateName begins here!
     !======================================================================
 
     ! Init
-    RC = HCO_SUCCESS
+    RC        = HCO_SUCCESS
+    errMsg    = ''
+    thisLoc   = 'CheckForDuplicateName (in module hco_config_mod.F90)'
     Duplicate = .FALSE.
 
     ! Pass name to clear spaces
@@ -4785,8 +4795,8 @@ CONTAINS
     ENDDO
 
     IF ( Duplicate ) THEN
-       MSG = 'Error: HEMCO field already exists:'//TRIM(cName)
-       CALL HCO_ERROR ( HcoConfig%Err, MSG, RC )
+       errMsg = 'Error: HEMCO field already exists:'//TRIM(cName)
+       CALL HCO_Error( errMsg, RC, thisLoc )
        RETURN
     ENDIF
 
@@ -4829,6 +4839,7 @@ CONTAINS
 ! !REVISION HISTORY:
 !  23 Oct 2018 - M. Sulprizio- Initial version based on routine Get_TagInfo in
 !                              GEOS-Chem's Headers/state_diag_mod.F90
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4840,14 +4851,16 @@ CONTAINS
     LOGICAL            :: isNumTags, isTagName, isN
 
     ! Strings
-    CHARACTER(LEN=255) :: ErrMsg,    ThisLoc,   Nstr
+    CHARACTER(LEN=255) :: thisLoc,   Nstr
+    CHARACTER(LEN=512) :: errMsg
 
     !=======================================================================
     ! Hco_GetTagInfo begins here
     !=======================================================================
 
     ! Initialize
-    ErrMsg     = ''
+    errMsg     = ''
+    thisLoc    = 'Hco_Get_TagInfo (in module hco_config_mod.F90)'
     Found      = .TRUE.
     numTags    = 0
 
@@ -4859,7 +4872,7 @@ CONTAINS
     ! Exit with error if getting tag name but index not specified
     IF ( isTagName .AND. .NOT. isN ) THEN
        ErrMsg = 'Index must be specified if retrieving an individual tag name'
-       CALL HCO_ERROR( HcoConfig%Err, ErrMsg, RC )
+       CALL HCO_Error( errMsg, RC, thisLoc )
        RETURN
     ENDIF
 
@@ -4875,7 +4888,7 @@ CONTAINS
           FOUND = .FALSE.
           ErrMsg = 'Handling of tagId ' // TRIM(tagId) // &
                    ' is not implemented for getting number of tags'
-          CALL HCO_Error( HcoConfig%Err, ErrMsg, RC )
+          CALL HCO_Error( errMsg, RC, thisLoc )
           RETURN
     END SELECT
 
@@ -4891,9 +4904,10 @@ CONTAINS
 
     ! Exit with error if index exceeds number of tags for this wildcard
     IF ( isTagName .AND. .NOT. isN ) THEN
-       ErrMsg = 'Index must be greater than total number of tags for wildcard' &
-                // TRIM(tagId)
-       CALL HCO_Error( HcoConfig%Err, ErrMsg, RC )
+       errMsg =                                                              &
+            'Index must be greater than total number of tags for wildcard'   &
+             // TRIM(tagId)
+       CALL HCO_Error( errMsg, RC, thisLoc )
        RETURN
     ENDIF
 
@@ -4905,9 +4919,9 @@ CONTAINS
           D = N
        CASE DEFAULT
           FOUND = .FALSE.
-          ErrMsg = 'Handling of tagId ' // TRIM( tagId ) // &
+          errMsg = 'Handling of tagId ' // TRIM( tagId ) // &
                    ' is not implemented for getting tag name'
-          CALL HCO_Error( HcoConfig%Err, ErrMsg, RC )
+          CALL HCO_Error( errMsg, RC, thisLoc )
           RETURN
     END SELECT
 
@@ -4917,5 +4931,264 @@ CONTAINS
     tagName = HcoConfig%ModelSpc(D)%SpcName
 
   END SUBROUTINE Hco_GetTagInfo
+!EOC
+!------------------------------------------------------------------------------
+!                  GEOS-Chem Global Chemical Transport Model                  !
+!------------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: UpdateDtaProperties
+!
+! !DESCRIPTION: Updates metdata about the current data container that is
+!  being created (e.g. time cycle information, level information, etc.)
+!\\
+!\\
+! !INTERFACE:
+!
+  SUBROUTINE UpdateDtaProperties( char1,     char2,     dctType,  int3,       &
+                                  separator, srcDim,    tagCName, tmCycle,    &
+                                  wildCard,  HcoConfig, Lct,      Dta,        &
+                                  RC                                         )
+!
+! !INPUT PARAMETERS:
+!
+    CHARACTER(LEN=*), INTENT(IN)  :: char1      !
+    CHARACTER(LEN=1), INTENT(IN)  :: char2      !
+    INTEGER,          INTENT(IN)  :: dctType    ! 1=base; 2=scale; 3=mask
+    INTEGER,          INTENT(IN)  :: int3       !
+    CHARACTER(LEN=*), INTENT(IN)  :: separator  ! Separator character
+    CHARACTER(LEN=*), INTENT(IN)  :: srcDim     ! e.g. "xyz", "xy", etc.
+    CHARACTER(LEN=*), INTENT(IN)  :: tagCName   ! Contaniner name
+    CHARACTER(LEN=*), INTENT(IN)  :: tmCycle    ! Tioe cycle flag setting
+    CHARACTER(LEN=*), INTENT(IN)  :: wildCard   ! Wild card character
+    TYPE(ConfigObj),  POINTER     :: HcoConfig  ! HEMCO configuration object
+!
+! !INPUT/OUTPUT PARAMETERS:
+!
+    TYPE(ListCont),   POINTER     :: Lct        ! List container object
+    TYPE(FileData),   POINTER     :: Dta        ! Data container object
+!
+! !OUTPUT PARAMETERS:
+!
+    INTEGER,          INTENT(OUT) :: RC         ! Success or failure
+!
+! !REMARKS:
+!  Abstracted from routine Config_ReadCont.
+!EOP
+!------------------------------------------------------------------------------
+!BOC
+!
+! !LOCAL VARIABLES:
+!
+    ! Scalars
+    INTEGER            :: levScal1
+    INTEGER            :: levScal2
+    INTEGER            :: nEdges
+
+    ! Arrays
+    INTEGER            :: splitInts(255)
+
+    ! Strings
+    CHARACTER(LEN=255) :: thisLoc
+    CHARACTER(LEN=512) :: errMsg
+
+    ! String arrays
+    CHARACTER(LEN=255) :: SubStrs(255)
+
+    !========================================================================
+    ! UpdateDtaProperties begins here!
+    !========================================================================
+
+    ! Initialize
+    RC        = HCO_SUCCESS
+    levScal1  = 0
+    levScal2  = 0
+    nEdges    = 0
+    splitInts = 0
+    errMsg    = ''
+    thisLoc   = &
+    ' -> at UpdateDtaProperties (in module HEMCO/src/Core/hco_config_mod.F90)'
+
+    !========================================================================
+    ! Set time cycling behaviour. Possible values are:
+    ! - "C"   : cycling <-- DEFAULT
+    ! - "CS"  : cycling, skip if not exist
+    ! - "CY"  : cycling, always use simulation year
+    ! - "CYS" : cycling, always use simulation yr, skip if not exist
+    ! - "R"   : range
+    ! - "RA"  : range, average outside
+    ! - "RF"  : range, forced (error if not in range)
+    ! - "RFY" : range, forced, always use simulation year
+    ! - "RFY3 : range, forced, always use simulation year, 3-hourly
+    ! - "RY"  : range, always use simulation year
+    ! - "E"   : exact, read/query once
+    ! - "EF"  : exact, forced (error if not exist), read/query once
+    ! - "EFY" : exact, forced, always use sim year
+    ! - "EFYO": exact, forced, always use sim year, read once
+    ! - "EC"  : exact, read/query continuously (e.g. for ESMF interface)
+    ! - "ECF" : exact, forced, read/query continuously
+    ! - "EY"  : exact, always use simulation year, read/query once
+    ! - "A"   : average
+    ! - "I"   : interpolate
+    ! - "ID"  : interpolate, discontinuous dataset
+    !========================================================================
+
+    ! Zero logical fields of Dta for safety's sake
+    Dta%MustFind      = .FALSE.
+    Dta%UseSimYear    = .FALSE.
+    Dta%Discontinuous = .FALSE.
+
+    ! Look for time cycle values
+    SELECT CASE( TRIM( TmCycle ) )
+       CASE( "C" )
+          Dta%CycleFlag     = HCO_CFLAG_CYCLE
+          Dta%MustFind      = .TRUE.
+       CASE( "CS" )
+          Dta%CycleFlag     = HCO_CFLAG_CYCLE
+          Dta%MustFind      = .FALSE.
+       CASE( "CY" )
+          Dta%CycleFlag     = HCO_CFLAG_CYCLE
+          Dta%MustFind      = .TRUE.
+          Dta%UseSimYear    = .TRUE.
+       CASE( "CYS" )
+          Dta%CycleFlag     = HCO_CFLAG_CYCLE
+          Dta%MustFind      = .FALSE.
+          Dta%UseSimYear    = .TRUE.
+       CASE( "R" )
+          Dta%CycleFlag     = HCO_CFLAG_RANGE
+       CASE( "RA" )
+          Dta%CycleFlag     = HCO_CFLAG_RANGEAVG
+       CASE( "RF" )
+          Dta%CycleFlag     = HCO_CFLAG_RANGE
+          Dta%MustFind      = .TRUE.
+       CASE( "RFY" )
+          Dta%CycleFlag     = HCO_CFLAG_RANGE
+          Dta%MustFind      = .TRUE.
+          Dta%UseSimYear    = .TRUE.
+       CASE( "RFY3" )
+          Dta%CycleFlag     = HCO_CFLAG_RANGE
+          Dta%MustFind      = .TRUE.
+          Dta%UseSimYear    = .TRUE.
+          Dta%UpdtFlag      = HCO_UFLAG_3HR
+       CASE( "RY" )
+          Dta%CycleFlag     = HCO_CFLAG_RANGE
+          Dta%UseSimYear    = .TRUE.
+       CASE( "E" )
+          Dta%CycleFlag     = HCO_CFLAG_EXACT
+          Dta%UpdtFlag      = HCO_UFLAG_ONCE
+       CASE( "EF" )
+          Dta%CycleFlag     = HCO_CFLAG_EXACT
+          Dta%UpdtFlag      = HCO_UFLAG_ONCE
+          Dta%MustFind      = .TRUE.
+       CASE( "EFY" )
+          Dta%CycleFlag     = HCO_CFLAG_EXACT
+          Dta%MustFind      = .TRUE.
+          Dta%UseSimYear    = .TRUE.
+       CASE( "EFYO" )
+          Dta%CycleFlag     = HCO_CFLAG_EXACT
+          Dta%UpdtFlag      = HCO_UFLAG_ONCE
+          Dta%MustFind      = .TRUE.
+          Dta%UseSimYear    = .TRUE.
+       CASE( "EC" )
+          Dta%CycleFlag     = HCO_CFLAG_EXACT
+       CASE( "ECF" )
+          Dta%CycleFlag     = HCO_CFLAG_EXACT
+          Dta%MustFind      = .TRUE.
+       CASE( "EY" )
+          Dta%CycleFlag     = HCO_CFLAG_EXACT
+          Dta%UpdtFlag      = HCO_UFLAG_ONCE
+          Dta%UseSimYear    = .TRUE.
+       CASE( "A" )
+          Dta%CycleFlag     = HCO_CFLAG_AVERG
+       CASE( "I" )
+          Dta%CycleFlag     = HCO_CFLAG_INTER
+       CASE( "ID" )
+          Dta%CycleFlag     = HCO_CFLAG_INTER
+          Dta%Discontinuous = .TRUE.
+       CASE( "-" )
+          Dta%CycleFlag     = HCO_CFLAG_CYCLE
+       CASE DEFAULT
+          errMsg = 'Invalid time cycling attribute: ' // tmCycle          // &
+                   ' - in '                           // tagcName
+          CALL HCO_Error( errMsg, RC, thisLoc )
+          RETURN
+    END SELECT
+
+    !========================================================================
+    ! Set space dimension. This will determine the dimension of the
+    ! data array vector, i.e. 3D or 2D. Different time slices will
+    ! be stored as different vector elements.
+    ! For 3D data, it is now possible to explicitly set the number
+    ! of vertical levels to be used, as well as the 'reading
+    ! direction' (up or down). These information is also extracted
+    ! from srcDim and will be stored in variable Dta%Levels.
+    ! (ckeller, 5/20/15)
+    ! ExtractSrcDim now also returns possible scale factors for the
+    ! injection level, which will be stored in container variable
+    ! levScalID1 (bottom level) and levScalID2 (top level).
+    !========================================================================
+    CALL ExtractSrcDim( HcoConfig, srcDim, Dta, levScal1, levScal2, RC       )
+    IF ( RC /= HCO_SUCCESS ) THEN
+       errMsg = 'Error encountered in routine "ExtractSrcDim"!'
+       CALL HCO_Error( errMsg, RC, thisLoc )
+       RETURN
+    ENDIF
+
+    ! Set level scale factor index
+    IF ( levScal1 > 0 ) Lct%Dct%levScalID1 = levScal1
+    IF ( levScal2 > 0 ) Lct%Dct%levScalID2 = levScal2
+
+    !========================================================================
+    ! For scale factors: check if a mask is assigned to this scale factor.
+    ! In this case, pass mask ID to first slot of Scal_cID vector. This
+    ! value will be set to the container ID of the corresponding mask
+    ! field later on.
+    !========================================================================
+    IF ( DctType == HCO_DCTTYPE_SCAL .AND. Int3 > 0 ) THEN
+       ALLOCATE ( Lct%Dct%Scal_cID(1) )
+       Lct%Dct%Scal_cID(1) = Int3
+       Lct%Dct%nScalID     = 1
+    ENDIF
+
+    !========================================================================
+    ! For masks: extract grid box edges. These will be used later on to
+    ! determine if emissions have to be considered by this CPU.
+    !========================================================================
+    IF ( DctType == HCO_DCTTYPE_MASK ) THEN
+
+       ! Extract grid box edges. Need to be four values.
+       CALL HCO_CharSplit( char1,     separator, wildcard,                   &
+                           splitInts, nEdges,    RC                         )
+       IF ( RC /= HCO_SUCCESS ) THEN
+          errMsg = 'Error encountered in routine "HCO_CharSplit"!'
+          CALL HCO_Error( errMsg, RC, thisLoc )
+          RETURN
+       ENDIF
+       IF ( nEdges /= 4 ) THEN
+          errMsg = 'Cannot properly read mask coverage: '                 // &
+                   TRIM( Lct%Dct%cName )
+          CALL HCO_Error( errMsg, RC, thisLoc )
+          RETURN
+       ENDIF
+
+       ! Save temporarily in year and month range. Will be
+       ! reset lateron.
+       Dta%ncYrs(1) = splitInts(1)
+       Dta%ncYrs(2) = splitInts(2)
+       Dta%ncMts(1) = splitInts(3)
+       Dta%ncMts(2) = splitInts(4)
+
+       ! Make sure that masks are always being read if specified so.
+       IF ( char2 == 'y' .OR. char2 == 'Y' ) THEN
+          CALL ScalID2List( HcoConfig%ScalIDList, Lct%Dct%ScalID, RC )
+          IF ( RC /= HCO_SUCCESS ) THEN
+             errMsg = 'Error encountered in routine "ScalID2List"!'
+             CALL HCO_Error( errMsg, RC, thisLoc )
+             RETURN
+          ENDIF
+       ENDIF
+    ENDIF
+
+  END SUBROUTINE UpdateDtaProperties
 !EOC
 END MODULE HCO_Config_Mod

@@ -1,0 +1,63 @@
+#=============================================================================
+# Build matrix pipeline:
+#
+# This pipeline checks that pre-releases and the main branch
+# compile in a wide variety of build environments. This pipeline
+# is intended to be a rigorous check of HEMCO's build.
+#
+# This pipeline triggers on tagged pre-releases (alpha and beta
+# versions, as well as release candidates). Commits to the main
+# branch also trigger this pipeline.
+#=============================================================================
+trigger:
+  branches:
+    include:
+      - main
+    exclude:
+      - bugfix*
+      - dev*
+      - feature*
+  tags:
+    include:        # Semantic versioning 2.0.0 examples:
+      - '*-alpha*'  # 12.7.1-alpha.3
+      - '*-beta*'   # 12.7.0-beta.1
+      - '*-rc*'     # 12.7.0-rc.1
+pr: none
+
+# Basic agent set up
+pool:
+  vmImage: 'ubuntu-latest'
+
+
+# Define the "matrix" of build images to try building HEMCO in
+strategy:
+  matrix:
+    ubuntu_basic:
+      containerImage: geoschem/buildmatrix:netcdf-ubuntu
+    gcc8:
+      containerImage: geoschem/buildmatrix:netcdf-gcc8
+    gcc9:
+      containerImage: geoschem/buildmatrix:netcdf-gcc9
+    gcc10:
+      containerImage: geoschem/buildmatrix:netcdf-gcc10
+container: $[ variables['containerImage'] ]
+
+
+# Try building HEMCO (this is run for each "matrix" entry above)
+steps:
+- checkout: self
+  submodules: true
+- script: |
+    . /opt/spack/share/spack/setup-env.sh
+    export CC=gcc
+    export CXX=g++
+    export FC=gfortran
+    set -x
+    spack load cmake
+    spack load netcdf-c
+    spack load netcdf-fortran
+    mkdir build
+    cd build
+    cmake -DCMAKE_COLOR_MAKEFILE=FALSE $(Build.Repository.LocalPath)
+    make -j
+  displayName: 'Building HEMCO'

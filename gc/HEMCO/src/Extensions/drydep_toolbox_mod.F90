@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -23,33 +23,28 @@ MODULE DryDep_ToolBox_Mod
 !
 ! !PUBLIC MEMBER FUNCTIONS:
 !
-  PUBLIC  :: BIOFIT
-
-  INTERFACE BIOFIT
-    MODULE PROCEDURE BIOFIT_R4
-    MODULE PROCEDURE BIOFIT_R8
+  PUBLIC  :: BioFit
+  INTERFACE BioFit
+    MODULE PROCEDURE BioFit_R4
+    MODULE PROCEDURE BioFit_R8
   END INTERFACE
 
 !
 ! !PRIVATE MEMBER FUNCTIONS:
 !
-  PRIVATE :: SUNPARAM_R4
-  PRIVATE :: SUNPARAM_R8
-
+  PRIVATE :: SunParam_R4
+  PRIVATE :: SunParam_R8
 !
 ! !REVISION HISTORY:
 !  14 Nov 2013 - C. Keller   - Created from BIOFIT.F and SUNPARAM.F
-!  09 Jul 2014 - R. Yantosca - Now use F90 free-format indentation
-!  09 Jul 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  11 Dec 2014 - M. Yannetti - Split BIOFIT into R4 and R8 versions
-!                              Split SUNPARAM into R4 and R8 versions
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -61,7 +56,7 @@ CONTAINS
 !\\
 ! !INTERFACE:
 !
-  FUNCTION BIOFIT_R4( COEFF1, XLAI1, SUNCOS1, CFRAC1, NPOLY ) RESULT ( BIO_FIT )
+  FUNCTION BioFit_R4( COEFF1, XLAI1, SUNCOS1, CFRAC1, NPOLY ) RESULT( BIO_FIT )
 !
 ! !INPUT PARAMETERS:
 !
@@ -86,8 +81,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  13 Dec 2012 - R. Yantosca - Added ProTeX headers
-!  09 Dec 2014 - R. Yantosca - Now use BIO_FIT as the return value
-!  11 Dec 2014 - M. Yannetti - Split from BIO_FIT
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -105,36 +99,22 @@ CONTAINS
     !=================================================================
     ! BIOFIT begins here!
     !=================================================================
-    TERM(1)=1.
-    TERM(2)=XLAI1
-    TERM(3)=SUNCOS1
-    TERM(4)=CFRAC1
-    CALL SUNPARAM_R4(TERM(2))
-    K=0
-    DO K3=1,KK
-       DO K2=K3,KK
-          DO K1=K2,KK
-             K=K+1
+    TERM(1) = 1.0e0
+    TERM(2) = XLAI1
+    TERM(3) = SUNCOS1
+    TERM(4) = CFRAC1
+    CALL SUNPARAM_R4( TERM(2:4) )
+    K = 0
+    DO K3 = 1, KK
+       DO K2 = K3, KK
+          DO K1 = K2, KK
+             K = K + 1
              REALTERM(K)=TERM(K1)*TERM(K2)*TERM(K3)
-          END DO
-       END DO
-    END DO
+          ENDDO
+       ENDDO
+    ENDDO
 
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-!%%%%% KLUDGE: UNCOMMENT THIS CODE TO GET IDENTICAL RESULTS w/ v10-01e!
-!%%%%% (bmy, myannetti, 12/10/14)
-!%%%%%
-!%%%%% NOTE: This code did not use Fortran "d" exponents, so it was not
-!%%%%% forcing values to REAL*8 precision.  This was not as precise as it
-!%%%%% could have been, but this code was like this for many years.
-!%%%%%    BIO_FIT=0
-!%%%%%    DO K=1,NPOLY
-!%%%%%       BIO_FIT=BIO_FIT+COEFF1(K)*REALTERM(K)
-!%%%%%    END DO
-!%%%%%    IF (BIO_FIT .LT. 0.1 ) BIO_FIT=0.1
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-    ! Now explicitly use REAL*8 precision.  This will cause very small
+    ! Now explicitly use REAL*4 precision.  This will cause very small
     ! differences at the level of numerical noise when comparing to
     ! prior states of the code like v10-01e.  But this is something that
     ! we can live with.  Stick with REAL*8 precision for now, but we'll
@@ -144,12 +124,12 @@ CONTAINS
     DO K = 1, NPOLY
        BIO_FIT = BIO_FIT + COEFF1(K)*REALTERM(K)
     END DO
-    IF ( BIO_FIT .LT. 0.1e0 ) BIO_FIT=0.1e0
+    IF ( BIO_FIT .LT. 0.1e0 ) BIO_FIT = 0.1e0
 
-  END FUNCTION BIOFIT_R4
+  END FUNCTION BioFit_R4
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -161,7 +141,7 @@ CONTAINS
 !\\
 ! !INTERFACE:
 !
-  FUNCTION BIOFIT_R8( COEFF1, XLAI1, SUNCOS1, CFRAC1, NPOLY ) RESULT ( BIO_FIT )
+  FUNCTION BioFit_R8( COEFF1, XLAI1, SUNCOS1, CFRAC1, NPOLY ) RESULT( BIO_FIT )
 !
 ! !INPUT PARAMETERS:
 !
@@ -186,8 +166,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  13 Dec 2012 - R. Yantosca - Added ProTeX headers
-!  09 Dec 2014 - R. Yantosca - Now use BIO_FIT as the return value
-!  11 Dec 2014 - M. Yannetti - Split from BIO_FIT
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -205,34 +184,20 @@ CONTAINS
     !=================================================================
     ! BIOFIT begins here!
     !=================================================================
-    TERM(1)=1.
-    TERM(2)=XLAI1
-    TERM(3)=SUNCOS1
-    TERM(4)=CFRAC1
-    CALL SUNPARAM_R8(TERM(2))
+    TERM(1) = 1.0d0
+    TERM(2) = XLAI1
+    TERM(3) = SUNCOS1
+    TERM(4) = CFRAC1
+    CALL SUNPARAM_R8(TERM(2:4))
     K=0
-    DO K3=1,KK
-       DO K2=K3,KK
-          DO K1=K2,KK
-             K=K+1
+    DO K3 = 1, KK
+       DO K2 = K3, KK
+          DO K1 = K2, KK
+             K = K + 1
              REALTERM(K)=TERM(K1)*TERM(K2)*TERM(K3)
-          END DO
-       END DO
-    END DO
-
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-!%%%%% KLUDGE: UNCOMMENT THIS CODE TO GET IDENTICAL RESULTS w/ v10-01e!
-!%%%%% (bmy, myannetti, 12/10/14)
-!%%%%%
-!%%%%% NOTE: This code did not use Fortran "d" exponents, so it was not
-!%%%%% forcing values to REAL*8 precision.  This was not as precise as it
-!%%%%% could have been, but this code was like this for many years.
-!%%%%%    BIO_FIT=0
-!%%%%%    DO K=1,NPOLY
-!%%%%%       BIO_FIT=BIO_FIT+COEFF1(K)*REALTERM(K)
-!%%%%%    END DO
-!%%%%%    IF (BIO_FIT .LT. 0.1 ) BIO_FIT=0.1
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+          ENDDO
+       ENDDO
+    ENDDO
 
     ! Now explicitly use REAL*8 precision.  This will cause very small
     ! differences at the level of numerical noise when comparing to
@@ -244,16 +209,16 @@ CONTAINS
     DO K = 1, NPOLY
        BIO_FIT = BIO_FIT + COEFF1(K)*REALTERM(K)
     END DO
-    IF ( BIO_FIT .LT. 0.1d0 ) BIO_FIT=0.1d0
+    IF ( BIO_FIT .LT. 0.1d0 ) BIO_FIT = 0.1d0
 
   END FUNCTION BIOFIT_R8
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
-! !IROUTINE: SunParam_r4
+! !IROUTINE: SunParam_R4
 !
 ! !DESCRIPTION: Subroutine SUNPARAM is called by BIOFIT to perform the
 !  light correction used in the dry deposition and canopy NOx modules.
@@ -261,7 +226,7 @@ CONTAINS
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE SUNPARAM_R4( X )
+  SUBROUTINE SunParam_R4( X )
 !
 ! !DEFINED PARAMETERS:
 !
@@ -282,7 +247,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  13 Dec 2012 - R. Yantosca - Added ProTeX headers
-!  11 Dec 2014 - M. Yannetti - Split into R4 and R8 versions.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -291,33 +256,30 @@ CONTAINS
     ! the sequence is lai,suncos,cloud fraction
     !===============================================
 
-    !  ND = scaling factor for each variable
-    INTEGER ND(NN),I
-    DATA ND /55,20,11/
+    ! ND = scaling factor for each variable
+    INTEGER :: I
+    REAL*4  :: ND(NN) = (/ 55.0e0, 20.0e0, 11.0e0 /)
+    REAL*4  :: X0(NN) = (/ 11.0e0,  1.0e0,  1.0e0 /)
 
     !  X0 = maximum for each variable
-    REAL*4 X0(NN),XLOW
-    DATA X0 /11.,1.,1./
+    REAL*4  :: XLOW
 
-    DO I=1,NN
-       X(I)=MIN(X(I),X0(I))
+    DO I = 1, NN
+       X(I) = MIN( X(I), X0(I) )
        ! XLOW = minimum for each variable
-       IF (I.NE.3) THEN
-          XLOW=X0(I)/REAL(ND(I))
+       IF ( I .NE. 3 ) THEN
+          XLOW = X0(I) / ND(I)
        ELSE
-          XLOW= 0.
-       END IF
-       X(I)=MAX(X(I),XLOW)
-       X(I)=X(I)/X0(I)
-    END DO
+          XLOW = 0.0e0
+       ENDIF
+       X(I) = MAX( X(I), XLOW )
+       X(I) = X(I) / X0(I)
+    ENDDO
 
-  END SUBROUTINE SUNPARAM_R4
-!EOC
-
-
+  END SUBROUTINE SunParam_R4
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -329,7 +291,7 @@ CONTAINS
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE SUNPARAM_R8( X )
+  SUBROUTINE SunParam_R8( X )
 !
 ! !DEFINED PARAMETERS:
 !
@@ -350,7 +312,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  13 Dec 2012 - R. Yantosca - Added ProTeX headers
-!  11 Dec 2014 - M. Yannetti - Split into R4 and R8 versions.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -360,25 +322,25 @@ CONTAINS
     !===============================================
 
     !  ND = scaling factor for each variable
-    INTEGER ND(NN),I
-    DATA ND /55,20,11/
+    INTEGER :: I
+    REAL*8  :: ND(NN) = (/ 55.0d0, 20.0d0, 11.0d0 /)
+    REAL*8  :: X0(NN) = (/ 11.0e0,  1.0e0,  1.0e0 /)
 
     !  X0 = maximum for each variable
-    REAL*8 X0(NN),XLOW
-    DATA X0 /11.,1.,1./
+    REAL*8  :: XLOW
 
-    DO I=1,NN
-       X(I)=MIN(X(I),X0(I))
+    DO I = 1, NN
+       X(I) = MIN( X(I), X0(I) )
        ! XLOW = minimum for each variable
-       IF (I.NE.3) THEN
-          XLOW=X0(I)/REAL(ND(I))
+       IF ( I .NE. 3 ) THEN
+          XLOW = X0(I) / ND(I)
        ELSE
-          XLOW= 0.
+          XLOW = 0.0d0
        END IF
-       X(I)=MAX(X(I),XLOW)
-       X(I)=X(I)/X0(I)
+       X(I) = MAX( X(I), XLOW )
+       X(I) = X(I) / X0(I)
     END DO
 
-  END SUBROUTINE SUNPARAM_R8
+  END SUBROUTINE SunParam_R8
 !EOC
 END MODULE DryDep_ToolBox_Mod

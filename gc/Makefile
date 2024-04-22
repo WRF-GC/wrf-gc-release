@@ -42,7 +42,7 @@ GTMM    :=GTMM
 ###############################################################################
 
 .PHONY: all lib libcore libheaders libkpp libiso libnc librad libutil
-.PHONY: exe clean realclean doc docclean tauclean help wipeout debug
+.PHONY: exe clean realclean tauclean help wipeout debug
 .PHONY: realclean_except_rrtmg libhemcosa
 
 all:
@@ -98,12 +98,6 @@ realclean:
 
 realclean_except_rrtmg:
 	@$(MAKE) -C $(GEOSDIR) realclean_except_rrtmg
-
-doc:
-	@$(MAKE) -C $(GEOSDIR) doc
-
-docclean: 
-	@$(MAKE) -C $(GEOSDIR) docclean
 
 tauclean:
 	find . -name '*.pdb' -o -name '*.inst.*' -o -name '*.pp.*' -o -name '*.continue.*' -o -name '*.tau.inc~' | xargs rm -f

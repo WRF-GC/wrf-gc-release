@@ -143,14 +143,14 @@ CONTAINS
 ! !USES:
 !
     USE ErrCode_Mod
-    USE HCO_INTERFACE_MOD,  ONLY : HcoState
-    USE HCO_EmisList_Mod,   ONLY : HCO_GetPtr
-    USE HCO_STATE_MOD,      ONLY : HCO_GetHcoID
-    USE Input_Opt_Mod,      ONLY : OptInput
-    USE State_Chm_Mod,      ONLY : ChmState
-    USE State_Diag_Mod,     ONLY : DgnState
-    USE State_Grid_Mod,     ONLY : GrdState
-    USE State_Met_Mod,      ONLY : MetState
+    USE HCO_Utilities_GC_Mod, ONLY : HCO_GC_EvalFld
+    USE HCO_State_GC_Mod,     ONLY : HcoState
+    USE Input_Opt_Mod,        ONLY : OptInput
+    USE Species_Mod,          ONLY : SpcConc
+    USE State_Chm_Mod,        ONLY : ChmState
+    USE State_Diag_Mod,       ONLY : DgnState
+    USE State_Grid_Mod,       ONLY : GrdState
+    USE State_Met_Mod,        ONLY : MetState
 !
 ! !INPUT PARAMETERS:
 !
@@ -171,6 +171,8 @@ CONTAINS
 !  The initial condition for CO2 has to be at least 50 ppm or higher or else
 !  the balanced biosphere fluxes will make STT negative. (pns, bmy, 8/16/05)
 !
+!  The HEMCO grid no longer is restricted to the model grid (hplin, 6/14/20)
+!
 ! !REVISION HISTORY:
 !  16 Aug 2005 - P. Suntharalingam - Initial version
 !  See https://github.com/geoschem/geos-chem for complete history
@@ -181,25 +183,27 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     ! Scalars
-    INTEGER                    :: I, J, L, N, NA
-    INTEGER                    :: nAdvect
-    REAL(fp)                   :: A_CM2, DTSRCE, E_CO2
+    INTEGER               :: I, J, L, N, NA
+    INTEGER               :: nAdvect
+    REAL(fp)              :: A_CM2, DTSRCE, E_CO2
 
     ! SAVEd scalars
-    LOGICAL,         SAVE      :: FIRST      = .TRUE.
+    LOGICAL, SAVE         :: FIRST = .TRUE.
 
     ! Strings
-    CHARACTER(LEN=255)         :: ThisLoc
-    CHARACTER(LEN=512)         :: ErrMsg
+    CHARACTER(LEN=255)    :: ThisLoc
+    CHARACTER(LEN=512)    :: ErrMsg
 
     ! Pointers
-    REAL(f4),        POINTER   :: CO2_COPROD(:,:,:  )
-    REAL(fp),        POINTER   :: Spc       (:,:,:,:)
+    TYPE(SpcConc), POINTER :: Spc(:)
+
+    ! Arrays
+    REAL(fp) :: CO2_COPROD(State_Grid%NX,State_Grid%NY,State_Grid%NZ)
 !
 ! !DEFINED PARAMETERS:
 !
-    REAL(fp),        PARAMETER :: CM2PERM2 = 1.d4
-    REAL(fp),        PARAMETER :: CM3PERM3 = 1.d6
+    REAL(fp), PARAMETER   :: CM2PERM2 = 1.d4
+    REAL(fp), PARAMETER   :: CM3PERM3 = 1.d6
 
     !=================================================================
     ! EMISSCO2 begins here!
@@ -208,8 +212,7 @@ CONTAINS
     ! Initialize
     RC          = GC_SUCCESS
     ErrMsg      = ''
-    ThisLoc     = ' -> at EMISSCO2 (in module GeosCore/co2_mod.F)'
-    CO2_COPROD  => NULL()
+    ThisLoc     = ' -> at EMISSCO2 (in module GeosCore/co2_mod.F90)'
     Spc         => NULL()
 
     ! Import emissions from HEMCO (through HEMCO state)
@@ -229,19 +232,6 @@ CONTAINS
     ! Species ID setup and error checks (first-time only)
     !=================================================================
     IF ( FIRST ) THEN
-
-       !--------------------------------------------------------------
-       ! Error check: For now, the emission grid must be
-       ! on the simulation grid.
-       !--------------------------------------------------------------
-       IF ( HcoState%NX /= State_Grid%NX .OR. &
-            Hcostate%NY /= State_Grid%NY .OR. &
-            Hcostate%NZ /= State_Grid%NZ     ) THEN
-          ErrMsg = 'The HEMCO grid not same as the sim. grid!'
-          CALL GC_Error( ErrMsg, RC, ThisLoc )
-          RETURN
-       ENDIF
-
        ! Set first-time flag to false
        FIRST = .FALSE.
     ENDIF
@@ -261,14 +251,10 @@ CONTAINS
        ! Point to chemical species array [kg/kg dry air]
        Spc => State_Chm%Species
 
-       ! %%% NOTE: This might be able to be done just in init %%%
-       ! %%% as the HEMCO pointer will evolve in time %%%%%%%%%%%
-       ! Get a pointer to the CO2 production from CO oxidation
-       ! This is now listed in the NON-EMISSIONS DATA section of
-       ! the HEMCO configuration file. (bmy, 4/17/15)
-       CALL HCO_GetPtr( HcoState, 'CO2_COPROD', CO2_COPROD, RC )
+       ! Evalulate the CO2 production from HEMCO
+       CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'CO2_COPROD', CO2_COPROD, RC )
        IF ( RC /= GC_SUCCESS ) THEN
-          ErrMsg = 'CO2 production is not defined in HEMCO!'
+          ErrMsg = 'CO_COPROD not found in HEMCO data list!'
           CALL GC_Error( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
@@ -308,11 +294,11 @@ CONTAINS
                     - State_Met%SPHU(I,J,L) * 1.0e-3_fp ) )
 
           ! Add to Species #1: Total CO2 [kg/kg]
-          Spc(I,J,L,1) = Spc(I,J,L,1) + E_CO2
+          Spc(1)%Conc(I,J,L) = Spc(1)%Conc(I,J,L) + E_CO2
 
           ! Add to Species #10: Chemical Source of CO2 [kg/kg]
           IF ( nAdvect > 9 ) THEN
-             Spc(I,J,L,10) = Spc(I,J,L,10) + E_CO2
+             Spc(10)%Conc(I,J,L) = Spc(10)%Conc(I,J,L) + E_CO2
           ENDIF
 
        ENDDO
@@ -321,9 +307,8 @@ CONTAINS
        !$OMP END PARALLEL DO
     ENDIF
 
-    ! Free pointers
+    ! Free pointer
     Spc        => NULL()
-    CO2_COPROD => NULL()
 
   END SUBROUTINE EMISSCO2
 !EOC

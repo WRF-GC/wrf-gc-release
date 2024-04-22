@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -30,9 +30,7 @@ MODULE HCOX_Custom_Mod
 !
 ! !REVISION HISTORY:
 !  13 Dec 2013 - C. Keller   - Initial version
-!  06 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  06 Jun 2014 - R. Yantosca - Now indented with F90 free-format
-!  12 Sep 2018 - C. Keller   - Wrapped into instance
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -55,7 +53,7 @@ MODULE HCOX_Custom_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -88,10 +86,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  13 Dec 2013 - C. Keller   - Initial version
-!  05 Jun 2014 - R. Yantosca - Now store the results of HCO_LANDTYPE
-!                              in a PRIVATE variable for the !OMP loop
-!  05 Jun 2014 - R. Yantosca - Cosmetic changes
-!  06 Jun 2014 - R. Yantosca - Now indented with F90 free-format
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -104,7 +99,7 @@ CONTAINS
     REAL(hp), ALLOCATABLE :: FLUXICE(:,:)
     REAL(hp), ALLOCATABLE :: FLUXWIND(:,:)
     LOGICAL               :: ERR
-    CHARACTER(LEN=255)    :: MSG
+    CHARACTER(LEN=255)    :: MSG, LOC
 
     TYPE(MyInst), POINTER :: Inst
 !
@@ -116,10 +111,14 @@ CONTAINS
     !=================================================================
     ! HCOX_CUSTOM_RUN begins here!
     !=================================================================
+    LOC = 'HCOX_CUSTOM_RUN (HCOX_CUSTOM_MOD.F90)'
 
     ! Enter
-    CALL HCO_ENTER( HcoState%Config%Err, 'HCOX_Custom_Run (hcox_custom_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Set error flag
     ERR = .FALSE.
@@ -132,7 +131,7 @@ CONTAINS
     CALL InstGet ( ExtState%Custom, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        WRITE(MSG,*) 'Cannot find custom instance Nr. ', ExtState%Custom
-       CALL HCO_ERROR(HcoState%Config%Err,MSG,RC)
+       CALL HCO_ERROR(MSG,RC)
        RETURN
     ENDIF
 
@@ -140,7 +139,7 @@ CONTAINS
     ALLOCATE ( FLUXICE( HcoState%NX,HcoState%NY),        &
                FLUXWIND(HcoState%NX,HcoState%NY), STAT=AS )
     IF ( AS/= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'ALLOCATION ERROR', RC )
+       CALL HCO_ERROR( 'ALLOCATION ERROR', RC )
        RETURN
     ENDIF
     FLUXICE  = 0.0_hp
@@ -155,8 +154,11 @@ CONTAINS
     DO I = 1, HcoState%NX
 
        ! Get the land type for grid box (I,J)
-       LANDTYPE = HCO_LANDTYPE( ExtState%WLI%Arr%Val(I,J),  &
-                                ExtState%ALBD%Arr%Val(I,J) )
+       LANDTYPE = HCO_LANDTYPE( ExtState%FRLAND%Arr%Val(I,J),   &
+                                ExtState%FRLANDIC%Arr%Val(I,J), &
+                                ExtState%FROCEAN%Arr%Val(I,J),  &
+                                ExtState%FRSEAICE%Arr%Val(I,J), &
+                                ExtState%FRLAKE%Arr%Val(I,J)   )
 
        ! Check surface type
        ! Ocean:
@@ -170,7 +172,7 @@ CONTAINS
           ! Set flux to wind speed
           FLUXWIND(I,J) = W10M * SCALWIND
 
-         ! Ice:
+       ! Ice:
        ELSE IF ( LANDTYPE == 2 ) THEN
 
           ! Set uniform flux
@@ -193,7 +195,10 @@ CONTAINS
        ! Emissions array
        CALL HCO_EmisAdd( HcoState, FLUXWIND, Inst%OcWindIDs(N), &
                          RC,       ExtNr=Inst%ExtNr )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
     ENDDO !N
 
     ! Add ice fluxes to emission arrays & diagnostics
@@ -202,7 +207,10 @@ CONTAINS
        ! Emissions array
        CALL HCO_EmisAdd( HcoState, FLUXICE, Inst%IceSrcIDs(N), &
                          RC,       ExtNr=Inst%ExtNr )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
     ENDDO !N
 
     ! Return w/ success
@@ -212,7 +220,7 @@ CONTAINS
   END SUBROUTINE HCOX_Custom_Run
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -243,8 +251,7 @@ CONTAINS
 
 ! !REVISION HISTORY:
 !  13 Dec 2013 - C. Keller   - Now a HEMCO extension
-!  06 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  06 Jun 2014 - R. Yantosca - Now indented using F90 free-format
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -255,37 +262,44 @@ CONTAINS
     INTEGER,           ALLOCATABLE :: HcoIDs(:)
     LOGICAL                        :: verb
     CHARACTER(LEN=31), ALLOCATABLE :: SpcNames(:)
-    CHARACTER(LEN=255)             :: MSG
+    CHARACTER(LEN=255)             :: MSG, LOC
     TYPE(MyInst), POINTER          :: Inst
 
     !=================================================================
     ! HCOX_CUSTOM_INIT begins here!
     !=================================================================
+    LOC = 'HCOX_CUSTOM_INIT (HCOX_CUSTOM_MOD.F90)'
 
     ! Extension Nr.
     ExtNr = GetExtNr( HcoState%Config%ExtList, TRIM(ExtName) )
     IF ( ExtNr <= 0 ) RETURN
 
     ! Enter
-    CALL HCO_ENTER( HcoState%Config%Err, 'HCOX_Custom_Init (hcox_custom_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     verb = HCO_IsVerb(HcoState%Config%Err,1)
 
     Inst => NULL()
     CALL InstCreate ( ExtNr, ExtState%Custom, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot create custom instance', RC )
+       CALL HCO_ERROR (  'Cannot create custom instance', RC )
        RETURN
     ENDIF
 
     ! Set species IDs
     CALL HCO_GetExtHcoID( HcoState, Inst%ExtNr, HcoIDs, SpcNames, nSpc, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 4', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Assume first half are 'wind species', second half are ice.
     IF ( MOD(nSpc,2) /= 0 ) THEN
        MSG = 'Cannot set species IDs for custom emission module!'
-       CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+       CALL HCO_ERROR(MSG, RC )
        RETURN
     ENDIF
 
@@ -316,8 +330,11 @@ CONTAINS
     ! Activate met fields required by this extension
     ExtState%U10M%DoUse = .TRUE.
     ExtState%V10M%DoUse = .TRUE.
-    ExtState%ALBD%DoUse = .TRUE.
-    ExtState%WLI%DoUse  = .TRUE.
+    ExtState%FRLAND%DoUse   = .TRUE.
+    ExtState%FRLANDIC%DoUse = .TRUE.
+    ExtState%FROCEAN%DoUse  = .TRUE.
+    ExtState%FRSEAICE%DoUse = .TRUE.
+    ExtState%FRLAKE%DoUse   = .TRUE.
 
     ! Activate this extension
     !ExtState%Custom = .TRUE.
@@ -331,7 +348,7 @@ CONTAINS
   END SUBROUTINE HCOX_Custom_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -351,8 +368,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  13 Dec 2013 - C. Keller   - Now a HEMCO extension
-!  06 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  06 Jun 2014 - R. Yantosca - Now indended with F90 free-format
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -365,7 +381,7 @@ CONTAINS
   END SUBROUTINE HCOX_Custom_Final
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -387,6 +403,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -419,7 +436,7 @@ CONTAINS
   END SUBROUTINE InstGet
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -447,7 +464,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -495,7 +512,7 @@ CONTAINS
   END SUBROUTINE InstCreate
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -514,7 +531,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -535,9 +552,24 @@ CONTAINS
 
     ! Instance-specific deallocation
     IF ( ASSOCIATED(Inst) ) THEN
+
+       !---------------------------------------------------------------------
+       ! Deallocate fields of Inst before popping off from the list
+       ! in order to avoid memory leaks (Bob Yantosca (17 Aug 2022)
+       !---------------------------------------------------------------------
+       IF ( ASSOCIATED( Inst%OcWindIDs ) ) THEN
+          DEALLOCATE ( Inst%OcWindIDs )
+       ENDIF
+       Inst%OcWindIDs => NULL()
+
+       IF ( ASSOCIATED( Inst%IceSrcIDs ) ) THEN
+          DEALLOCATE ( Inst%IceSrcIDs )
+       ENDIF
+       Inst%IceSrcIDs => NULL()
+
+       !---------------------------------------------------------------------
        ! Pop off instance from list
-       IF ( ASSOCIATED(Inst%OcWindIDs) ) DEALLOCATE ( Inst%OcWindIDs )
-       IF ( ASSOCIATED(Inst%IceSrcIDs) ) DEALLOCATE ( Inst%IceSrcIDs )
+       !---------------------------------------------------------------------
        IF ( ASSOCIATED(PrevInst) ) THEN
           PrevInst%NextInst => Inst%NextInst
        ELSE
@@ -546,6 +578,10 @@ CONTAINS
        DEALLOCATE(Inst)
        Inst => NULL()
     ENDIF
+
+    ! Free pointers before exiting
+    PrevInst => NULL()
+    Inst     => NULL()
 
    END SUBROUTINE InstRemove
 !EOC

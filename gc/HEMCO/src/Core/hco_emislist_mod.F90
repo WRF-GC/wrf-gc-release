@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -38,7 +38,7 @@ MODULE HCO_EMISLIST_MOD
 !
 ! !REVISION HISTORY:
 !  04 Dec 2012 - C. Keller   - Initialization
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -53,7 +53,7 @@ MODULE HCO_EMISLIST_MOD
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -84,7 +84,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  04 Dec 2012 - C. Keller - Initial version
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -93,16 +93,16 @@ CONTAINS
 !
     TYPE(ListCont), POINTER                 :: Lct
     LOGICAL                                 :: FOUND, VERBOSE, NEW
-    CHARACTER(LEN=255)                      :: MSG
+    CHARACTER(LEN=255)                      :: MSG, LOC
     CHARACTER(LEN= 31)                      :: TempRes
 
     !======================================================================
     ! EmisList_Add begins here!
     !======================================================================
+    LOC = 'EmisList_Add (HCO_EMISLIST.F90)'
 
     ! Enter
-    CALL HCO_ENTER ( HcoState%Config%Err, &
-                     'EmisList_Add (HCO_EMISLL_MOD.F90)', RC )
+    CALL HCO_ENTER ( HcoState%Config%Err, LOC, RC )
     IF(RC /= HCO_SUCCESS) RETURN
 
     ! Set verbose flag
@@ -137,7 +137,10 @@ CONTAINS
     ! according to data type, species ID, hierarchy, and category.
     ! ----------------------------------------------------------------
     CALL Add2EmisList ( HcoState, Lct, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! ----------------------------------------------------------------
     ! Verbose mode
@@ -154,7 +157,7 @@ CONTAINS
   END SUBROUTINE EmisList_Add
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -181,7 +184,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  06 Dec 2012 - C. Keller - Initial version
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -190,7 +193,7 @@ CONTAINS
 !
     ! Scalars
     INTEGER                   :: NEWCAT, NEWHIR, NEWSPC
-    CHARACTER(LEN=255)        :: MSG
+    CHARACTER(LEN=255)        :: MSG, LOC
 
     ! Pointers
     TYPE(ListCont), POINTER   :: TmpLct => NULL()
@@ -198,10 +201,14 @@ CONTAINS
     !======================================================================
     ! Add2EmisList begins here!
     !======================================================================
+    LOC = 'Add2EmisList (HCO_EMISLIST_MOD.F90)'
 
     ! Enter
-    CALL HCO_ENTER ( HcoState%Config%Err, 'Add2EmisList', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER ( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Update number of containers in EmisList
     HcoState%nnEmisCont = HcoState%nnEmisCont + 1
@@ -326,7 +333,7 @@ CONTAINS
   END SUBROUTINE Add2EmisList
 !EOC
 !!------------------------------------------------------------------------------
-!!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!!                   Harmonized Emissions Component (HEMCO)                    !
 !!------------------------------------------------------------------------------
 !!BOP
 !!
@@ -359,7 +366,7 @@ CONTAINS
 !!
 !! !REVISION HISTORY:
 !!  20 Apr 2013 - C. Keller - Initial version
-!!  See https://github.com/geoschem/geos-chem for complete history
+!!  See https://github.com/geoschem/hemco for complete history
 !!EOP
 !!------------------------------------------------------------------------------
 !!BOC
@@ -404,7 +411,7 @@ CONTAINS
 !  END SUBROUTINE EmisList_Update
 !!EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -437,7 +444,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  28 Mar 2013 - C. Keller - Initial version
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -450,15 +457,15 @@ CONTAINS
     ! Scalars
     INTEGER                   :: I, J, L, T
     LOGICAL                   :: FOUND, verb, Add
-    CHARACTER(LEN=255)        :: MSG
+    CHARACTER(LEN=255)        :: MSG, LOC
 
     ! ================================================================
     ! EmisList_Pass begins here
     ! ================================================================
+    LOC = 'EmisList_Pass (HCO_EMISLIST_MOD.F90)'
 
     ! Enter
-    CALL HCO_ENTER ( HcoState%Config%Err, &
-                     'EmisList_Pass (hco_emislist_mod.F90)', RC )
+    CALL HCO_ENTER ( HcoState%Config%Err, LOC, RC )
     IF(RC /= HCO_SUCCESS) RETURN
 
     ! Init
@@ -498,7 +505,7 @@ CONTAINS
        IF ( .NOT. FOUND ) THEN
           MSG = 'Cannot add emissions to target array: error in ' // &
                TRIM(Lct%Dct%cName)
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+          CALL HCO_ERROR( MSG, RC )
           RETURN
        ENDIF
 
@@ -533,33 +540,33 @@ CONTAINS
           ! Check extension number
           IF ( Lct%Dct%ExtNr /= TargetLct%Dct%ExtNr ) THEN
              MSG = 'Wrong ext. number: ' // TRIM(Lct%Dct%cName)
-             CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+             CALL HCO_ERROR( MSG, RC )
              RETURN
           ENDIF
 
           ! Check data type
           IF ( Lct%Dct%DctType /= TargetLct%Dct%DctType ) THEN
              MSG = 'Wrong data type: ' // TRIM(Lct%Dct%cName)
-             CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+             CALL HCO_ERROR( MSG, RC )
              RETURN
           ENDIF
 
           ! Check species ID
           IF ( Lct%Dct%HcoID /= TargetLct%Dct%HcoID ) THEN
              MSG = 'Wrong species ID: ' // TRIM(Lct%Dct%cName)
-             CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+             CALL HCO_ERROR( MSG, RC )
              RETURN
           ENDIF
 
           ! Check for array dimensions
           IF ( Lct%Dct%Dta%SpaceDim /= TargetLct%Dct%Dta%SpaceDim ) THEN
              MSG = 'Wrong space dimension: ' // TRIM(Lct%Dct%cName)
-             CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+             CALL HCO_ERROR( MSG, RC )
              RETURN
           ENDIF
           IF ( Lct%Dct%Dta%nt /= TargetLct%Dct%Dta%nt ) THEN
              MSG = 'Wrong time dim: ' // TRIM(Lct%Dct%cName)
-             CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+             CALL HCO_ERROR( MSG, RC )
              RETURN
           ENDIF
           IF ( Lct%Dct%Dta%SpaceDim <= 2) THEN
@@ -590,21 +597,21 @@ CONTAINS
           ! Check operator
           IF ( Lct%Dct%Oper /= TargetLct%Dct%Oper ) THEN
              MSG = 'Wrong operator: ' // TRIM(Lct%Dct%cName)
-             CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+             CALL HCO_ERROR( MSG, RC )
              RETURN
           ENDIF
 
           ! Check category
           IF ( Lct%Dct%Cat /= TargetLct%Dct%Cat ) THEN
              MSG = 'Wrong category: ' // TRIM(Lct%Dct%cName)
-             CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+             CALL HCO_ERROR( MSG, RC )
              RETURN
           ENDIF
 
           ! Check hierarchy
           IF ( Lct%Dct%Hier /= TargetLct%Dct%Hier ) THEN
              MSG = 'Wrong hierarchy: ' // TRIM(Lct%Dct%cName)
-             CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+             CALL HCO_ERROR( MSG, RC )
              RETURN
           ENDIF
 
@@ -613,7 +620,7 @@ CONTAINS
                Lct%Dct%Oper    == 3                       ) THEN
              MSG = 'Cannot add masks if operator is 3: ' // &
                   TRIM(Lct%Dct%cName)
-             CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+             CALL HCO_ERROR( MSG, RC )
              RETURN
           ENDIF
 
@@ -656,7 +663,10 @@ CONTAINS
     ! ----------------------------------------------------------------
     IF ( Add ) THEN
        CALL EmisList_Add( Lct%Dct, HcoState, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
     ENDIF
 
     ! ----------------------------------------------------------------
@@ -667,7 +677,7 @@ CONTAINS
   END SUBROUTINE EmisList_Pass
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -714,7 +724,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  04 Sep 2013 - C. Keller - Initial version
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -763,7 +773,7 @@ CONTAINS
           RETURN
        ELSE
           MSG = 'Container not found: ' // TRIM(DctName)
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
           RETURN
        ENDIF
     ENDIF
@@ -771,14 +781,14 @@ CONTAINS
     ! Check spatial dimension
     IF ( Lct%Dct%Dta%SpaceDim /= 3 ) THEN
        MSG = 'Container is not 3D: ' // TRIM(DctName)
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+       CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
        RETURN
     ENDIF
 
     ! Check time dimension
     IF ( Lct%Dct%Dta%nt < T ) THEN
        MSG = 'not enough time slices: ' // TRIM(DctName)
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+       CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
        RETURN
     ENDIF
 
@@ -790,7 +800,7 @@ CONTAINS
           Ptr3D  => NULL()
        ELSE
           MSG = 'Container data not filled: ' // TRIM(DctName)
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
           RETURN
        ENDIF
     ENDIF
@@ -801,7 +811,7 @@ CONTAINS
   END SUBROUTINE HCO_GetPtr_3D
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -839,7 +849,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  04 Sep 2013 - C. Keller - Initial version
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -886,7 +896,7 @@ CONTAINS
           RETURN
        ELSE
           MSG = 'Container not found: ' // TRIM(DctName)
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
           RETURN
        ENDIF
     ENDIF
@@ -895,14 +905,14 @@ CONTAINS
     IF ( (Lct%Dct%Dta%SpaceDim/=2) .AND. &
          (Lct%Dct%Dta%SpaceDim/=1)        ) THEN
        MSG = 'Container is not 2D: ' // TRIM(DctName)
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+       CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
        RETURN
     ENDIF
 
     ! Check time dimension
     IF ( Lct%Dct%Dta%nt < T ) THEN
        MSG = 'not enough time slices: ' // TRIM(DctName)
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+       CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
        RETURN
     ENDIF
 
@@ -914,7 +924,7 @@ CONTAINS
           Ptr2D  => NULL()
        ELSE
           MSG = 'Container data not filled: ' // TRIM(DctName)
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
           RETURN
        ENDIF
     ENDIF

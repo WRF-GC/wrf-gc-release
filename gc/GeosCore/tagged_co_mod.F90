@@ -23,7 +23,6 @@ MODULE TAGGED_CO_MOD
 !
 ! !PRIVATE MEMBER FUNCTIONS:
 !
-  PRIVATE :: CALC_DIURNAL
 !
 ! !PUBLIC MEMBER FUNCTIONS:
 !
@@ -68,15 +67,6 @@ MODULE TAGGED_CO_MOD
   REAL(fp), ALLOCATABLE :: SUMMONOCO  (:,:  )   ! P(CO) from Monoterpenes
   REAL(fp), ALLOCATABLE :: TCOSZ      (:,:  )   ! Daily sum COS(SZA)
 
-  ! Pointers to fields in the HEMCO data structure.
-  ! These need to be declared REAL(f4), aka REAL*4.
-  REAL(f4), POINTER     :: OH         (:,:,:) => NULL() ! Global OH
-  REAL(f4), POINTER     :: GMI_PROD_CO(:,:,:) => NULL() ! Global P(CO)
-  REAL(f4), POINTER     :: GMI_LOSS_CO(:,:,:) => NULL() ! Global L(CO)
-  REAL(f4), POINTER     :: PCO_CH4    (:,:,:) => NULL() ! CH4 P(CO)
-  REAL(f4), POINTER     :: PCO_NMVOC  (:,:,:) => NULL() ! NMVOC P(CO)
-  REAL(f4), POINTER     :: SFC_CH4    (:,:  ) => NULL() ! Global sfc CH4
-
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
@@ -99,11 +89,13 @@ CONTAINS
 !
     USE ErrCode_Mod
     USE ERROR_MOD,          ONLY : CHECK_VALUE
-    USE HCO_EmisList_Mod,   ONLY : HCO_GetPtr
+    USE HCO_Utilities_GC_Mod, ONLY : HCO_GC_EvalFld
     USE HCO_Error_Mod
-    USE HCO_Interface_Mod,  ONLY : HcoState, GetHcoID
+    USE HCO_State_Mod,      ONLY : Hco_GetHcoId
+    USE HCO_State_GC_Mod,   ONLY : HcoState
     USE Input_Opt_Mod,      ONLY : OptInput
     USE PhysConstants,      ONLY : AVO
+    USE Species_Mod,        ONLY : SpcConc
     USE State_Chm_Mod,      ONLY : ChmState, Ind_
     USE State_Diag_Mod,     ONLY : DgnState
     USE State_Grid_Mod,     ONLY : GrdState
@@ -156,7 +148,7 @@ CONTAINS
     REAL(fp)                 :: OH_MOLEC_CM3,  FAC_DIURNAL, SUNCOS
     REAL(fp)                 :: PCO_CH4_MCM3S, PCO_NMVOC_MCM3S
     REAL(fp)                 :: kgs_to_atomsC, Emis,        DTEMIS
-    REAL(fp)                 :: kgm3_to_mcm3OH,kgm3_to_mcm3sCO
+    REAL(fp)                 :: kgm3_to_mcm3OH
 
     ! Strings
     CHARACTER(LEN=255)       :: ERR_VAR
@@ -166,13 +158,19 @@ CONTAINS
     CHARACTER(LEN=255)       :: ThisLoc
 
     ! Arrays
-    INTEGER                  :: ERR_LOC(4)
+    INTEGER  :: ERR_LOC(4)
+    REAL(fp) :: SFC_CH4    (State_Grid%NX, State_Grid%NY)
+    REAL(fp) :: GMI_LOSS_CO(State_Grid%NX, State_Grid%NY, State_Grid%NZ)
+    REAL(fp) :: GMI_PROD_CO(State_Grid%NX, State_Grid%NY, State_Grid%NZ)
+    REAL(fp) :: GLOBAL_OH  (State_Grid%NX, State_Grid%NY, State_Grid%NZ)
+    REAL(fp) :: PCO_CH4    (State_Grid%NX, State_Grid%NY, State_Grid%NZ)
+    REAL(fp) :: PCO_NMVOC  (State_Grid%NX, State_Grid%NY, State_Grid%NZ)
 
     ! Pointers
-    REAL(fp),        POINTER :: AD    (:,:,:  )
-    REAL(fp),        POINTER :: AIRVOL(:,:,:  )
-    REAL(fp),        POINTER :: Spc   (:,:,:,:)
-    REAL(fp),        POINTER :: T     (:,:,:  )
+    REAL(fp),        POINTER :: AD    (:,:,:)
+    REAL(fp),        POINTER :: AIRVOL(:,:,:)
+    REAL(fp),        POINTER :: T     (:,:,:)
+    TYPE(SpcConc),   POINTER :: Spc   (:    )
 
     ! SAVED scalars
     LOGICAL,   SAVE          :: FIRST = .TRUE.
@@ -235,11 +233,6 @@ CONTAINS
     ! Factor to convert OH from kg/m3 (from HEMCO) to molec/cm3
     kgm3_to_mcm3OH = ( AVO / 17.0e-3_fp ) * 1.0e-6_fp
 
-    ! Factor to convert P(CO) from kg/m3 (from HEMCO) to molec/cm3/s
-    ! HEMCO uses emission timestep to convert from kg/m3/s to kg/m3;
-    ! apply that here.
-    kgm3_to_mcm3sCO = ( AVO / (FMOL_CO * DTEMIS) ) * 1.0e-6_fp
-
     ! Compute diurnal cycle for OH every day (check for new day inside
     ! subroutine) - jaf 7/10/14
     CALL CALC_DIURNAL( State_Grid )
@@ -282,59 +275,77 @@ CONTAINS
        IDmono   = Ind_( 'COmono'  )
        IDacet   = Ind_( 'COacet'  )
 
-       ! Get a pointer to the OH field from the HEMCO list (bmy, 3/11/15)
-       CALL HCO_GetPtr( HcoState, 'GLOBAL_OH', OH,   RC )
-       IF ( RC /= HCO_SUCCESS ) THEN
-          ErrMsg = 'Cannot get pointer to GLOBAL_OH!'
-          CALL GC_Error( ErrMsg, RC, ThisLoc )
-          RETURN
-       ENDIF
-
-       ! Get pointer to strat P(CO) from GMI
-       CALL HCO_GetPtr( HcoState, 'GMI_PROD_CO', GMI_PROD_CO, RC )
-       IF ( RC /= HCO_SUCCESS ) THEN
-          ErrMsg = 'Cannot get pointer to GMI_PROD_CO!'
-          CALL GC_Error( ErrMsg, RC, ThisLoc )
-          RETURN
-       ENDIF
-
-       ! Get pointer to strat L(CO) from GMI
-       CALL HCO_GetPtr( HcoState, 'GMI_LOSS_CO', GMI_LOSS_CO, RC )
-       IF ( RC /= HCO_SUCCESS ) THEN
-          ErrMsg = 'Cannot get pointer to GMI_LOSS_CO!'
-          CALL GC_Error( ErrMsg, RC, ThisLoc )
-          RETURN
-       ENDIF
-
-       ! Get pointer to trop P(CO) from CH4 if needed
-       IF ( LPCO_CH4 ) THEN
-          CALL HCO_GetPtr( HcoState, 'PCO_CH4', PCO_CH4, RC )
-          IF ( RC /= HCO_SUCCESS ) THEN
-             ErrMsg = 'Cannot get pointer to PCO_CH4!'
-             CALL GC_Error( ErrMsg, RC, ThisLoc )
-             RETURN
-          ENDIF
-       ENDIF
-
-       IF ( LPCO_NMVOC ) THEN
-          CALL HCO_GetPtr( HcoState, 'PCO_NMVOC', PCO_NMVOC, RC )
-          IF ( RC /= HCO_SUCCESS ) THEN
-             ErrMsg = 'Cannot get pointer to PCO_NMVOC!'
-             CALL GC_Error( ErrMsg, RC, ThisLoc )
-             RETURN
-          ENDIF
-       ENDIF
-
-       ! Get pointer to surface CH4 data
-       CALL HCO_GetPtr( HcoState, 'NOAA_GMD_CH4', SFC_CH4, RC )
-       IF ( RC /= HCO_SUCCESS ) THEN
-          ErrMsg = 'Cannot get pointer to NOAA_GMD_CH4!'
-          CALL GC_Error( ErrMsg, RC, ThisLoc )
-          RETURN
-       ENDIF
-
        ! Reset first-time flag
        FIRST = .FALSE.
+    ENDIF
+
+    ! Evaluate global OH from HEMCO
+    CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'GLOBAL_OH', GLOBAL_OH, RC )
+    IF ( RC /= GC_SUCCESS ) THEN
+       ErrMsg = 'Cannot retrieve data for GLOBAL_OH from HEMCO!'
+       CALL GC_Error( ErrMsg, RC, ThisLoc )
+       RETURN
+    ENDIF
+
+    ! Evaluate strat P(CO) from GMI from HEMCO
+    CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'GMI_PROD_CO', GMI_PROD_CO, RC )
+    IF ( RC /= GC_SUCCESS ) THEN
+       ErrMsg = 'Cannot retrieve data for GMI_PROD_CO from HEMCO!'
+       CALL GC_Error( ErrMsg, RC, ThisLoc )
+       RETURN
+    ENDIF
+
+    ! Evaluate strat L(CO) from GMI from HEMCO
+    CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'GMI_LOSS_CO', GMI_LOSS_CO, RC )
+    IF ( RC /= GC_SUCCESS ) THEN
+       ErrMsg = 'Cannot retrieve data for GMI_LOSS_CO from HEMCO!'
+       CALL GC_Error( ErrMsg, RC, ThisLoc )
+       RETURN
+    ENDIF
+
+    ! Use the NOAA spatially resolved data where available
+    CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'NOAA_GMD_CH4', SFC_CH4, &
+                         RC, FOUND=FOUND )
+    IF (.NOT. FOUND ) THEN
+       FOUND = .TRUE.
+       ! Use the CMIP6 data from Meinshausen et al. 2017, GMD
+       ! https://doi.org/10.5194/gmd-10-2057-2017a
+       CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'CMIP6_Sfc_CH4', SFC_CH4, &
+                            RC, FOUND=FOUND )
+    ENDIF
+    IF (.NOT. FOUND ) THEN
+       FOUND = .TRUE.
+       ! Use the CMIP6 data boundary conditions processed for GCAP 2.0
+       CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'SfcVMR_CH4', SFC_CH4, &
+                            RC, FOUND=FOUND )
+    ENDIF
+    IF (.NOT. FOUND ) THEN
+       ErrMsg = 'Cannot retrieve data for NOAA_GMD_CH4, CMIP6_Sfc_CH4, or ' // &
+                'SfcVMR_CH4 from HEMCO! Make sure the data source ' // &
+                'corresponds to your emissions year in HEMCO_Config.rc ' // &
+                '(NOAA GMD for 1978 and later; else CMIP6).'
+       CALL GC_Error( ErrMsg, RC, ThisLoc )
+       RETURN
+    ENDIF
+
+    ! Evaluate trop P(CO) from CH4 in HEMCO if needed
+    IF ( LPCO_CH4 ) THEN
+       CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'PCO_CH4', PCO_CH4, RC )
+       IF ( RC /= GC_SUCCESS ) THEN
+          ErrMsg = 'Cannot retrieve data for PCO_CH4 from HEMCO!'
+          CALL GC_Error( ErrMsg, RC, ThisLoc )
+          RETURN
+       ENDIF
+    ENDIF
+
+    ! Evaluate trop P(CO) from NMVOC in HEMCO if needed
+    IF ( LPCO_NMVOC ) THEN
+       CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'PCO_NMVOC', PCO_NMVOC, RC )
+       IF ( RC /= GC_SUCCESS ) THEN
+          ErrMsg = 'Cannot retrieve data for PCO_NMVOC from HEMCO!'
+          CALL GC_Error( ErrMsg, RC, ThisLoc )
+          RETURN
+       ENDIF
     ENDIF
 
     !=================================================================
@@ -350,14 +361,14 @@ CONTAINS
     ! Also note, skip this section if emissions are turned off,
     ! which will keep the SUM*CO arrays zeroed out. (bmy, 10/11/16)
     !=================================================================
-    IF ( Input_Opt%LEMIS ) THEN
+    IF ( Input_Opt%DoEmissions ) THEN
 
        ! Conversion factor from [kg/s] --> [atoms C]
        ! (atoms C /mole C) / (kg C /mole C) * chemistry timestep [s]
        kgs_to_atomsC = ( AVO / 12e-3_fp ) * DTCHEM
 
        ! SUMACETCO (convert [kgC/m2/s] to [atoms C])
-       HcoId = GetHcoId( 'ACET' )
+       HcoId = HCO_GetHcoId( 'ACET', HcoState )
        IF ( HcoId > 0 ) THEN
           SUMACETCO = SUM( HcoState%Spc(HcoID)%Emis%Val, 3 )    ! kgC/m2/s
           SUMACETCO = SUMACETCO * HcoState%Grid%AREA_M2%Val     ! kgC/s
@@ -369,7 +380,7 @@ CONTAINS
        ENDIF
 
        ! SUMISOPCO (convert [kgC/m2/s] to [atoms C])
-       HcoId = GetHcoId( 'ISOP' )
+       HcoId = HCO_GetHcoId( 'ISOP', HcoState )
        IF ( HcoId > 0 ) THEN
           SUMISOPCO = SUM( HcoState%Spc(HcoID)%Emis%Val, 3 )    ! kgC/m2/s
           SUMISOPCO = SUMISOPCO * HcoState%Grid%AREA_M2%Val     ! kgC/s
@@ -381,7 +392,7 @@ CONTAINS
        ENDIF
 
        ! SUMMONOCO (Total monoterpene = MTPA + LIMO + MTPO)
-       HcoId = GetHcoId( 'MTPA' )
+       HcoId = HCO_GetHcoId( 'MTPA', HcoState )
        IF ( HcoId > 0 ) THEN
           ! kgC/m2/s
           SUMMONOCO = SUM( HcoState%Spc(HcoID)%Emis%Val, 3 )
@@ -390,7 +401,7 @@ CONTAINS
           CALL GC_Error( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
-       HcoId = GetHcoId( 'LIMO' )
+       HcoId = HCO_GetHcoId( 'LIMO', HcoState )
        IF ( HcoId > 0 ) THEN
           ! kgC/m2/s
           SUMMONOCO = SUMMONOCO + SUM(HcoState%Spc(HcoID)%Emis%Val,3)
@@ -399,7 +410,7 @@ CONTAINS
           CALL GC_Error( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
-       HcoId = GetHcoId( 'MTPO' )
+       HcoId = HCO_GetHcoId( 'MTPO', HcoState )
        IF ( HcoId > 0 ) THEN
           ! kgC/m2/s
           SUMMONOCO = SUMMONOCO + SUM(HcoState%Spc(HcoID)%Emis%Val,3)
@@ -448,10 +459,10 @@ CONTAINS
        STTCO = 1.0_fp  / AIRVOL(I,J,L) / 1e+6_fp / FMOL_CO * AVO
 
        ! GCO is CO concentration in [molec CO/cm3]
-       GCO   = Spc(I,J,L,1) * STTCO
+       GCO   = Spc(1)%Conc(I,J,L) * STTCO
 
-       ! DENS is the number density of air [molec air/cm3]
-       DENS  = AD(I,J,L) * 1000.e+0_fp / BOXVL * AVO / AIRMW
+       ! Number density of air [molec air/cm3]
+       DENS  = State_Met%AIRNUMDEN(I,J,L)
 
        ! Cosine of the solar zenith angle [unitless]
        SUNCOS = State_Met%SUNCOSmid(I,J)
@@ -468,9 +479,9 @@ CONTAINS
        ! This is done in other offline simulations but was
        ! missing from tagged CO (jaf, 3/12/14)
        !
-       ! NOTE: HEMCO brings in OH in kg/m3, so we need to also
+       ! NOTE: HEMCO brings in OH in mol/mol, so we need to also
        ! apply a conversion to molec/cm3 here. (bmy, 10/12/16)
-       OH_MOLEC_CM3 = ( OH(I,J,L) * kgm3_to_mcm3OH ) * FAC_DIURNAL
+       OH_MOLEC_CM3 = ( GLOBAL_OH(I,J,L) * DENS ) * FAC_DIURNAL
 
        ! Make sure OH is not negative
        OH_MOLEC_CM3 = MAX( OH_MOLEC_CM3, 0e+0_fp )
@@ -478,9 +489,8 @@ CONTAINS
        ! Also impose diurnal cycle on P(CO) from CH4, NMVOC
        IF ( LPCO_CH4 ) THEN
 
-          ! HEMCO brings in PCO in kg/m3, so we need to also
-          ! apply a conversion to molec/cm3/s
-          PCO_CH4_MCM3S = PCO_CH4(I,J,L) * kgm3_to_mcm3sCO * FAC_DIURNAL
+          ! Apply diurnal scaling factor
+          PCO_CH4_MCM3S = PCO_CH4(I,J,L) * FAC_DIURNAL
 
           ! Make sure PCO_CH4 is not negative
           PCO_CH4_MCM3S = MAX( PCO_CH4_MCM3S, 0e+0_fp )
@@ -489,9 +499,8 @@ CONTAINS
 
        IF ( LPCO_NMVOC ) THEN
 
-          ! HEMCO brings in PCO in kg/m3/s, so we need to also
-          ! apply a conversion to molec/cm3/s
-          PCO_NMVOC_MCM3S = PCO_NMVOC(I,J,L) * kgm3_to_mcm3sCO * FAC_DIURNAL
+          ! Apply diurnal scaling factor
+          PCO_NMVOC_MCM3S = PCO_NMVOC(I,J,L) * FAC_DIURNAL
 
           ! Make sure PCO_NMVOC is not negative
           PCO_NMVOC_MCM3S = MAX( PCO_NMVOC_MCM3S, 0e+0_fp )
@@ -795,18 +804,24 @@ CONTAINS
        !==============================================================
        IF ( LSPLIT ) THEN
           IF ( IDch4 >= 0 ) &
-               Spc(I,J,L,IDch4) = Spc(I,J,L,IDch4) + CO_CH4   / STTCO
+               Spc(IDch4)%Conc(I,J,L) = &
+                       Spc(IDch4)%Conc(I,J,L) + CO_CH4 / STTCO
           IF ( IDnmvoc >= 0 ) &
-               Spc(I,J,L,IDnmvoc) = Spc(I,J,L,IDnmvoc) + CO_NMVOC /STTCO
+               Spc(IDnmvoc)%Conc(I,J,L) = &
+                       Spc(IDnmvoc)%Conc(I,J,L) + CO_NMVOC /STTCO
           IF (.not. LPCO_NMVOC) THEN
              IF ( IDisop >= 0 ) &
-                  Spc(I,J,L,IDisop) = Spc(I,J,L,IDisop) + CO_ISOP /STTCO
+                  Spc(IDisop)%Conc(I,J,L) = &
+                       Spc(IDisop)%Conc(I,J,L) + CO_ISOP /STTCO
              IF ( IDmono >= 0 ) &
-                  Spc(I,J,L,IDmono) = Spc(I,J,L,IDmono) + CO_MONO /STTCO
+                  Spc(IDmono)%Conc(I,J,L) = &
+                       Spc(IDmono)%Conc(I,J,L) + CO_MONO /STTCO
              IF ( IDch3oh >= 0 ) &
-                  Spc(I,J,L,IDch3oh) = Spc(I,J,L,IDch3oh)+CO_CH3OH/STTCO
+                  Spc(IDch3oh)%Conc(I,J,L) = &
+                       Spc(IDch3oh)%Conc(I,J,L)+CO_CH3OH/STTCO
              IF ( IDacet >= 0 ) &
-                  Spc(I,J,L,IDacet) = Spc(I,J,L,IDacet) + CO_ACET /STTCO
+                  Spc(IDacet)%Conc(I,J,L) = &
+                       Spc(IDacet)%Conc(I,J,L) + CO_ACET /STTCO
           ENDIF
        ENDIF
 
@@ -864,22 +879,22 @@ CONTAINS
 
                 !Units: [kg/s]
                 IF ( State_Diag%Archive_Loss ) THEN
-                   State_Diag%Loss(I,J,L,N) = ( CORATE * Spc(I,J,L,N) )
+                   State_Diag%Loss(I,J,L,N) = ( CORATE * Spc(N)%Conc(I,J,L) )
                 ENDIF
 
                 ! Loss
-                Spc(I,J,L,N) = Spc(I,J,L,N) * ( 1.0_fp - CO_OH )
+                Spc(N)%Conc(I,J,L) = Spc(N)%Conc(I,J,L) * ( 1.0_fp - CO_OH )
 
                 ! Species shouldn't be less than zero
-                IF ( Spc(I,J,L,N) < 0.0_fp ) THEN
-                   Spc(I,J,L,N) = 0.0_fp
+                IF ( Spc(N)%Conc(I,J,L) < 0.0_fp ) THEN
+                   Spc(N)%Conc(I,J,L) = 0.0_fp
                 ENDIF
 
                 ! Error check
                 ERR_LOC = (/ I, J, L, N /)
-                ERR_VAR = 'Spc (points to State_Chm%Species)'
+                ERR_VAR = 'Spc(N)%Conc (points to State_Chm%Species)'
                 ERR_MSG = 'STOP at tagged_co_mod:7'
-                CALL CHECK_VALUE( Spc(I,J,L,N), ERR_LOC, ERR_VAR, ERR_MSG )
+                CALL CHECK_VALUE( Spc(N)%Conc(I,J,L), ERR_LOC, ERR_VAR, ERR_MSG )
 
              ENDDO
           ENDIF
@@ -988,18 +1003,18 @@ CONTAINS
                 IF ( State_Diag%Archive_Loss ) THEN
                    State_Diag%Loss(I,J,L,N) = ( KRATE &
                                               *   OH_MOLEC_CM3 &
-                                              *   Spc(I,J,L,N) )
+                                              *   Spc(N)%Conc(I,J,L) )
                 ENDIF
 
                 ! Use tropospheric rate constant
-                Spc(I,J,L,N) = Spc(I,J,L,N) * &
+                Spc(N)%Conc(I,J,L) = Spc(N)%Conc(I,J,L) * &
                                ( 1e+0_fp - KRATE * OH_MOLEC_CM3 * DTCHEM )
 
                 ! Error check
                 ERR_LOC = (/ I, J, L, N /)
-                ERR_VAR = 'Spc (points to State_Chm%Species)'
+                ERR_VAR = 'Spc(N)%Conc (points to State_Chm%Species)'
                 ERR_MSG = 'STOP at tagged_co_mod:8'
-                CALL CHECK_VALUE( Spc(I,J,L,N), ERR_LOC, ERR_VAR, ERR_MSG )
+                CALL CHECK_VALUE( Spc(N)%Conc(I,J,L), ERR_LOC, ERR_VAR, ERR_MSG )
              ENDDO
           ENDIF
 
@@ -1007,7 +1022,7 @@ CONTAINS
 
        !==============================================================
        ! Save the total chemical production from various sources
-       ! into the total CO species Spc(I,J,L,1)
+       ! into the total CO species Spc(1)%Conc(I,J,L)
        !==============================================================
 
        ! GCO is the total CO before chemistry was applied [molec CO/cm3]
@@ -1016,7 +1031,7 @@ CONTAINS
 
        ! Convert net CO from [molec CO/cm3] to [kg] and store in
        ! State_Chm%Species
-       Spc(I,J,L,1) = GCO / STTCO
+       Spc(1)%Conc(I,J,L) = GCO / STTCO
 
        !==============================================================
        ! HISTORY (aka netCDF diagnostics)
@@ -1352,12 +1367,6 @@ CONTAINS
        CALL GC_CheckVar( 'tagged_co_mod.F90:TCOSZ', 2, RC )
        RETURN
     ENDIF
-
-    ! Free pointers
-    GMI_PROD_CO => NULL()
-    GMI_LOSS_CO => NULL()
-    OH          => NULL()
-    SFC_CH4     => NULL()
 
   END SUBROUTINE CLEANUP_TAGGED_CO
 !EOC

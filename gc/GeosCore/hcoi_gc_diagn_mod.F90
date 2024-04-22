@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                  GEOS-Chem Global Chemical Transport Model                  !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -36,11 +36,9 @@ MODULE HCOI_GC_Diagn_Mod
 #ifdef BPCH_DIAG
   USE CMN_DIAG_Mod
   USE DIAG_Mod
-  USE DIAG53_Mod
 #endif
   USE HCO_Diagn_Mod
   USE HCO_Error_Mod
-  USE HCO_Interface_Mod
 
   IMPLICIT NONE
   PRIVATE
@@ -69,7 +67,7 @@ MODULE HCOI_GC_Diagn_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                  GEOS-Chem Global Chemical Transport Model                  !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -152,22 +150,6 @@ CONTAINS
        RETURN
     ENDIF
 
-    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    !%%%%  NOTE: Emissions for Hg specialty simulations are passed to   %%%%
-    !%%%%  mercury_mod.F90 via HEMCO diagnostics, and not directly      %%%%
-    !%%%%  from the HEMCO state pointer.  Therefore, we need to make    %%%%
-    !%%%%  sure that routine DIAGN_Hg is outside the BPCH_DIAG #if      %%%%
-    !%%%%  block.  -- Bob Yantosca (25 Jan 2018)                        %%%%
-    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    CALL Diagn_Hg( Input_Opt, HcoState, ExtState, RC )
-
-    ! Trap potential errors
-    IF ( RC /= HCO_SUCCESS ) THEN
-       ErrMsg = 'Error encountered in "Diagn_Hg"'
-       CALL GC_Error( ErrMsg, RC, ThisLoc )
-       RETURN
-    ENDIF
-
 #ifdef BPCH_DIAG
     !=======================================================================
     ! Define manual diagnostics
@@ -186,7 +168,7 @@ CONTAINS
   END SUBROUTINE HCOI_GC_Diagn_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                  GEOS-Chem Global Chemical Transport Model                  !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -238,7 +220,7 @@ CONTAINS
 !
 ! !LOCAL VARIABLES:
 !
-    INTEGER            :: ExtNr, id_CH4, Cat, HcoID, N
+    INTEGER            :: ExtNr,    id_CH4,   Cat,  HcoID,  N
     CHARACTER(LEN=31)  :: DiagnName
     CHARACTER(LEN=255) :: MSG
     CHARACTER(LEN=255) :: LOC = 'DIAGN_CH4 (hcoi_gc_diagn_mod.F90)'
@@ -248,10 +230,11 @@ CONTAINS
     !=======================================================================
 
     ! Assume success
-    RC = HCO_SUCCESS
+    RC       = HCO_SUCCESS
 
     ! Exit if the CH4 simulation is not selected
-    IF ( .NOT. ( Input_Opt%ITS_A_CH4_SIM .OR. Ind_('CH4','A') > 0 ) ) RETURN
+    IF ( ( .not. Input_Opt%ITS_A_CH4_SIM      ) .and. &
+         ( .not. Input_Opt%ITS_A_CARBON_SIM ) ) RETURN
 
     ! Get default HEMCO species ID for CH4
     id_CH4 = HCO_GetHcoID( 'CH4', HcoState )
@@ -684,7 +667,7 @@ CONTAINS
   END SUBROUTINE Diagn_CH4
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                  GEOS-Chem Global Chemical Transport Model                  !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -863,216 +846,9 @@ CONTAINS
 
   END SUBROUTINE Diagn_Dust
 !EOC
-!------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
-!------------------------------------------------------------------------------
-!BOP
-!
-! !IROUTINE: Diagn_Hg
-!
-! !DESCRIPTION: Subroutine Diagn\_Hg initializes diagnostics for the
-!  Hg specialty simulation. For now, this is just a placeholder.
-!\\
-!\\
-! !INTERFACE:
-!
-  SUBROUTINE Diagn_Hg( Input_Opt, HcoState, ExtState, RC )
-!
-! !USES:
-!
-    USE HCO_ExtList_Mod,    ONLY : GetExtNr
-    USE HCO_State_Mod,      ONLY : HCO_State
-    USE HCO_State_Mod,      ONLY : HCO_GetHcoID
-    USE HCOX_State_Mod,     ONLY : Ext_State
-    USE Input_Opt_Mod,      ONLY : OptInput
-!
-! !INPUT/OUTPUT PARAMETERS:
-!
-    TYPE(OptInput),   INTENT(INOUT)  :: Input_Opt  ! Input opts
-    TYPE(HCO_State),  POINTER        :: HcoState   ! HEMCO state object
-    TYPE(EXT_State),  POINTER        :: ExtState   ! Extensions state object
-    INTEGER,          INTENT(INOUT)  :: RC         ! Failure or success
-!
-! !REMARKS:
-!
-! !REVISION HISTORY:
-!  23 Sep 2014 - C. Keller   - Initial version
-!  See https://github.com/geoschem/geos-chem for complete history
-!EOP
-!------------------------------------------------------------------------------
-!BOC
-!
-! !LOCAL VARIABLES:
-!
-    INTEGER            :: ExtNr, HcoID, Cat, N
-    CHARACTER(LEN=31)  :: DiagnName
-    CHARACTER(LEN=255) :: MSG
-    CHARACTER(LEN=255) :: LOC = 'DIAGN_Hg (hcoi_gc_diagn_mod.F90)'
-
-    !=======================================================================
-    ! Define diagnostics (Hg emissions)
-    !=======================================================================
-
-    ! Assume success
-    RC = HCO_SUCCESS
-
-    ! Exit if the mercury simulation is not selected
-    IF ( .not. Input_Opt%ITS_A_MERCURY_SIM ) RETURN
-
-    ! HEMCO species ID
-    HcoID = GetHemcoId( 'Hg0', HcoState, LOC, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    ! Extension number is always zero (HEMCO core)
-    ExtNr = 0
-
-    !-------------------------------------------
-    ! %%%%% ARTISANAL HG (Hg0) %%%%%
-    !-------------------------------------------
-
-    ! Create diagnostic container
-    DiagnName = 'HG0_ARTISANAL'
-    Cat       = 8
-    CALL Diagn_Create( HcoState  = HcoState,                                 &
-                       cName     = TRIM(DiagnName),                          &
-                       ExtNr     = ExtNr,                                    &
-                       Cat       = Cat,                                      &
-                       Hier      = -1,                                       &
-                       HcoID     = HcoID,                                    &
-                       SpaceDim  = 2,                                        &
-                       LevIDx    = -1,                                       &
-                       OutUnit   = 'kg/m2/s',                                &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual,          &
-                       AutoFill  = 1,                                        &
-                       RC        = RC                                       )
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    !-------------------------------------------
-    ! %%%%% NATURAL HG (Hg0) %%%%%
-    !-------------------------------------------
-
-    ! Create diagnostic container
-    DiagnName = 'HG0_NATURAL'
-    Cat       = CATEGORY_NATURAL
-    CALL Diagn_Create( HcoState  = HcoState,                                 &
-                       cName     = TRIM(DiagnName),                          &
-                       ExtNr     = ExtNr,                                    &
-                       Cat       = Cat,                                      &
-                       Hier      = -1,                                       &
-                       HcoID     = HcoID,                                    &
-                       SpaceDim  = 2,                                        &
-                       LevIDx    = -1,                                       &
-                       OutUnit   = 'kg/m2/s',                                &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual,          &
-                       AutoFill  = 1,                                        &
-                       RC        = RC                                       )
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    !---------------------------------------------
-    ! %%%%% ANTHROPOGENIC HG (Hg0, Hg2, HgP) %%%%%
-    !---------------------------------------------
-
-    Cat = CATEGORY_ANTHRO
-
-    ! Create diagnostic container
-    DiagnName = 'HG0_ANTHRO'
-    CALL Diagn_Create( HcoState  = HcoState,                                 &
-                       cName     = TRIM(DiagnName),                          &
-                       ExtNr     = ExtNr,                                    &
-                       Cat       = Cat,                                      &
-                       Hier      = -1,                                       &
-                       HcoID     = HcoID,                                    &
-                       SpaceDim  = 2,                                        &
-                       LevIDx    = -1,                                       &
-                       OutUnit   = 'kg/m2/s',                                &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual,          &
-                       AutoFill  = 1,                                        &
-                       RC        = RC                                       )
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    ! Hg2
-    HcoID = GetHemcoId( 'Hg2', HcoState, LOC, RC, ERR=.FALSE. )
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    ! Create diagnostic container
-    IF ( HcoID > 0 ) THEN
-       DiagnName = 'HG2_ANTHRO'
-       CALL Diagn_Create( HcoState  = HcoState,                              &
-                          cName     = TRIM(DiagnName),                       &
-                          ExtNr     = ExtNr,                                 &
-                          Cat       = Cat,                                   &
-                          Hier      = -1,                                    &
-                          HcoID     = HcoID,                                 &
-                          SpaceDim  = 2,                                     &
-                          LevIDx    = -1,                                    &
-                          OutUnit   = 'kg/m2/s',                             &
-                          COL       = HcoState%Diagn%HcoDiagnIDManual,       &
-                          AutoFill  = 1,                                     &
-                          RC        = RC                                    )
-       IF ( RC /= HCO_SUCCESS ) RETURN
-    ENDIF
-
-    ! HgP
-    HcoID = GetHemcoId( 'HgP', HcoState, LOC, RC, ERR=.FALSE. )
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    ! Create diagnostic container
-    IF ( HcoID > 0 ) THEN
-       DiagnName = 'HGP_ANTHRO'
-       CALL Diagn_Create( HcoState  = HcoState,                              &
-                          cName     = TRIM(DiagnName),                       &
-                          ExtNr     = ExtNr,                                 &
-                          Cat       = Cat,                                   &
-                          Hier      = -1,                                    &
-                          HcoID     = HcoID,                                 &
-                          SpaceDim  = 2,                                     &
-                          LevIDx    = -1,                                    &
-                          OutUnit   = 'kg/m2/s',                             &
-                          COL       = HcoState%Diagn%HcoDiagnIDManual,       &
-                          AutoFill  = 1,                                     &
-                          RC        = RC                                     )
-       IF ( RC /= HCO_SUCCESS ) RETURN
-    ENDIF
-
-    !-------------------------------------------
-    ! %%%%% BIOMASS BURNING HG %%%%%
-    ! ==> defined in Diagn_Biomass
-    !-------------------------------------------
-
-    ! Do only if Hg0 is defined ...
-    HcoID = HCO_GetHcoID( 'Hg0', HcoState )
-    IF ( HcoID > 0 ) THEN
-
-        Cat   = -1
-        ExtNr = GetExtNr( HcoState%Config%ExtList, 'GFED' )
-        IF ( ExtNr <= 0 ) ExtNr = GetExtNr( HcoState%Config%ExtList, 'FINN' )
-        IF ( ExtNr <= 0 ) THEN
-           ExtNr = 0
-           Cat   = CATEGORY_BIOMASS
-        ENDIF
-
-       ! Create diagnostic container
-       DiagnName = 'BIOMASS_HG0'
-       CALL Diagn_Create( HcoState  = HcoState,                              &
-                          cName     = TRIM(DiagnName),                       &
-                          ExtNr     = ExtNr,                                 &
-                          Cat       = Cat,                                   &
-                          Hier      = -1,                                    &
-                          HcoID     = HcoID,                                 &
-                          SpaceDim  = 2,                                     &
-                          LevIDx    = -1,                                    &
-                          OutUnit   = 'kg/m2/s',                             &
-                          COL       = HcoState%Diagn%HcoDiagnIDManual,       &
-                          AutoFill  = 1,                                     &
-                          RC        = RC                                    )
-       IF ( RC /= HCO_SUCCESS ) RETURN
-    ENDIF
-
-  END SUBROUTINE Diagn_Hg
-!EOC
 #ifdef TOMAS
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                  GEOS-Chem Global Chemical Transport Model                  !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1445,7 +1221,7 @@ CONTAINS
 !EOC
 #endif
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                  GEOS-Chem Global Chemical Transport Model                  !
 !------------------------------------------------------------------------------
 !BOP
 !

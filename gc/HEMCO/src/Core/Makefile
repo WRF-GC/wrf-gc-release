@@ -106,6 +106,73 @@ debug:
 ###                                                                         ###
 ###############################################################################
 
+# hack hack - all common files here
+hco_precision_mod.o          : hco_precision_mod.F90
+hco_charpak_mod.o            : hco_charpak_mod.F90
+hco_henry_mod.o              : hco_henry_mod.F90
+hco_inquireMod.o             : hco_inquireMod.F90
+hco_julday_mod.o             : hco_julday_mod.F90               \
+                               hco_precision_mod.o
+hco_regrid_a2a_mod.o         : hco_regrid_a2a_mod.F90           \
+                               hco_precision_mod.o
+
+m_do_err_out.o           : m_do_err_out.F90
+
+hco_m_netcdf_io_checks.o     : hco_m_netcdf_io_checks.F90
+
+hco_m_netcdf_io_close.o      : hco_m_netcdf_io_close.F90        \
+                           m_do_err_out.o
+
+hco_m_netcdf_io_create.o     : hco_m_netcdf_io_create.F90       \
+                           m_do_err_out.o
+
+hco_m_netcdf_io_define.o     : hco_m_netcdf_io_define.F90       \
+                           m_do_err_out.o
+
+hco_m_netcdf_io_get_dimlen.o : hco_m_netcdf_io_get_dimlen.F90   \
+                           m_do_err_out.o
+
+hco_m_netcdf_io_handle_err.o : hco_m_netcdf_io_handle_err.F90   \
+                           m_do_err_out.o
+
+hco_m_netcdf_io_open.o       : hco_m_netcdf_io_open.F90         \
+                           m_do_err_out.o
+
+hco_m_netcdf_io_read.o       : hco_m_netcdf_io_read.F90         \
+                           m_do_err_out.o
+
+hco_m_netcdf_io_readattr.o   : hco_m_netcdf_io_readattr.F90     \
+                           m_do_err_out.o
+
+hco_m_netcdf_io_write.o      : hco_m_netcdf_io_write.F90        \
+                           m_do_err_out.o
+
+hco_ncdf_mod.o               : hco_ncdf_mod.F90                 \
+                               hco_charpak_mod.o              \
+                               hco_julday_mod.o                 \
+                               hco_m_netcdf_io_checks.o         \
+                               hco_m_netcdf_io_close.o          \
+                               hco_m_netcdf_io_create.o         \
+                               hco_m_netcdf_io_define.o         \
+                               hco_m_netcdf_io_get_dimlen.o     \
+                               hco_m_netcdf_io_handle_err.o     \
+                               hco_m_netcdf_io_open.o           \
+                               hco_m_netcdf_io_read.o           \
+                               hco_m_netcdf_io_readattr.o       \
+                               hco_m_netcdf_io_write.o
+
+TestNcdfUtil.o           : TestNcdfUtil.F90             \
+                           m_do_err_out.o               \
+                           hco_m_netcdf_io_create.o         \
+                           hco_m_netcdf_io_define.o         \
+                           hco_m_netcdf_io_write.o          \
+                           hco_m_netcdf_io_close.o          \
+                           hco_m_netcdf_io_open.o           \
+                           hco_m_netcdf_io_close.o          \
+                           hco_m_netcdf_io_get_dimlen.o     \
+                           hco_m_netcdf_io_read.o           \
+                           hco_m_netcdf_io_readattr.o
+
 hco_arr_mod.o          : hco_arr_mod.F90         \
                          hco_error_mod.o
 
@@ -122,17 +189,19 @@ hco_calc_mod.o         : hco_calc_mod.F90        \
                          hco_tidx_mod.o
 
 hco_chartools_mod.o    : hco_chartools_mod.F90   \
-	                 hco_error_mod.o         \
-	                 hco_extlist_mod.o       \
-                         hco_types_mod.o
+	                     hco_error_mod.o         \
+	                     hco_extlist_mod.o       \
+                         hco_types_mod.o         \
+                         hco_charpak_mod.o
 
 hco_clock_mod.o        : hco_clock_mod.F90       \
                          hco_arr_mod.o           \
                          hco_emislist_mod.o      \
                          hco_error_mod.o         \
-	                 hco_extlist_mod.o       \
+	                     hco_extlist_mod.o       \
                          hco_state_mod.o         \
-                         hco_types_mod.o
+                         hco_types_mod.o         \
+                         hco_julday_mod.o
 
 hco_config_mod.o       : hco_config_mod.F90      \
                          hco_chartools_mod.o     \
@@ -144,7 +213,9 @@ hco_config_mod.o       : hco_config_mod.F90      \
                          hco_readlist_mod.o      \
                          hco_state_mod.o         \
                          hco_types_mod.o         \
-                         hco_tidx_mod.o
+                         hco_tidx_mod.o          \
+                         hco_inquireMod.o        \
+                         hco_charpak_mod.o
 
 hco_datacont_mod.o     : hco_datacont_mod.F90    \
                          hco_arr_mod.o           \
@@ -160,7 +231,9 @@ hco_diagn_mod.o        : hco_diagn_mod.F90       \
                          hco_extlist_mod.o       \
                          hco_state_mod.o         \
                          hco_types_mod.o         \
-                         hco_unit_mod.o
+                         hco_unit_mod.o          \
+                         hco_inquireMod.o        \
+                         hco_charpak_mod.o
 
 hco_driver_mod.o       : hco_driver_mod.F90      \
                          hco_calc_mod.o          \
@@ -187,9 +260,11 @@ hco_emislist_mod.o     : hco_emislist_mod.F90    \
 
 hco_extlist_mod.o      : hco_extlist_mod.F90     \
                          hco_error_mod.o         \
-                         hco_types_mod.o
+                         hco_types_mod.o         \
+                         hco_charpak_mod.o
 
-hco_error_mod.o        : hco_error_mod.F90
+hco_error_mod.o        : hco_error_mod.F90       \
+                         hco_inquireMod.o
 
 hco_filedata_mod.o     : hco_filedata_mod.F90    \
                          hco_arr_mod.o           \
@@ -216,7 +291,8 @@ hco_interp_mod.o       : hco_interp_mod.F90      \
                          hco_error_mod.o         \
                          hco_filedata_mod.o      \
                          hco_state_mod.o         \
-                         hco_types_mod.o
+                         hco_types_mod.o         \
+                         hco_regrid_a2a_mod.o
 
 hco_logfile_mod.o      : hco_logfile_mod.F90     \
                          hco_error_mod.o         \
@@ -249,13 +325,14 @@ hco_scale_mod.o        : hco_scale_mod.F90       \
                          hco_state_mod.o
 
 hco_state_mod.o        : hco_state_mod.F90       \
-	                 hco_arr_mod.o           \
+	                     hco_arr_mod.o           \
                          hco_chartools_mod.o     \
                          hco_error_mod.o         \
                          hco_extlist_mod.o       \
                          hco_types_mod.o         \
                          hco_unit_mod.o          \
-                         hco_vertgrid_mod.o
+                         hco_vertgrid_mod.o      \
+                         hco_charpak_mod.o
 
 hco_tidx_mod.o         : hco_tidx_mod.F90        \
                          hco_chartools_mod.o     \
@@ -263,18 +340,21 @@ hco_tidx_mod.o         : hco_tidx_mod.F90        \
                          hco_error_mod.o         \
                          hco_state_mod.o         \
                          hco_timeshift_mod.o     \
-                         hco_types_mod.o
+                         hco_types_mod.o         \
+                         hco_charpak_mod.o
 
 hco_timeshift_mod.o    : hco_timeshift_mod.F90   \
                          hco_error_mod.o         \
                          hco_state_mod.o         \
-                         hco_types_mod.o
+                         hco_types_mod.o         \
+                         hco_julday_mod.o
 
 hco_unit_mod.o         : hco_unit_mod.F90        \
                          hco_chartools_mod.o     \
                          hco_error_mod.o         \
                          hco_extlist_mod.o       \
-                         hco_types_mod.o
+                         hco_types_mod.o         \
+                         hco_charpak_mod.o
 
 hco_types_mod.o        : hco_types_mod.F90       \
                          hco_error_mod.o         \
@@ -289,16 +369,26 @@ hcoio_diagn_mod.o      : hcoio_diagn_mod.F90     \
                          hco_clock_mod.o         \
                          hco_error_mod.o         \
                          hco_state_mod.o         \
-                         hcoio_write_esmf_mod.o  \
+                         hcoio_write_mapl_mod.o  \
                          hcoio_write_std_mod.o
+
+hcoio_util_mod.o       : hcoio_util_mod.F90      \
+                         hco_m_netcdf_io_checks.o\
+                         hco_m_netcdf_io_get_dimlen.o\
+                         hco_ncdf_mod.o          \
+                         hco_inquireMod.o        \
+                         hco_julday_mod.o        \
+                         interpreter.o           \
+                         hco_state_mod.o         \
+                         hco_tidx_mod.o
 
 hcoio_dataread_mod.o   : hcoio_dataread_mod.F90  \
                          hco_error_mod.o         \
-                         hcoio_read_esmf_mod.o   \
+                         hcoio_read_mapl_mod.o   \
                          hcoio_read_std_mod.o    \
                          hco_state_mod.o
 
-hcoio_read_esmf_mod.o  : hcoio_read_esmf_mod.F90 \
+hcoio_read_mapl_mod.o  : hcoio_read_mapl_mod.F90 \
                          hco_error_mod.o         \
                          hco_filedata_mod.o      \
                          hco_state_mod.o         \
@@ -318,7 +408,10 @@ hcoio_read_std_mod.o   : hcoio_read_std_mod.F90  \
                          hco_types_mod.o         \
                          hco_unit_mod.o          \
                          hcoio_messy_mod.o       \
-                         interpreter.o
+                         hcoio_util_mod.o        \
+                         interpreter.o           \
+                         hco_ncdf_mod.o          \
+                         hco_charpak_mod.o
 
 hcoio_messy_mod.o      : hcoio_messy_mod.F90     \
                          hco_error_mod.o         \
@@ -329,7 +422,7 @@ hcoio_messy_mod.o      : hcoio_messy_mod.F90     \
                          hco_unit_mod.o          \
                          messy_ncregrid_base.o
 
-hcoio_write_esmf_mod.o : hcoio_write_esmf_mod.F90\
+hcoio_write_mapl_mod.o : hcoio_write_mapl_mod.F90\
                          hco_diagn_mod.o         \
                          hco_error_mod.o         \
                          hco_state_mod.o         \
@@ -341,7 +434,10 @@ hcoio_write_std_mod.o  : hcoio_write_std_mod.F90 \
                          hco_error_mod.o         \
                          hco_extlist_mod.o       \
                          hco_state_mod.o         \
-                         hco_types_mod.o
+                         hco_types_mod.o         \
+                         hco_ncdf_mod.o          \
+                         hco_charpak_mod.o       \
+                         hco_julday_mod.o
 
 interpreter.o          : interpreter.F90         \
                          hco_error_mod.o

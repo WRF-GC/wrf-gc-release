@@ -173,6 +173,7 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     CHARACTER(LEN=255) :: ErrMsg_noIn, ErrMsg_noOut, ErrMsg_RC, LOC, InUnit
+    LOGICAL            :: IS_ADJOINT ! Is this the reverse integration
 
     !====================================================================
     ! Convert_Spc_Units begins here!
@@ -212,6 +213,14 @@ CONTAINS
        RETURN
 ENDIF
 
+#ifdef ADJOINT
+! check if this is the adjoint run
+    IS_ADJOINT = Input_Opt%Is_Adjoint
+#else
+! if ADJOINT is not defined, this can never be the adjoint run
+    IS_ADJOINT = .FALSE.
+#endif
+
     ! Convert based on input and output units
     SELECT CASE ( TRIM(InUnit) )
 
@@ -221,19 +230,24 @@ ENDIF
        CASE ( 'kg/kg dry' )
           SELECT CASE ( TRIM(OutUnit) )
              CASE ( 'v/v dry' )
-                CALL ConvertSpc_KgKgDry_to_VVDry( State_Chm, State_Grid, RC )
+                CALL ConvertSpc_KgKgDry_to_VVDry( State_Chm, State_Grid, &
+                                                  IS_ADJOINT, RC )
              CASE ( 'kg/kg total' )
                 CALL ConvertSpc_KgKgDry_to_KgKgTotal( State_Chm, State_Grid, &
-                                                      State_Met, RC )
+                                                      State_Met,             &
+                                                      IS_ADJOINT, RC )
              CASE ( 'kg' )
-                CALL ConvertSpc_KgKgDry_to_Kg( State_Chm, State_Grid, &
-                                               State_Met, RC )
+                CALL ConvertSpc_KgKgDry_to_Kg( State_Chm, State_Grid,           &
+                                               State_Met, IS_ADJOINT, &
+                                               RC )
              CASE ( 'kg/m2' )
-                CALL ConvertSpc_KgKgDry_to_Kgm2( State_Chm, State_Grid, &
-                                                 State_Met, RC )
+                CALL ConvertSpc_KgKgDry_to_Kgm2( State_Chm, State_Grid,           &
+                                                 State_Met, IS_ADJOINT, &
+                                                 RC )
              CASE ( 'molec/cm3' )
-                CALL ConvertSpc_KgKgDry_to_MND( State_Chm, State_Grid, &
-                                                State_Met, RC )
+                CALL ConvertSpc_KgKgDry_to_MND( State_Chm, State_Grid,           &
+                                                State_Met, IS_ADJOINT, &
+                                                RC )
              CASE DEFAULT
                 CALL GC_Error( ErrMsg_noOut, RC, LOC )
           END SELECT
@@ -245,12 +259,21 @@ ENDIF
           SELECT CASE ( TRIM(OutUnit) )
              CASE ( 'kg/kg dry' )
                 CALL ConvertSpc_KgKgTotal_to_KgKgDry( State_Chm, State_Grid, &
-                                                      State_Met, RC )
+                                                      State_Met,             &
+                                                      IS_ADJOINT, RC )
              CASE ( 'kg' )
                 CALL ConvertSpc_KgKgTotal_to_KgKgDry( State_Chm, State_Grid, &
-                                                      State_Met, RC )
+                                                      State_Met,             &
+                                                      IS_ADJOINT, RC )
                 CALL ConvertSpc_KgKgDry_to_Kg( State_Chm, State_Grid, &
-                                               State_Met, RC )
+                                               State_Met, IS_ADJOINT, RC )
+             CASE ( 'molec/cm3' )
+                CALL ConvertSpc_KgKgTotal_to_KgKgDry( State_Chm, State_Grid, &
+                                                      State_Met,             &
+                                                      IS_ADJOINT, RC )
+                CALL ConvertSpc_KgKgDry_to_MND( State_Chm, State_Grid,           &
+                                                State_Met, IS_ADJOINT, &
+                                                RC )
              CASE DEFAULT
                 CALL GC_Error( ErrMsg_noOut, RC, LOC )
           END SELECT
@@ -261,14 +284,17 @@ ENDIF
        CASE ( 'v/v dry' )
           SELECT CASE ( TRIM(OutUnit) )
              CASE ( 'kg/kg dry' )
-                CALL ConvertSpc_VVDry_to_KgKgDry( State_Chm, State_Grid, RC )
+                CALL ConvertSpc_VVDry_to_KgKgDry( State_Chm, State_Grid, &
+                                                  IS_ADJOINT, RC )
              CASE ( 'kg' )
                 CALL ConvertSpc_VVDry_to_Kg( State_Chm, State_Grid, &
-                                             State_Met, RC )
+                                             State_Met, IS_ADJOINT, RC )
              CASE ( 'kg/m2' )
-                CALL ConvertSpc_VVDry_to_KgKgDry( State_Chm, State_Grid, RC )
+                CALL ConvertSpc_VVDry_to_KgKgDry( State_Chm, State_Grid, &
+                                                  IS_ADJOINT, RC )
                 CALL ConvertSpc_KgKgDry_to_Kgm2 ( State_Chm, State_Grid, &
-                                                  State_Met, RC )
+                                                  State_Met,             &
+                                                  IS_ADJOINT, RC )
              CASE DEFAULT
                 CALL GC_Error( ErrMsg_noOut, RC, LOC )
           END SELECT
@@ -280,18 +306,22 @@ ENDIF
           SELECT CASE ( TRIM(OutUnit) )
              CASE ( 'kg/kg dry' )
                 CALL ConvertSpc_Kg_to_KgKgDry( State_Chm, State_Grid, &
-                                               State_Met, RC )
+                                               State_Met,             &
+                                               IS_ADJOINT, RC )
              CASE ( 'kg/kg total' )
                 CALL ConvertSpc_Kg_to_KgKgDry( State_Chm, State_Grid, &
-                                               State_Met, RC )
+                                               State_Met,             &
+                                               IS_ADJOINT, RC )
                 CALL ConvertSpc_KgKgDry_to_KgKgTotal( State_Chm, State_Grid, &
-                                                      State_Met, RC )
+                                                      State_Met,             &
+                                                      IS_ADJOINT, RC )
              CASE ( 'v/v dry' )
                 CALL ConvertSpc_Kg_to_VVDry( State_Chm, State_Grid, &
-                                             State_Met, RC )
+                                             State_Met,             &
+                                             IS_ADJOINT, RC )
              CASE ( 'molec/cm3' )
                 CALL ConvertSpc_Kg_to_MND( State_Chm, State_Grid, &
-                                           State_Met, RC )
+                                           State_Met, IS_ADJOINT, RC )
              CASE DEFAULT
                 CALL GC_Error( ErrMsg_noOut, RC, LOC )
           END SELECT
@@ -303,11 +333,14 @@ ENDIF
           SELECT CASE ( TRIM(OutUnit) )
              CASE( 'kg/kg dry' )
                 CALL ConvertSpc_Kgm2_to_KgKgDry( State_Chm, State_Grid, &
-                                                 State_Met, RC )
+                                                 State_Met,             &
+                                                 IS_ADJOINT, RC )
              CASE ( 'v/v dry' )
                 CALL ConvertSpc_Kgm2_to_KgKgDry( State_Chm, State_Grid, &
-                                                 State_Met, RC )
-                CALL ConvertSpc_KgKgDry_to_VVDry( State_Chm, State_Grid, RC )
+                                                 State_Met,             &
+                                                 IS_ADJOINT, RC )
+                CALL ConvertSpc_KgKgDry_to_VVDry( State_Chm, State_Grid, &
+                                                  IS_ADJOINT, RC )
              CASE DEFAULT
                 CALL GC_Error( ErrMsg_noOut, RC, LOC )
           END SELECT
@@ -319,10 +352,19 @@ ENDIF
           SELECT CASE ( TRIM(OutUnit) )
              CASE ( 'kg' )
                 CALL ConvertSpc_MND_to_Kg( State_Chm, State_Grid, &
-                                           State_Met, RC )
+                                           State_Met,             &
+                                           IS_ADJOINT, RC )
              CASE ( 'kg/kg dry' )
                 CALL ConvertSpc_MND_to_KgKgDry( State_Chm, State_Grid, &
-                                                State_Met, RC )
+                                                State_Met,             &
+                                                IS_ADJOINT, RC )
+             CASE ( 'kg/kg total' )
+                CALL ConvertSpc_MND_to_KgKgDry( State_Chm, State_Grid, &
+                                                State_Met,             &
+                                                IS_ADJOINT, RC )
+                CALL ConvertSpc_KgKgDry_to_KgKgTotal( State_Chm, State_Grid, &
+                                                      State_Met,             &
+                                                      IS_ADJOINT, RC )
              CASE DEFAULT
                 CALL GC_Error( ErrMsg_noOut, RC, LOC )
           END SELECT
@@ -411,7 +453,7 @@ ENDIF
     ThisLoc   = ' -> at Print_Global_Species_Kg (in module ' // &
                 'GeosUtil/unitconv_mod.F90)'
 
-    !PRINT *, TRIM(LOC), ', 1,', State_Chm%Species(I,J,L,N)
+    !PRINT *, TRIM(LOC), ', 1,', State_Chm%Species(N)%Conc(I,J,L)
 
     ! Convert species conc units to kg
     CALL Convert_Spc_Units( Input_Opt, State_Chm, State_Grid, State_Met, &
@@ -434,7 +476,7 @@ ENDIF
     N = Ind_(spc)
 
     ! Compute global sum
-    SpcTotal = SUM( State_Chm%Species(:,:,:,N) )
+    SpcTotal = SUM( State_Chm%Species(N)%Conc(:,:,:) )
 
     ! Get species name from the species database
     SpcName = TRIM( State_Chm%SpcData(N)%Info%Name )
@@ -442,7 +484,7 @@ ENDIF
     ! Write formatted output
     IF ( Input_Opt%amIRoot ) THEN
        WRITE( 6, 110 ) SpcName, SpcTotal
-       WRITE( 6, 115 ) SpcName, State_Chm%Species(I,J,L,N), I, J, L
+       WRITE( 6, 115 ) SpcName, State_Chm%Species(N)%Conc(I,J,L), I, J, L
        WRITE( 6, 115 ) 'AD', State_Met%AD(I,J,L), I, J, L
        WRITE( 6, 115 ) 'PREVSPHU', State_Met%SPHU_PREV(I,J,L), I, J, L
        WRITE( 6, 115 ) 'SPHU', State_Met%SPHU(I,J,L), I, J, L
@@ -456,7 +498,7 @@ ENDIF
     CALL Convert_Spc_Units( Input_Opt, State_Chm, State_Grid, State_Met, &
                             OrigUnit,  RC )
 
-    !PRINT *, TRIM(LOC), ', 2,', State_Chm%Species(I,J,L,N)
+    !PRINT *, TRIM(LOC), ', 2,', State_Chm%Species(N)%Conc(I,J,L)
 
     ! Trap potential errors
     IF ( RC /= GC_SUCCESS ) THEN
@@ -481,11 +523,12 @@ ENDIF
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE ConvertSpc_KgKgDry_to_VVDry( State_Chm, State_Grid, RC )
+  SUBROUTINE ConvertSpc_KgKgDry_to_VVDry( State_Chm, State_Grid, Is_Adjoint, RC )
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(GrdState), INTENT(IN)    :: State_Grid  ! Grid State object
+    LOGICAL,        INTENT(IN)    :: Is_Adjoint  ! Is this the reverse integration?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -559,12 +602,8 @@ ENDIF
     !$OMP PRIVATE( I, J, L, N, MW_g, MwRatio )
     DO N = 1, State_Chm%nSpecies
 
-       ! (Emitted) molecular weight for the species [g]
-       ! NOTE: Non-advected species will have a MW of -1, which will
-       ! make the species concentration negative.  This can be used to
-       ! flag that the species should not be used.  The inverse unit
-       ! conversion will flip the sign back to positive (ewl, bmy, 8/4/16)
-       MW_g = State_Chm%SpcData(N)%Info%emMW_g
+       ! Molecular weight for the species [g]
+       MW_g = State_Chm%SpcData(N)%Info%MW_g
 
        ! Compute the ratio (MW air / MW species) outside of the IJL loop
        MwRatio = ( AIRMW / MW_g )
@@ -573,7 +612,12 @@ ENDIF
        DO L = 1, State_Grid%NZ
        DO J = 1, State_Grid%NY
        DO I = 1, State_Grid%NX
-          State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N) * MwRatio
+          State_Chm%Species(N)%Conc(I,J,L) = &
+                    State_Chm%Species(N)%Conc(I,J,L) * MwRatio
+#ifdef ADJOINT
+          if (Is_Adjoint) &
+               State_Chm%SpeciesAdj(I,J,L,N) = State_Chm%SpeciesAdj(I,J,L,N) * MwRatio
+#endif
        ENDDO
        ENDDO
        ENDDO
@@ -599,11 +643,12 @@ ENDIF
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE ConvertSpc_VVDry_to_KgKgDry( State_Chm, State_Grid, RC )
+  SUBROUTINE ConvertSpc_VVDry_to_KgKgDry( State_Chm, State_Grid, Is_Adjoint, RC )
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(GrdState), INTENT(IN)    :: State_Grid  ! Grid State object
+    LOGICAL,        INTENT(IN)    :: Is_Adjoint  ! Is this the reverse integration?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -674,19 +719,20 @@ ENDIF
     !$OMP PRIVATE( I, J, L, N, MW_g )
     DO N = 1, State_Chm%nSpecies
 
-       ! (Emitted) molecular weight for the species [g]
-       ! NOTE: Non-advected species will have a MW of -1, which will
-       ! make the species concentration negative.  This can be used to
-       ! flag that the species should not be used.  The inverse unit
-       ! conversion will flip the sign back to positive (ewl, bmy, 8/4/16)
-       MW_g = State_Chm%SpcData(N)%Info%emMW_g
+       ! Molecular weight for the species [g]
+       MW_g = State_Chm%SpcData(N)%Info%MW_g
 
        ! Loop over grid boxes and do the unit conversion
        DO L = 1, State_Grid%NZ
        DO J = 1, State_Grid%NY
        DO I = 1, State_Grid%NX
-         State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N)   &
+         State_Chm%Species(N)%Conc(I,J,L) = &
+                   State_Chm%Species(N)%Conc(I,J,L) / ( AIRMW / MW_G )
+#ifdef ADJOINT
+         if (Is_Adjoint) &
+              State_Chm%SpeciesAdj(I,J,L,N) = State_Chm%SpeciesAdj(I,J,L,N)  &
                                     / ( AIRMW / MW_G )
+#endif
        ENDDO
        ENDDO
        ENDDO
@@ -714,12 +760,13 @@ ENDIF
 ! !INTERFACE:
 !
   SUBROUTINE ConvertSpc_KgKgDry_to_KgKgTotal( State_Chm, State_Grid, &
-                                              State_Met, RC )
+                                              State_Met, Is_Adjoint, RC )
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(GrdState), INTENT(IN)    :: State_Grid  ! Grid State object
     TYPE(MetState), INTENT(IN)    :: State_Met   ! Meteorology State object
+    LOGICAL,        INTENT(IN)    :: Is_Adjoint  ! Is this the reverse integration?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -774,8 +821,14 @@ ENDIF
        DO L = 1, State_Grid%NZ
        DO J = 1, State_Grid%NY
        DO I = 1, State_Grid%NX
-          State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N)  &
+          State_Chm%Species(N)%Conc(I,J,L) =                         &
+                        State_Chm%Species(N)%Conc(I,J,L)             &
                         * ( 1e0_fp - ( State_Met%SPHU(I,J,L) * 1e-3_fp ) )
+#ifdef ADJOINT
+          if (Is_Adjoint) &
+               State_Chm%SpeciesAdj(I,J,L,N) = State_Chm%SpeciesAdj(I,J,L,N) &
+                        * ( 1e0_fp - ( State_Met%SPHU(I,J,L) * 1e-3_fp ) )
+#endif
        ENDDO
        ENDDO
        ENDDO
@@ -802,12 +855,13 @@ ENDIF
 ! !INTERFACE:
 !
   SUBROUTINE ConvertSpc_KgKgTotal_to_KgKgDry( State_Chm, State_Grid, &
-                                              State_Met, RC )
+                                              State_Met, Is_Adjoint, RC )
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(GrdState), INTENT(IN)    :: State_Grid  ! Grid State object
     TYPE(MetState), INTENT(IN)    :: State_Met   ! Meteorology State object
+    LOGICAL,        INTENT(IN)    :: Is_Adjoint  ! Is this the reverse integration?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -863,8 +917,14 @@ ENDIF
        DO L = 1, State_Grid%NZ
        DO J = 1, State_Grid%NY
        DO I = 1, State_Grid%NX
-         State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N)   &
+         State_Chm%Species(N)%Conc(I,J,L) =                          &
+                        State_Chm%Species(N)%Conc(I,J,L)             &
                         / ( 1e0_fp - ( State_Met%SPHU(I,J,L) * 1e-3_fp ) )
+#ifdef ADJOINT
+          if (Is_Adjoint) &
+               State_Chm%SpeciesAdj(I,J,L,N) = State_Chm%SpeciesAdj(I,J,L,N) &
+                        / ( 1e0_fp - ( State_Met%SPHU(I,J,L) * 1e-3_fp ) )
+#endif
        ENDDO
        ENDDO
        ENDDO
@@ -892,12 +952,13 @@ ENDIF
 ! !INTERFACE:
 !
   SUBROUTINE ConvertSpc_KgKgDry_to_Kgm2( State_Chm, State_Grid, &
-                                         State_Met, RC )
+                                         State_Met, Is_Adjoint, RC )
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(GrdState), INTENT(IN)    :: State_Grid    ! Grid State object
     TYPE(MetState), INTENT(IN)    :: State_Met     ! Meteorology state object
+    LOGICAL,        INTENT(IN)    :: Is_Adjoint  ! Is this the reverse integration?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -961,9 +1022,15 @@ ENDIF
     DO L = 1, State_Grid%NZ
     DO J = 1, State_Grid%NY
     DO I = 1, State_Grid%NX
-       State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N)          &
-                                    * ( g0_100                          &
-                                    * State_Met%DELP_DRY(I,J,L) )
+       State_Chm%Species(N)%Conc(I,J,L) =                              &
+                                    State_Chm%Species(N)%Conc(I,J,L)   &
+                                    * ( g0_100 * State_Met%DELP_DRY(I,J,L) )
+#ifdef ADJOINT
+          if (Is_Adjoint) &
+               State_Chm%SpeciesAdj(I,J,L,N) = State_Chm%SpeciesAdj(I,J,L,N) &
+                                    * ( g0_100                               &
+                                    * State_Met%DELP_DRY(I,J,L) ) 
+#endif
     ENDDO
     ENDDO
     ENDDO
@@ -990,12 +1057,13 @@ ENDIF
 ! !INTERFACE:
 !
   SUBROUTINE ConvertSpc_Kgm2_to_KgKgDry( State_Chm, State_Grid, &
-                                         State_Met, RC )
+                                         State_Met, Is_Adjoint, RC )
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(GrdState), INTENT(IN)    :: State_Grid  ! Grid State object
     TYPE(MetState), INTENT(IN)    :: State_Met   ! Meteorology state object
+    LOGICAL,        INTENT(IN)    :: Is_Adjoint  ! Is this the reverse integration?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -1060,10 +1128,17 @@ ENDIF
     DO L = 1, State_Grid%NZ
     DO J = 1, State_Grid%NY
     DO I = 1, State_Grid%NX
-       State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N)          &
-                                    * ( 1.0e+0_fp                       &
-                                    / ( g0_100                          &
+       State_Chm%Species(N)%Conc(I,J,L) =                            &
+                                    State_Chm%Species(N)%Conc(I,J,L) &
+                                    * ( 1.0e+0_fp / ( g0_100            &
                                     * State_Met%DELP_DRY(I,J,L) ) )
+#ifdef ADJOINT
+          if (Is_Adjoint) &
+               State_Chm%SpeciesAdj(I,J,L,N) = State_Chm%SpeciesAdj(I,J,L,N) &
+                                    * ( 1.0e+0_fp                            &
+                                    / ( g0_100                               &
+                                    * State_Met%DELP_DRY(I,J,L) ) )
+#endif
     ENDDO
     ENDDO
     ENDDO
@@ -1089,12 +1164,14 @@ ENDIF
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE ConvertSpc_KgKgDry_to_MND( State_Chm, State_Grid, State_Met, RC )
+  SUBROUTINE ConvertSpc_KgKgDry_to_MND( State_Chm, State_Grid, State_Met,  &
+                                        Is_Adjoint, RC )
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(GrdState), INTENT(IN)    :: State_Grid  ! Grid State object
     TYPE(MetState), INTENT(IN)    :: State_Met   ! Meteorology state object
+    LOGICAL,        INTENT(IN)    :: Is_Adjoint  ! Is this the reverse integration?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -1114,7 +1191,7 @@ ENDIF
 ! !LOCAL VARIABLES:
 !
     INTEGER            :: I, J, L, N
-    REAL(fp)           :: MolecRatio, MW_kg
+    REAL(fp)           :: MW_kg
     CHARACTER(LEN=255) :: MSG, LOC
 
     !====================================================================
@@ -1159,35 +1236,33 @@ ENDIF
     !    = Species(I,J,L,N) [kg/kg] * AIRDEN(I,J,L) * AVO / MW_KG / 1e6
     !
     ! NOTES:
-    !   (1) Also divide by mol C / mol species (equal to one for most spc)
-    !   (2) Use AD/AIRVOL instead of AIRDEN to preserve legacy method
+    !   (1) Use AD/AIRVOL instead of AIRDEN to preserve legacy method
     !====================================================================
 
     ! Loop over all species
-    !$OMP PARALLEL DO                              &
-    !$OMP DEFAULT( SHARED                        ) &
-    !$OMP PRIVATE( I, J, L, N, MolecRatio, MW_kg )
+    !$OMP PARALLEL DO                  &
+    !$OMP DEFAULT( SHARED            ) &
+    !$OMP PRIVATE( I, J, L, N, MW_kg )
     DO N = 1, State_Chm%nSpecies
 
-       ! Moles C / moles species
-       MolecRatio = State_Chm%SpcData(N)%Info%MolecRatio
-
-       ! (Emitted) molecular weight for the species [kg]
-       ! NOTE: Non-advected species will have a MW of -1, which will
-       ! make the species concentration negative.  This can be used to
-       ! flag that the species should not be used.  The inverse unit
-       ! conversion will flip the sign back to positive (ewl, bmy, 8/4/16)
-       MW_kg      = State_Chm%SpcData(N)%Info%emMW_g * 1.e-3_fp
+       ! Molecular weight for the species [kg]
+       MW_kg = State_Chm%SpcData(N)%Info%MW_g * 1.e-3_fp
 
        ! Loop over grid boxes and do the unit conversion
        DO L = 1, State_Grid%NZ
        DO J = 1, State_Grid%NY
        DO I = 1, State_Grid%NX
-          State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N)           &
+          State_Chm%Species(N)%Conc(I,J,L) =                             &
+                                     State_Chm%Species(N)%Conc(I,J,L)    &
                                      * State_Met%AIRDEN(I,J,L)              &
-                                     * ( AVO / MW_kg )                      &
-                                     / ( 1e+6_fp * MolecRatio )
-
+                                     * ( AVO / MW_kg ) / 1e+6_fp
+#ifdef ADJOINT
+          if (Is_Adjoint) &
+               State_Chm%SpeciesAdj(I,J,L,N) = State_Chm%SpeciesAdj(I,J,L,N) &
+                                     * State_Met%AIRDEN(I,J,L)               &
+                                     * ( AVO / MW_kg )                       &
+                                     / 1e+6_fp
+#endif
        ENDDO
        ENDDO
        ENDDO
@@ -1214,12 +1289,14 @@ ENDIF
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE ConvertSpc_MND_to_KgKgDry( State_Chm, State_Grid, State_Met, RC )
+  SUBROUTINE ConvertSpc_MND_to_KgKgDry( State_Chm, State_Grid, State_Met, &
+                                        Is_Adjoint, RC )
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(GrdState), INTENT(IN)    :: State_Grid  ! Grid State object
     TYPE(MetState), INTENT(IN)    :: State_Met   ! Meteorology state object
+    LOGICAL,        INTENT(IN)    :: Is_Adjoint  ! Is this the reverse integration?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -1239,7 +1316,7 @@ ENDIF
 ! !LOCAL VARIABLES:
 !
     INTEGER            :: I, J, L, N
-    REAL(fp)           :: MolecRatio, MW_kg
+    REAL(fp)           :: MW_kg
     CHARACTER(LEN=255) :: MSG, LOC
 
     !====================================================================
@@ -1285,37 +1362,35 @@ ENDIF
     !    = Species(I,J,L,N) [molecules/cm3] * AIRDEN(I,J,L) * AVO / MW_KG / 1e6
     !
     ! NOTES:
-    !  (1) Also multiply by mol C / mol species (equal to one for most spc)
-    !  (2) Use exact reverse of the mixing ratio -> # density conversion to
+    !  (1) Use exact reverse of the mixing ratio -> # density conversion to
     !      avoid numerical noise differences
-    !  (3) Use AD/AIRVOL instead of AIRDEN to preserve legacy method
+    !  (2) Use AD/AIRVOL instead of AIRDEN to preserve legacy method
     !
     !====================================================================
 
     ! Loop over species
-    !$OMP PARALLEL DO                              &
-    !$OMP DEFAULT( SHARED                        ) &
-    !$OMP PRIVATE( I, J, L, N, MolecRatio, MW_kg )
+    !$OMP PARALLEL DO                  &
+    !$OMP DEFAULT( SHARED            ) &
+    !$OMP PRIVATE( I, J, L, N, MW_kg )
     DO N = 1, State_Chm%nSpecies
 
-       ! Moles C / moles species
-       MolecRatio = State_Chm%SpcData(N)%Info%MolecRatio
-
-       ! (Emitted) molecular weight for the species [kg]
-       ! NOTE: Non-advected species will have a MW of -1, which will
-       ! make the species concentration negative.  This can be used to
-       ! flag that the species should not be used.  The inverse unit
-       ! conversion will flip the sign back to positive (ewl, bmy, 8/4/16)
-       MW_kg      = State_Chm%SpcData(N)%Info%emMW_g * 1.e-3_fp
+       ! Molecular weight for the species [kg]
+       MW_kg = State_Chm%SpcData(N)%Info%MW_g * 1.e-3_fp
 
        ! Loop over grid boxes and do the unit conversion
        DO L = 1, State_Grid%NZ
        DO J = 1, State_Grid%NY
        DO I = 1, State_Grid%NX
-          State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N)           &
-                                     * ( 1e+6_fp * MolecRatio )             &
-                                     / ( AVO / MW_kg )                      &
+          State_Chm%Species(N)%Conc(I,J,L) =                             & 
+                                     State_Chm%Species(N)%Conc(I,J,L)    &
+                                     * 1e+6_fp / ( AVO / MW_kg )            &
                                      / State_Met%AIRDEN(I,J,L)
+#ifdef ADJOINT
+          if (Is_Adjoint) &
+               State_Chm%SpeciesAdj(I,J,L,N) = State_Chm%SpeciesAdj(I,J,L,N) &
+                                     * 1e+6_fp / ( AVO / MW_kg )             &
+                                     / State_Met%AIRDEN(I,J,L)
+#endif
        ENDDO
        ENDDO
        ENDDO
@@ -1342,12 +1417,14 @@ ENDIF
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE ConvertSpc_VVDry_to_Kg( State_Chm, State_Grid, State_Met, RC )
+  SUBROUTINE ConvertSpc_VVDry_to_Kg( State_Chm, State_Grid, State_Met, &
+                                     Is_Adjoint, RC )
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(GrdState), INTENT(IN)    :: State_Grid  ! Grid State object
     TYPE(MetState), INTENT(IN)    :: State_Met   ! Meteorology state object
+    LOGICAL,        INTENT(IN)    :: Is_Adjoint  ! Is this the reverse integration?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -1424,20 +1501,23 @@ ENDIF
     !$OMP PRIVATE( I, J, L, N, MW_g )
     DO N = 1, State_Chm%nSpecies
 
-       ! (Emitted) molecular weight for the species [g]
-       ! NOTE: Non-advected species will have a MW of -1, which will
-       ! make the species concentration negative.  This can be used to
-       ! flag that the species should not be used.  The inverse unit
-       ! conversion will flip the sign back to positive (ewl, bmy, 8/4/16)
-       MW_g = State_Chm%SpcData(N)%Info%emMW_g
+       ! Molecular weight for the species [g]
+       MW_g = State_Chm%SpcData(N)%Info%MW_g
 
        ! Loop over grid boxes and do the unit conversion
        DO L = 1, State_Grid%NZ
        DO J = 1, State_Grid%NY
        DO I = 1, State_Grid%NX
-          State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N)  &
-                                       * State_Met%AD(I,J,L)       &
+          State_Chm%Species(N)%Conc(I,J,L) =                            &
+                                       State_Chm%Species(N)%Conc(I,J,L) &
+                                       * State_Met%AD(I,J,L)               &
                                        / ( AIRMW / MW_g )
+#ifdef ADJOINT
+          if (Is_Adjoint) &
+               State_Chm%SpeciesAdj(I,J,L,N) = State_Chm%SpeciesAdj(I,J,L,N) &
+                                       * State_Met%AD(I,J,L)                 &
+                                       / ( AIRMW / MW_g )
+#endif
        ENDDO
        ENDDO
        ENDDO
@@ -1464,12 +1544,14 @@ ENDIF
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE ConvertSpc_Kg_to_VVDry( State_Chm, State_Grid, State_Met, RC )
+  SUBROUTINE ConvertSpc_Kg_to_VVDry( State_Chm, State_Grid, State_Met,  &
+                                     Is_Adjoint, RC )
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(GrdState), INTENT(IN)    :: State_Grid  ! Grid State object
     TYPE(MetState), INTENT(IN)    :: State_Met   ! Meteorology state object
+    LOGICAL,        INTENT(IN)    :: Is_Adjoint  ! Is this the reverse integration?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -1545,20 +1627,23 @@ ENDIF
     !$OMP PRIVATE( I, J, L, N, MW_g )
     DO N = 1, State_Chm%nSpecies
 
-       ! (Emitted) molecular weight for the species [g]
-       ! NOTE: Non-advected species will have a MW of -1, which will
-       ! make the species concentration negative.  This can be used to
-       ! flag that the species should not be used.  The inverse unit
-       ! conversion will flip the sign back to positive (ewl, bmy, 8/4/16)
-       MW_g = State_Chm%SpcData(N)%Info%emMW_g
+       ! Molecular weight for the species [g]
+       MW_g = State_Chm%SpcData(N)%Info%MW_g
 
        ! Loop over grid boxes and do the unit conversion
        DO L = 1, State_Grid%NZ
        DO J = 1, State_Grid%NY
        DO I = 1, State_Grid%NX
-          State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N)  &
-                                       *  ( AIRMW / MW_g )         &
+          State_Chm%Species(N)%Conc(I,J,L) =                         &
+                                       State_Chm%Species(N)%Conc(I,J,L)  &
+                                       *  ( AIRMW / MW_g )              &
                                        / State_Met%AD(I,J,L)
+#ifdef ADJOINT
+          if (Is_Adjoint) &
+               State_Chm%SpeciesAdj(I,J,L,N) = State_Chm%SpeciesAdj(I,J,L,N) &
+                                       *  ( AIRMW / MW_g )                   &
+                                       / State_Met%AD(I,J,L)
+#endif
        ENDDO
        ENDDO
        ENDDO
@@ -1585,12 +1670,14 @@ ENDIF
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE ConvertSpc_KgKgDry_to_Kg( State_Chm, State_Grid, State_Met, RC )
+  SUBROUTINE ConvertSpc_KgKgDry_to_Kg( State_Chm, State_Grid, State_Met,  &
+                                       Is_Adjoint, RC )
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(GrdState), INTENT(IN)    :: State_Grid  ! Grid State object
     TYPE(MetState), INTENT(IN)    :: State_Met   ! Meteorology state object
+    LOGICAL,        INTENT(IN)    :: Is_Adjoint  ! Is this the reverse integration?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -1661,8 +1748,14 @@ ENDIF
     DO L = 1, State_Grid%NZ
     DO J = 1, State_Grid%NY
     DO I = 1, State_Grid%NX
-       State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N) &
+       State_Chm%Species(N)%Conc(I,J,L) =                          &
+                                  State_Chm%Species(N)%Conc(I,J,L) &
                                   * State_Met%AD(I,J,L)
+#ifdef ADJOINT
+       if (Is_Adjoint) &
+            State_Chm%SpeciesAdj(I,J,L,N) = State_Chm%SpeciesAdj(I,J,L,N) &
+                                  * State_Met%AD(I,J,L)
+#endif
     ENDDO
     ENDDO
     ENDDO
@@ -1688,12 +1781,14 @@ ENDIF
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE ConvertSpc_Kg_to_KgKgDry( State_Chm, State_Grid, State_Met, RC )
+  SUBROUTINE ConvertSpc_Kg_to_KgKgDry( State_Chm, State_Grid, State_Met,  &
+                                       Is_Adjoint, RC )
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(GrdState), INTENT(IN)    :: State_Grid  ! Grid State object
     TYPE(MetState), INTENT(IN)    :: State_Met   ! Meteorology state object
+    LOGICAL,        INTENT(IN)    :: Is_Adjoint  ! Is this the reverse integration?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -1763,8 +1858,14 @@ ENDIF
     DO L = 1, State_Grid%NZ
     DO J = 1, State_Grid%NY
     DO I = 1, State_Grid%NX
-       State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N) &
+       State_Chm%Species(N)%Conc(I,J,L) =                          &
+                                  State_Chm%Species(N)%Conc(I,J,L) &
                                   / State_Met%AD(I,J,L)
+#ifdef ADJOINT
+       if (Is_Adjoint) &
+            State_Chm%SpeciesAdj(I,J,L,N) = State_Chm%SpeciesAdj(I,J,L,N) &
+                                  / State_Met%AD(I,J,L)
+#endif
     ENDDO
     ENDDO
     ENDDO
@@ -1790,12 +1891,14 @@ ENDIF
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE ConvertSpc_MND_to_Kg( State_Chm, State_Grid, State_Met, RC )
+  SUBROUTINE ConvertSpc_MND_to_Kg( State_Chm, State_Grid, State_Met,  &
+                                   Is_Adjoint, RC )
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(GrdState), INTENT(IN)    :: State_Grid  ! Grid State object
     TYPE(MetState), INTENT(IN)    :: State_Met   ! Meteorology state object
+    LOGICAL,        INTENT(IN)    :: Is_Adjoint  ! Is this the reverse integration?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -1816,7 +1919,7 @@ ENDIF
 !
     ! Scalars
     INTEGER                :: I, J, L, N
-    REAL(fp)               :: MolecRatio, MW_kg
+    REAL(fp)               :: MW_kg
 
     ! Strings
     CHARACTER(LEN=255)     :: MSG, LOC
@@ -1864,36 +1967,35 @@ ENDIF
     !    = Species(I,J,L,N) [molecules/cm3] * AIRVOL(I,J,L) * AVO / MW_KG / 1e6
     !
     ! NOTES:
-    !  (1) Also multiply by mol C / mol species (equal to one for most spc)
-    !  (2) Use exact reverse of the species mass -> # density conversion to
+    !  (1) Use exact reverse of the species mass -> # density conversion to
     !      avoid numerical noise differences
     !
     !====================================================================
 
     ! Loop over all species
-    !$OMP PARALLEL DO                              &
-    !$OMP DEFAULT( SHARED                        ) &
-    !$OMP PRIVATE( I, J, L, N, MolecRatio, MW_kg )
+    !$OMP PARALLEL DO                  &
+    !$OMP DEFAULT( SHARED            ) &
+    !$OMP PRIVATE( I, J, L, N, MW_kg )
     DO N = 1, State_Chm%nSpecies
 
-       ! Moles C / moles species
-       MolecRatio = State_Chm%SpcData(N)%Info%MolecRatio
-
-       ! (Emitted) molecular weight for the species [g]
-       ! NOTE: Non-advected species will have a MW of -1, which will
-       ! make the species concentration negative.  This can be used to
-       ! flag that the species should not be used.  The inverse unit
-       ! conversion will flip the sign back to positive (ewl, bmy, 8/4/16)
-       MW_kg      = State_Chm%SpcData(N)%Info%emMW_g * 1.e-3_fp
+       ! Molecular weight for the species [g]
+       MW_kg = State_Chm%SpcData(N)%Info%MW_g * 1.e-3_fp
 
        ! Loop over grid boxes and do the unit conversion
        DO L = 1, State_Grid%NZ
        DO J = 1, State_Grid%NY
        DO I = 1, State_Grid%NX
-          State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N)           &
+          State_Chm%Species(N)%Conc(I,J,L) =                             &
+                                     State_Chm%Species(N)%Conc(I,J,L)    &
                                      / ( AVO / MW_kg )                      &
-                                     * (  State_Met%AIRVOL(I,J,L)           &
-                                          * 1e+6_fp * MolecRatio )
+                                     * (  State_Met%AIRVOL(I,J,L) * 1e+6_fp )
+#ifdef ADJOINT
+          if (Is_Adjoint) &
+               State_Chm%SpeciesAdj(I,J,L,N) = State_Chm%SpeciesAdj(I,J,L,N) &
+                                     / ( AVO / MW_kg )                       &
+                                     * (  State_Met%AIRVOL(I,J,L)            &
+                                          * 1e+6_fp )     
+#endif
        ENDDO
        ENDDO
        ENDDO
@@ -1920,12 +2022,14 @@ ENDIF
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE ConvertSpc_Kg_to_MND( State_Chm, State_Grid, State_Met, RC )
+  SUBROUTINE ConvertSpc_Kg_to_MND( State_Chm, State_Grid, State_Met,   &
+                                   Is_Adjoint, RC )
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(GrdState), INTENT(IN)    :: State_Grid  ! Grid State object
     TYPE(MetState), INTENT(IN)    :: State_Met   ! Meteorology state object
+    LOGICAL,        INTENT(IN)    :: Is_Adjoint  ! Is this the reverse integration?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -1946,7 +2050,7 @@ ENDIF
 !
     ! Scalars
     INTEGER            :: I, J, L, N
-    REAL(fp)           :: MolecRatio, MW_kg
+    REAL(fp)           :: MW_kg
 
     ! Strings
     CHARACTER(LEN=255) :: MSG, LOC
@@ -1992,34 +2096,32 @@ ENDIF
     !
     !    = Species(I,J,L,N) [kg] / AIRVOL(I,J,L) * AVO / MW_KG / 1e6
     !
-    ! NOTE: Also divide by mol C / mol species (equal to one for most spc)
-    !
     !====================================================================
 
     ! Loop over all species
-    !$OMP PARALLEL DO                              &
-    !$OMP DEFAULT( SHARED                        ) &
-    !$OMP PRIVATE( I, J, L, N, MolecRatio, MW_kg )
+    !$OMP PARALLEL DO                  &
+    !$OMP DEFAULT( SHARED            ) &
+    !$OMP PRIVATE( I, J, L, N, MW_kg )
     DO N = 1, State_Chm%nSpecies
 
-       ! Moles C / moles species
-       MolecRatio = State_Chm%SpcData(N)%Info%MolecRatio
-
-       ! (Emitted) molecular weight for the species [kg]
-       ! NOTE: Non-advected species will have a MW of -1, which will
-       ! make the species concentration negative.  This can be used to
-       ! flag that the species should not be used.  The inverse unit
-       ! conversion will flip the sign back to positive (ewl, bmy, 8/4/16)
-       MW_kg      = State_Chm%SpcData(N)%Info%emMW_g * 1.e-3_fp
+       ! Molecular weight for the species [kg]
+       MW_kg = State_Chm%SpcData(N)%Info%MW_g * 1.e-3_fp
 
        ! Loop over grid boxes and do the unit conversion
        DO L = 1, State_Grid%NZ
        DO J = 1, State_Grid%NY
        DO I = 1, State_Grid%NX
-          State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N)           &
+          State_Chm%Species(N)%Conc(I,J,L) =                             &
+                                    State_Chm%Species(N)%Conc(I,J,L)     &
                                      * ( AVO / MW_kg )                      &
-                                     / ( State_Met%AIRVOL(I,J,L)            &
-                                         * 1e+6_fp * MolecRatio )
+                                     / ( State_Met%AIRVOL(I,J,L) * 1e+6_fp )
+#ifdef ADJOINT
+          if (Is_Adjoint) &
+               State_Chm%SpeciesAdj(I,J,L,N) = State_Chm%SpeciesAdj(I,J,L,N) &
+                                     * ( AVO / MW_kg )                       &
+                                     / ( State_Met%AIRVOL(I,J,L)             &
+                                         * 1e+6_fp )   
+#endif
        ENDDO
        ENDDO
        ENDDO
@@ -2047,12 +2149,13 @@ ENDIF
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE ConvertBox_KgKgDry_to_Kg( I, J, L, State_Met, State_Chm, RC )
+  SUBROUTINE ConvertBox_KgKgDry_to_Kg( I, J, L, State_Met, State_Chm, Is_Adjoint, RC )
 !
 ! !INPUT PARAMETERS:
 !
     INTEGER,        INTENT(IN)    :: I, J, L     ! Grid box indexes
     TYPE(MetState), INTENT(IN)    :: State_Met   ! Meteorology state object
+    LOGICAL,        INTENT(IN)    :: Is_Adjoint  ! Is this the reverse integration?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -2095,8 +2198,14 @@ ENDIF
     !$OMP DEFAULT( SHARED     ) &
     !$OMP PRIVATE( N )
     DO N = 1, State_Chm%nSpecies
-       State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N) &
+       State_Chm%Species(N)%Conc(I,J,L) =                          &
+                                  State_Chm%Species(N)%Conc(I,J,L) &
                                   * State_Met%AD(I,J,L)
+#ifdef ADJOINT
+       if (Is_Adjoint) &
+            State_Chm%SpeciesAdj(I,J,L,N) = State_Chm%SpeciesAdj(I,J,L,N) &
+                                  * State_Met%AD(I,J,L)
+#endif
     ENDDO
     !$OMP END PARALLEL DO
 
@@ -2118,12 +2227,13 @@ ENDIF
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE ConvertBox_Kg_to_KgKgDry( I, J, L, State_Met, State_Chm, RC   )
+  SUBROUTINE ConvertBox_Kg_to_KgKgDry( I, J, L, State_Met, State_Chm, Is_Adjoint, RC   )
 !
 ! !INPUT PARAMETERS:
 !
     INTEGER,        INTENT(IN)    :: I, J, L     ! Grid box indexes
     TYPE(MetState), INTENT(IN)    :: State_Met   ! Meteorology state object
+    LOGICAL,        INTENT(IN)    :: Is_Adjoint  ! Is this the reverse integration?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -2165,8 +2275,14 @@ ENDIF
     !$OMP DEFAULT( SHARED     ) &
     !$OMP PRIVATE( N )
     DO N = 1, State_Chm%nSpecies
-       State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N) &
+       State_Chm%Species(N)%Conc(I,J,L) =                          &
+                                  State_Chm%Species(N)%Conc(I,J,L) &
                                   / State_Met%AD(I,J,L)
+#ifdef ADJOINT
+       if (Is_Adjoint) &
+            State_Chm%SpeciesAdj(I,J,L,N) = State_Chm%SpeciesAdj(I,J,L,N) &
+                                  / State_Met%AD(I,J,L)
+#endif
     ENDDO
     !$OMP END PARALLEL DO
 
@@ -2186,12 +2302,13 @@ ENDIF
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE ConvertBox_Kgm2_to_Kg( I, J, L, State_Chm, State_Grid, RC )
+  SUBROUTINE ConvertBox_Kgm2_to_Kg( I, J, L, State_Chm, State_Grid, Is_Adjoint, RC )
 !
 ! !INPUT PARAMETERS:
 !
     INTEGER,        INTENT(IN)    :: I, J, L       ! Grid box indexes
     TYPE(GrdState), INTENT(IN)    :: State_Grid    ! Grid State object
+    LOGICAL,        INTENT(IN)    :: Is_Adjoint  ! Is this the reverse integration?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -2232,8 +2349,14 @@ ENDIF
     !$OMP DEFAULT( SHARED ) &
     !$OMP PRIVATE( N      )
     DO N = 1, State_Chm%nSpecies
-       State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N)    &
+       State_Chm%Species(N)%Conc(I,J,L) =                             &
+                                  State_Chm%Species(N)%Conc(I,J,L)    &
                                   * State_Grid%Area_M2(I,J)
+#ifdef ADJOINT
+       if (Is_Adjoint) &
+          State_Chm%SpeciesAdj(I,J,L,N) = State_Chm%SpeciesAdj(I,J,L,N) &
+                                  * State_Grid%Area_M2(I,J)
+#endif
     ENDDO
     !$OMP END PARALLEL DO
 
@@ -2253,12 +2376,13 @@ ENDIF
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE ConvertBox_Kg_to_Kgm2( I, J, L, State_Chm, State_Grid, RC )
+  SUBROUTINE ConvertBox_Kg_to_Kgm2( I, J, L, State_Chm, State_Grid, Is_Adjoint, RC )
 !
 ! !INPUT PARAMETERS:
 !
     INTEGER,        INTENT(IN)    :: I, J, L       ! Grid box indexes
     TYPE(GrdState), INTENT(IN)    :: State_Grid    ! Grid State object
+    LOGICAL,        INTENT(IN)    :: Is_Adjoint  ! Is this the reverse integration?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -2299,8 +2423,14 @@ ENDIF
     !$OMP DEFAULT( SHARED ) &
     !$OMP PRIVATE( N      )
     DO N = 1, State_Chm%nSpecies
-       State_Chm%Species(I,J,L,N) = State_Chm%Species(I,J,L,N)    &
+       State_Chm%Species(N)%Conc(I,J,L) =                             &
+                                  State_Chm%Species(N)%Conc(I,J,L)    &
                                   / State_Grid%Area_M2(I,J)
+#ifdef ADJOINT
+       if (Is_Adjoint) &
+            State_Chm%SpeciesAdj(I,J,L,N) = State_Chm%SpeciesAdj(I,J,L,N) &
+                                  / State_Grid%Area_M2(I,J)
+#endif
     ENDDO
     !$OMP END PARALLEL DO
 

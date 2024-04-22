@@ -1,0 +1,3 @@
+[submodule "docs/source/geos-chem-shared-docs"]
+	path = docs/source/geos-chem-shared-docs
+	url = https://github.com/geoschem/geos-chem-shared-docs.git

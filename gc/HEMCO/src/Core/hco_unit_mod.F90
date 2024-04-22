@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !!
+!                   Harmonized Emissions Component (HEMCO)                    !!
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -38,19 +38,7 @@ MODULE HCO_Unit_Mod
 !
 ! !REVISION HISTORY:
 !  15 May 2012 - C. Keller   - Initialization
-!  08 Jul 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  08 Jul 2014 - R. Yantosca - Now use F90 free-format indentation
-!  24 Jul 2014 - C. Keller   - Now define unitless & 'standard' units as
-!                              parameter
-!  13 Aug 2014 - C. Keller   - Interface for sp & dp arrays
-!  13 Mar 2015 - R. Yantosca - Add m and m2 to the "unitless" list
-!  16 Mar 2015 - R. Yantosca - Also allow "kg m-2 s-1" and similar units
-!  16 Mar 2015 - R. Yantosca - Add dobsons and dobsons/day units
-!  16 Jun 2015 - R. Yantosca - Add % and percent to the unitless list
-!  07 Jan 2016 - E. Lundgren - Update Avogadro's # to NIST 2014 value
-!  19 Sep 2016 - R. Yantosca - Make sure all strings are the same length in
-!                              the array constructor or Gfortran will choke
-!  10 Jun 2018 - C. Keller   - Add mol/mol to unitless quantities
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -117,13 +105,9 @@ MODULE HCO_Unit_Mod
   ! All characters in this list should be lower case!
 
   ! Emission units
-  INTEGER,           PARAMETER :: NHE = 6
+  INTEGER,           PARAMETER :: NHE = 2
   CHARACTER(LEN=15), PARAMETER :: HE(NHE) = (/ 'kg/m2/s    ',   &
-                                               'kgc/m2/s   ',   &
-                                               'kg(c)/m2/s ',   &
-                                               'kgm-2s-1   ',   &
-                                               'kgcm-2s-1  ',   &
-                                               'kg(c)m-2s-1'  /)
+                                               'kgm-2s-1   '  /)
   ! Concentration units
   INTEGER,           PARAMETER :: NHC = 3
   CHARACTER(LEN=15), PARAMETER :: HC(NHC) = (/ 'kg/m3 ',        &
@@ -139,22 +123,21 @@ MODULE HCO_Unit_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
 ! !IROUTINE: HCO_Unit_Change_sp
 !
 ! !DESCRIPTION: Subroutine HCO\_UNIT\_CHANGE\_SP is a wrapper routine to
-! convert the values of the passed single precision array to units of
-! (emitted) kg/m2/s.
+! convert the values of the passed single precision array to units of kg/m2/s.
 !\\
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE HCO_Unit_Change_SP( HcoConfig,   ARRAY, UNITS, MW_IN, MW_OUT,   &
-                                 MOLEC_RATIO, YYYY,  MM,    AreaFlag, &
-                                 TimeFlag,    FACT,  RC,    KeepSpec   )
+  SUBROUTINE HCO_Unit_Change_SP( HcoConfig, ARRAY, UNITS,    MW, &
+                                 YYYY,      MM,    AreaFlag, &
+                                 TimeFlag,  FACT,  RC )
 !
 ! !USES:
 !
@@ -164,17 +147,17 @@ CONTAINS
 !
     TYPE(ConfigObj),  POINTER                 :: HcoConfig
     CHARACTER(LEN=*), INTENT(IN )             :: UNITS          ! Data unit
-    REAL(hp),         INTENT(IN )             :: MW_IN          ! MW g/mol
-    REAL(hp),         INTENT(IN )             :: MW_OUT         ! MW g/mol
-    REAL(hp),         INTENT(IN )             :: MOLEC_RATIO    ! molec. ratio
+    REAL(hp),         INTENT(IN )             :: MW             ! MW g/mol
     INTEGER,          INTENT(IN )             :: YYYY           ! Data year
     INTEGER,          INTENT(IN )             :: MM             ! Data month
-    LOGICAL,          INTENT(IN ), OPTIONAL   :: KeepSpec       ! Keep input species?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
-    INTEGER,          INTENT(INOUT)           :: AreaFlag       ! 2 if per area, 3 if per volume, 0 otherwise
-    INTEGER,          INTENT(INOUT)           :: TimeFlag       ! 1 if per time, 0 otherwise
+    INTEGER,          INTENT(INOUT)           :: AreaFlag       ! 2 if per area,
+                                                                ! 3 if per vol,
+                                                                ! 0 otherwise
+    INTEGER,          INTENT(INOUT)           :: TimeFlag       ! 1 if per time,
+                                                                ! 0 otherwise
     REAL(sp),         POINTER                 :: ARRAY(:,:,:,:) ! Data
     INTEGER,          INTENT(INOUT)           :: RC
 !
@@ -184,21 +167,27 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  13 Aug 2014 - C. Keller - Initial Version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
 ! LOCAL VARIABLES:
 !
-    REAL(hp)     :: Factor
+    REAL(hp)            :: Factor
+    CHARACTER(LEN=255)  :: LOC
 
     !=================================================================
     ! HCO_UNIT_CHANGE_SP begins here
     !=================================================================
+    LOC = 'HCO_UNIT_CHANGE_SP (HCO_UNIT_MOD.F90)'
 
-    CALL HCO_Unit_Factor( HcoConfig,UNITS, MW_IN, MW_OUT, MOLEC_RATIO, YYYY, &
-                          MM, AreaFlag, TimeFlag, Factor, RC, KeepSpec=KeepSpec   )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_Unit_Factor( HcoConfig, UNITS, MW, YYYY, MM, AreaFlag, TimeFlag, &
+                          Factor, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Apply correction factor
     IF ( Factor /= 1.0_hp ) THEN
@@ -214,22 +203,21 @@ CONTAINS
   END SUBROUTINE HCO_Unit_Change_SP
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
 ! !IROUTINE: HCO_Unit_Change_dp
 !
 ! !DESCRIPTION: Subroutine HCO\_UNIT\_CHANGE\_DP is a wrapper routine to
-! convert the values of the passed double precision array to units of
-! (emitted) kg/m2/s.
+! convert the values of the passed double precision array to units of kg/m2/s.
 !\\
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE HCO_Unit_Change_DP( HcoConfig,   ARRAY, UNITS, MW_IN, MW_OUT,   &
-                                 MOLEC_RATIO, YYYY,  MM,    AreaFlag, &
-                                 TimeFlag,    FACT,  RC,    KeepSpec   )
+  SUBROUTINE HCO_Unit_Change_DP( HcoConfig, ARRAY, UNITS,    MW, &
+                                 YYYY,      MM,    AreaFlag, &
+                                 TimeFlag,  FACT,  RC )
 !
 ! !USES:
 !
@@ -239,17 +227,17 @@ CONTAINS
 !
     TYPE(ConfigObj),  POINTER                 :: HcoConfig
     CHARACTER(LEN=*), INTENT(IN )             :: UNITS          ! Data unit
-    REAL(hp),         INTENT(IN )             :: MW_IN          ! MW g/mol
-    REAL(hp),         INTENT(IN )             :: MW_OUT         ! MW g/mol
-    REAL(hp),         INTENT(IN )             :: MOLEC_RATIO    ! molec. ratio
+    REAL(hp),         INTENT(IN )             :: MW             ! MW g/mol
     INTEGER,          INTENT(IN )             :: YYYY           ! Data year
     INTEGER,          INTENT(IN )             :: MM             ! Data month
-    LOGICAL,          INTENT(IN ), OPTIONAL   :: KeepSpec       ! Keep input species?
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
-    INTEGER,          INTENT(INOUT)           :: AreaFlag       ! 2 if per area, 3 if per volume, 0 otherwise
-    INTEGER,          INTENT(INOUT)           :: TimeFlag       ! 1 if per time, 0 otherwise
+    INTEGER,          INTENT(INOUT)           :: AreaFlag       ! 2 if per area,
+                                                                ! 3 if per vol,
+                                                                ! 0 otherwise
+    INTEGER,          INTENT(INOUT)           :: TimeFlag       ! 1 if per time,
+                                                                ! 0 otherwise
     REAL(dp),         POINTER                 :: ARRAY(:,:,:,:) ! Data
     INTEGER,          INTENT(INOUT)           :: RC
 !
@@ -259,21 +247,27 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  13 Aug 2014 - C. Keller - Initial Version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
 ! LOCAL VARIABLES:
 !
-    REAL(hp)     :: Factor
+    REAL(hp)            :: Factor
+    CHARACTER(LEN=255)  :: LOC
 
     !=================================================================
     ! HCO_UNIT_CHANGE_DP begins here
     !=================================================================
+    LOC = 'HCO_UNIT_CHANGE_DP (HCO_UNIT_MOD.F90)'
 
-    CALL HCO_Unit_Factor( HcoConfig, UNITS, MW_IN, MW_OUT, MOLEC_RATIO, YYYY, &
-                          MM, AreaFlag, TimeFlag, Factor, RC, KeepSpec=KeepSpec )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_Unit_Factor( HcoConfig, UNITS, MW, YYYY, MM, AreaFlag, TimeFlag, &
+                          Factor, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Apply correction factor
     IF ( Factor /= 1.0_hp ) THEN
@@ -289,7 +283,7 @@ CONTAINS
   END SUBROUTINE HCO_Unit_Change_DP
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -299,9 +293,6 @@ CONTAINS
 ! factor needed to conver unit UNIT to HEMCO units.
 !\\
 !\\
-! The mass is in units of kg and refers to mass of emitted species. For
-! most compounds, this corresponds to the molecular mass of the species,
-! but e.g. for VOCs this can be mass of carbon instead.
 ! The mass and area/volume conversion is always performed, but the time
 ! conversion is only done if a valid time string is provided. For example,
 ! if the input unit is kg/cm3 it will be converted to kg/m3, while
@@ -311,15 +302,7 @@ CONTAINS
 !\\
 !\\
 ! The input argument UNITS refers to the unit of the input data.
-! Argument MW\_IN denotes the molecular weight of the input unit
-! (g/mol), while MW\_OUT is the molecular weight of the output unit.
-! They can differ e.g. for VOCs whose output units are in mass carbon
-! instead of mass species. The argument MOLEC\_RATIO is the coefficient
-! used for the conversion of molecules of species to molecules of carbon.
-! For example, MOLEC\_RATIO should be set to 2 for C2H6, which will
-! properly convert kg species (or molec species) to kg C. If the input
-! unit is already on a per carbon basis (e.g. kgC, or molecC), no species
-! coefficients will be applied!
+! Argument MW denotes the molecular weight of the species (g/mol).
 !\\
 !\\
 ! Supported unit values:
@@ -327,9 +310,9 @@ CONTAINS
 !\\
 ! MASSES:
 ! \begin{itemize}
-! \item molec (includes molecC; molec(C); molec tracer; molecN, molec(N))
-! \item atom or atoms (incl. atomC, etc.)
-! \item kg, g, mg, ug, ng (incl. kgC, etc.)
+! \item molec
+! \item atom or atoms
+! \item kg, g, mg, ug, ng
 ! \end{itemize}
 !
 ! TIMES:
@@ -356,30 +339,27 @@ CONTAINS
 !
 ! !INTERFACE:
 !
-  SUBROUTINE HCO_Unit_Factor( HcoConfig, UNITS, MW_IN,    MW_OUT,   MOLEC_RATIO, YYYY, &
-                              MM,       AreaFlag, TimeFlag, Factor,      RC, KeepSpec )
+  SUBROUTINE HCO_Unit_Factor( HcoConfig, UNITS, MW, YYYY, MM, &
+                              AreaFlag, TimeFlag, Factor, RC )
 !
 ! !USES:
 !
     USE HCO_TYPES_MOD,    ONLY : ConfigObj
-    USE CharPak_Mod,      ONLY : CStrip
+    USE HCO_CharPak_Mod,  ONLY : CStrip
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(ConfigObj),  POINTER               :: HcoConfig
     CHARACTER(LEN=*), INTENT(IN )           :: UNITS       ! Data unit
-    REAL(hp),         INTENT(IN )           :: MW_IN       ! MW g/mol
-    REAL(hp),         INTENT(IN )           :: MW_OUT      ! MW g/mol
-    REAL(hp),         INTENT(IN )           :: MOLEC_RATIO ! molec. ratio
+    REAL(hp),         INTENT(IN )           :: MW          ! MW g/mol
     INTEGER,          INTENT(IN )           :: YYYY        ! Data year
     INTEGER,          INTENT(IN )           :: MM          ! Data month
-    LOGICAL,          INTENT(IN ), OPTIONAL :: KeepSpec    ! Keep input species?
 !
 ! !OUTPUT PARAMETERS:
 !
     INTEGER,          INTENT(  OUT)         :: AreaFlag
     INTEGER,          INTENT(  OUT)         :: TimeFlag
-    REAL(hp),         INTENT(  OUT)         :: Factor         ! Conversion factor
+    REAL(hp),         INTENT(  OUT)         :: Factor      ! Conversion factor
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -387,10 +367,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  23 Oct 2012 - C. Keller - Initial Version
-!  23 May 2013 - C. Keller - Now use additive method
-!  01 Oct 2013 - C. Keller - Now convert to kg/m2/s instead of
-!                            molec/cm2/s
-!  13 Aug 2014 - C. Keller - Split off from subroutine HCO\_UNIT\_CHANGE
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -447,12 +424,11 @@ CONTAINS
     !=================================================================
     ! Get scale factor for mass. Force to be a valid factor.
     !=================================================================
-    CALL HCO_UNIT_GetMassScal ( HcoConfig, unt, MW_IN, MW_OUT, &
-                                MOLEC_RATIO, Coef1, KeepSpec=KeepSpec )
+    CALL HCO_UNIT_GetMassScal( HcoConfig, unt, MW, Coef1 )
 
     IF ( Coef1 < 0.0_hp ) THEN
        MSG = 'cannot do unit conversion. Mass unit: ' // TRIM(unt)
-       CALL HCO_ERROR ( HcoConfig%Err, MSG, RC, ThisLoc = LOC )
+       CALL HCO_ERROR( MSG, RC, ThisLoc = LOC )
        RETURN
     ENDIF
     Factor = Factor * Coef1
@@ -461,7 +437,7 @@ CONTAINS
     ! Get scale factor for time. Skip if invalid factor. This makes
     ! sure that concentrations (e.g. kg/m3) are supported!
     !=================================================================
-    CALL HCO_UNIT_GetTimeScal ( unt, MM, YYYY, Coef1, Flag )
+    CALL HCO_UNIT_GetTimeScal( unt, MM, YYYY, Coef1, Flag )
     IF ( Flag > 0 ) Factor   = Factor * Coef1
     TimeFlag = Flag
 
@@ -469,7 +445,7 @@ CONTAINS
     ! Get scale factor for area/volume. If no area conversion
     ! factor can be determined, set PerArea flag to False.
     !=================================================================
-    CALL HCO_UNIT_GetAreaScal ( unt, Coef1, Flag )
+    CALL HCO_UNIT_GetAreaScal( unt, Coef1, Flag )
     IF ( Flag > 0 ) Factor = Factor * Coef1
     AreaFlag = Flag
 
@@ -479,7 +455,7 @@ CONTAINS
   END SUBROUTINE HCO_Unit_Factor
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -487,15 +463,12 @@ CONTAINS
 !
 ! !DESCRIPTION: Returns the mass scale factors for the given unit.
 ! This is the scale factor required to convert from input units to
-! HEMCO units (i.e. kg). If KeepSpec is set to true, the molecular
-! weight of the input data is preserved, e.g. data in kgC is kept in
-! kgC, data in molecC is converted to kgC, etc.
+! HEMCO units (i.e. kg).
 !\\
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE HCO_UNIT_GetMassScal( HcoConfig, unt, MW_IN, MW_OUT, &
-                                   MOLEC_RATIO, Scal, KeepSpec )
+  SUBROUTINE HCO_UNIT_GetMassScal( HcoConfig, unt, MW, Scal )
 !
 ! !USES:
 !
@@ -506,10 +479,7 @@ CONTAINS
 !
     TYPE(ConfigObj),  POINTER               :: HcoConfig
     CHARACTER(LEN=*), INTENT(IN)            :: unt         ! Input units
-    REAL(hp),         INTENT(IN)            :: MW_IN       ! MW g/mol
-    REAL(hp),         INTENT(IN)            :: MW_OUT      ! MW g/mol
-    REAL(hp),         INTENT(IN)            :: MOLEC_RATIO ! molec. ratio
-    LOGICAL,          INTENT(IN ), OPTIONAL :: KeepSpec    ! Keep input species?
+    REAL(hp),         INTENT(IN)            :: MW          ! MW g/mol
 !
 ! !OUTPUT PARAMETER:
 !
@@ -517,13 +487,13 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  13 Mar 2013 - C. Keller - Initial version
-!  17 Sep 2014 - C. Keller - Now accept '1' as mass unit (e.g. 1/m3/s)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
-    LOGICAL             :: KEEP
-    REAL(hp)            :: MW_N, MW_C
-    REAL(hp)            :: MR
+!
+! !LOCAL VARIABLES:
+!
     CHARACTER(LEN=255)  :: MSG
 
     !=================================================================
@@ -532,17 +502,6 @@ CONTAINS
 
     ! Init
     Scal = -999.0_hp
-
-    ! Keep same species
-    IF ( PRESENT(KeepSpec) ) THEN
-       KEEP = KeepSpec
-    ELSE
-       KEEP = .FALSE.
-    ENDIF
-
-    ! Set molecular weights of N and C
-    MW_N = MW_OUT
-    MW_C = MW_OUT
 
     ! Mass unit of '1': keep as is. Note: this has to be the first
     ! entry of the unit string (e.g. 1/m2/s or 1 cm^-3). Don't
@@ -554,205 +513,49 @@ CONTAINS
 
     ! Error checks: all passed variables must be defined! If this is not
     ! the case, only accept kg as valid unit!
-    IF ( MW_IN       <= 0.0_hp .OR. &
-         MW_OUT      <= 0.0_hp .OR. &
-         MOLEC_RATIO <= 0.0_hp       ) THEN
-       IF ( IsInWord(unt,'kg') .OR. KEEP ) THEN
+    IF ( MW <= 0.0_hp ) THEN
+       IF ( IsInWord(unt,'kg') ) THEN
           Scal = 1.0_hp
           RETURN
        ELSE
           MSG = 'Cannot determine unit conversion factor for mass - ' // &
-                'not all species parameter are defined!'
+                'species molecular weight is not defined!'
           CALL HCO_MSG(HcoConfig%Err,MSG)
           RETURN
        ENDIF
     ENDIF
 
-    ! Molecules / atoms of carbon: convert to kg carbon
-    ! Molecules / atoms of nitrogen: convert to kg output tracer
-    IF ( IsInWord(unt,'molecC'  ) .OR. IsInWord(unt,'atomC' )   .OR. &
-         IsInWord(unt,'atomsC'  ) .OR. IsInWord(unt,'molec(C)') .OR. &
-         IsInWord(unt,'atoms(C)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = MW_C * 1e-3_hp / N_0
-       ELSE
-          Scal = MW_OUT * 1e-3_hp / N_0
-       ENDIF
-
-    ELSEIF ( IsInWord(unt,'molecN') .OR. IsInWord(unt,'atomN') .OR. &
-             IsInWord(unt,'atomsN') .OR. IsInWord(unt,'molec(N)') .OR. &
-             IsInWord(unt,'atoms(N)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = MW_N * 1e-3_hp / N_0
-       ELSE
-          Scal = MW_OUT * 1e-3_hp / N_0
-       ENDIF
-
     ! Molecules / atoms of species: convert to kg output species.
-    ELSEIF ( IsInWord(unt,'molec') .OR. IsInWord(unt,'atom') ) THEN
-       Scal = MOLEC_RATIO * MW_OUT * 1e-3_hp / N_0
+    IF ( IsInWord(unt,'molec') .OR. IsInWord(unt,'atom') ) THEN
+       Scal = MW * 1e-3_hp / N_0
 
-    ! Mols carbon / nitrogen of species
-    ELSEIF ( IsInWord(unt,'nmolC') .OR. IsInWord(unt,'nmol(C)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1e-9_hp * MW_C * 1e-3_hp
-       ELSE
-          Scal = 1e-9_hp * MW_OUT * 1e-3_hp
-       ENDIF
-    ELSEIF ( IsInWord(unt,'nmolN') .OR. IsInWord(unt,'nmol(N)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1e-9_hp * MW_N * 1e-3_hp
-       ELSE
-          Scal = 1e-9_hp * MW_OUT * 1e-3_hp
-       ENDIF
-    ELSEIF ( IsInWord(unt,'umolC') .OR. IsInWord(unt,'umol(C)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1e-6_hp * MW_C * 1e-3_hp
-       ELSE
-          Scal = 1e-6_hp * MW_OUT * 1e-3_hp
-       ENDIF
-    ELSEIF ( IsInWord(unt,'umolN') .OR. IsInWord(unt,'umol(N)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1e-6_hp * MW_N * 1e-3_hp
-       ELSE
-          Scal = 1e-6_hp * MW_OUT * 1e-3_hp
-       ENDIF
-    ELSEIF ( IsInWord(unt,'mmolC') .OR. IsInWord(unt,'mmol(C)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1e-3_hp * MW_C * 1e-3_hp
-       ELSE
-          Scal = 1e-3_hp * MW_OUT * 1e-3_hp
-       ENDIF
-    ELSEIF ( IsInWord(unt,'mmolN') .OR. IsInWord(unt,'mmol(N)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1e-3_hp * MW_N * 1e-3_hp
-       ELSE
-          Scal = 1e-3_hp * MW_OUT * 1e-3_hp
-       ENDIF
-    ELSEIF ( IsInWord(unt,'molC') .OR. IsInWord(unt,'mol(C)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = MW_C * 1e-3_hp
-       ELSE
-          Scal = MW_OUT * 1e-3_hp
-       ENDIF
-    ELSEIF ( IsInWord(unt,'molN') .OR. IsInWord(unt,'mol(N)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = MW_N * 1e-3_hp
-       ELSE
-          Scal = MW_OUT * 1e-3_hp
-       ENDIF
-
-    ! Mols of species
+    ! Moles of species
     ELSEIF ( IsInWord(unt,'nmol') ) THEN
-       Scal = 1e-9_hp * MOLEC_RATIO * MW_OUT * 1e-3_hp
+       Scal = 1e-9_hp * MW * 1e-3_hp
     ELSEIF ( IsInWord(unt,'umol') ) THEN
-       Scal = 1e-6_hp * MOLEC_RATIO * MW_OUT * 1e-3_hp
+       Scal = 1e-6_hp * MW * 1e-3_hp
     ELSEIF ( IsInWord(unt,'mmol') ) THEN
-       Scal = 1e-3_hp * MOLEC_RATIO * MW_OUT * 1e-3_hp
+       Scal = 1e-3_hp * MW * 1e-3_hp
     ELSEIF ( IsInWord(unt,'mol') ) THEN
-       Scal = MOLEC_RATIO * MW_OUT * 1e-3_hp
-
-    ! Mass Carbon of species
-    ELSEIF ( IsInWord(unt,'ngC') .OR. IsInWord(unt,'ng(C)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1e-12_hp
-       ELSE
-          Scal = 1e-12_hp / 12_hp * MW_OUT
-       ENDIF
-    ELSEIF ( IsInWord(unt,'ugC') .OR. IsInWord(unt,'ug(C)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1e-9_hp
-       ELSE
-          Scal = 1e-9_hp / 12_hp * MW_OUT
-       ENDIF
-    ELSEIF ( IsInWord(unt,'mgC') .OR. IsInWord(unt,'mg(C)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1e-6_hp
-       ELSE
-          Scal = 1e-6_hp / 12_hp * MW_OUT
-       ENDIF
-    ELSEIF ( IsInWord(unt,'kgC') .OR. IsInWord(unt,'kg(C)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1.0_hp
-       ELSE
-          Scal = 1.0_hp / 12_hp * MW_OUT
-       ENDIF
-    ELSEIF ( IsInWord(unt,'gC') .OR. IsInWord(unt,'g(C)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1e-3_hp
-       ELSE
-          Scal = 1e-3_hp / 12_hp * MW_OUT
-       ENDIF
-
-    ! Mass Nitrogen of species
-    ELSEIF ( IsInWord(unt,'ngN') .OR. IsInWord(unt,'ng(N)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1e-12_hp
-       ELSE
-          Scal = 1e-12_hp / 14_hp * MW_OUT
-       ENDIF
-    ELSEIF ( IsInWord(unt,'ugN') .OR. IsInWord(unt,'ug(N)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1e-9_hp
-       ELSE
-          Scal = 1e-9_hp / 14_hp * MW_OUT
-       ENDIF
-    ELSEIF ( IsInWord(unt,'mgN') .OR. IsInWord(unt,'mg(N)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1e-6_hp
-       ELSE
-          Scal = 1e-6_hp / 14_hp * MW_OUT
-       ENDIF
-    ELSEIF ( IsInWord(unt,'kgN') .OR. IsInWord(unt,'kg(N)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1.0_hp
-       ELSE
-          Scal = 1.0_hp / 14_hp * MW_OUT
-       ENDIF
-    ELSEIF ( IsInWord(unt,'gN') .OR. IsInWord(unt,'g(N)') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1e-3_hp
-       ELSE
-          Scal = 1e-3_hp / 14_hp * MW_OUT
-       ENDIF
+       Scal = MW * 1e-3_hp
 
     ! Mass of species
     ELSEIF ( IsInWord(unt,'ng') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1e-12_hp
-       ELSE
-          Scal = 1e-12_hp * MOLEC_RATIO * MW_OUT / MW_IN
-       ENDIF
+       Scal = 1e-12_hp
     ELSEIF ( IsInWord(unt,'ug') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1e-9_hp
-       ELSE
-          Scal = 1e-9_hp * MOLEC_RATIO * MW_OUT / MW_IN
-       ENDIF
+       Scal = 1e-9_hp
     ELSEIF ( IsInWord(unt,'mg') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1e-6_hp
-       ELSE
-          Scal = 1e-6_hp * MOLEC_RATIO * MW_OUT / MW_IN
-       ENDIF
+       Scal = 1e-6_hp
     ELSEIF ( IsInWord(unt,'kg') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1.0_hp
-       ELSE
-          Scal = MOLEC_RATIO * MW_OUT / MW_IN
-       ENDIF
+       Scal = 1.0_hp
     ELSEIF ( IsInWord(unt,'g') ) THEN
-       IF ( KEEP ) THEN
-          Scal = 1e-3_hp
-       ELSE
-          Scal = 1e-3_hp * MOLEC_RATIO * MW_OUT / MW_IN
-       ENDIF
+       Scal = 1e-3_hp
     ENDIF
 
   END SUBROUTINE HCO_Unit_GetMassScal
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -784,6 +587,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  13 Mar 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -847,7 +651,7 @@ CONTAINS
   END SUBROUTINE HCO_UNIT_GetTimeScal
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -877,6 +681,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  13 Mar 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -939,7 +744,7 @@ CONTAINS
   END SUBROUTINE HCO_Unit_GetAreaScal
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -957,7 +762,7 @@ CONTAINS
 !
 ! !USES:
 !
-    USE CharPak_Mod, ONLY : TRANLC
+    USE HCO_CharPak_Mod, ONLY : TRANLC
 !
 ! !INPUT PARAMETERS:
 !
@@ -969,6 +774,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  13 Mar 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1018,7 +824,7 @@ CONTAINS
   END FUNCTION HCO_Unit_ScalCheck
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1042,6 +848,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  24 Jul 2014 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1051,7 +858,7 @@ CONTAINS
   END FUNCTION HCO_IsUnitless
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1075,6 +882,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  24 Jul 2014 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1084,7 +892,7 @@ CONTAINS
   END FUNCTION HCO_IsIndexData
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1114,6 +922,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  24 Jul 2014 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC

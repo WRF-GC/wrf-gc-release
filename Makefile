@@ -27,11 +27,11 @@
 #  Author: Haipeng Lin <linhaipeng@pku.edu.cn>, April 2nd, 2018
 #
 ################################################################################
+SHELL := /bin/bash
 
 LN      =       ln -sf
 MAKE    =       make -i -r
 RM      =       rm -f
-
 MODULES =                                 \
         module_data_radm2.o \
         module_data_sorgam.o \
@@ -58,6 +58,11 @@ MODULES =                                 \
         module_peg_util.o \
         wrfgc_convert_state_mod.o
 
+ifdef PNETCDF
+MODULES +=	wrfgc_history_mod.o\
+			wrfgc_io_pnetcdf.o
+endif
+
 OBJS    =                           \
         chemics_init.o              \
         optical_driver.o            \
@@ -80,7 +85,7 @@ export WRF_SRC_ROOT_DIR=$(ROOTDIR)
 # always run in this instance.
 #
 # If your make does not support phony targets... upgrade or check man make for FORCE
-.PHONY: chemics clean devclean install_registry install_configs compile_chem troubleshooting
+.PHONY: chemics clean devclean install_common install_registry install_registry_ch4 install_registry_co2 compile_chem troubleshooting test_registry_dummy
 
 # This is the main target (chemics)
 # It compiles modules, drivers, then links to create a libwrflib.a
@@ -206,57 +211,90 @@ devclean:
 	git checkout -- .
 	@echo "Done"
 
-install_registry:
+install_common:
 	@echo "*****************************************************************"
-	@echo "  __          _______  ______       _____  _____ _    _ _____    "
-	@echo "  \ \        / /  __ \|  ____|     / ____|/ ____| |  | |  __ \   "
-	@echo "   \ \  /\  / /| |__) | |__ ______| |  __| |    | |__| | |__) |  "
-	@echo "    \ \/  \/ / |  _  /|  __|______| | |_ | |    |  __  |  ___/   "
-	@echo "     \  /\  /  | | \ \| |         | |__| | |____| |  | | |       "
-	@echo "      \/  \/   |_|  \_\_|          \_____|\_____|_|  |_|_|       "
+	@echo "       __          _______  ______       _____  _____            "
+	@echo "       \ \        / /  __ \|  ____|     / ____|/ ____|           "
+	@echo "        \ \  /\  / /| |__) | |__ ______| |  __| |                "
+	@echo "         \ \/  \/ / |  _  /|  __|______| | |_ | |                "
+	@echo "          \  /\  /  | | \ \| |         | |__| | |____            "
+	@echo "           \/  \/   |_|  \_\_|          \_____|\_____|           "
 	@echo "*****************************************************************"
 	@echo "   THIS IS THE WRF-GC 'PUMPKIN' CHEMISTRY ABSTRACTION LAYER      "
 	@echo "                  FOR THE WRF MODEL VERSION 3+                   "
 	@echo "*****************************************************************"
-	@echo " (c) 2018-2020 Haipeng Lin                                       "
-	@echo " Peking University, Atmospheric Chemistry and Climate Group      "
-	@echo "*****************************************************************"
 	@echo "THIS WILL INSTALL AND REPLACE THE WRF-CHEM STANDARD REGISTRY.    "
-	mv ../Registry/registry.chem ../Registry/registry.chem.bak
+	mv -n ../Registry/registry.chem ../Registry/registry.chem.bak
 	cp ./registry.chem ../Registry/registry.chem
 	@echo "Your original registry is now in registry.chem.bak.              "
 	@echo "To compile, return to root directory and run ./compile em_real   "
 	@echo "*****************************************************************"
-	@echo "THIS WILL REPLACE PHYS/ WITH TWO-WAY COUPLING DATA PARAM FILES   "
+	@echo "THIS WILL REPLACE PHYS/ WITH TWO-WAY COUPLING DATA PARAM FILES (for WRFv3) "
 	mv ../phys/module_data_gocart_dust.F ../phys/module_data_gocart_dust.F.bak
+	mv ../share/module_chem_share.F ../share/module_chem_share.F.bak
 	cp ./module_data_gocart_dust.cpy ../phys/module_data_gocart_dust.F
+	cp ./module_chem_share.cpy ../share/module_chem_share.F
+	sed -i -e "s@  integer                , parameter      :: MaxVars          = 3000@  integer                , parameter      :: MaxVars          = 10000@" "$(ROOTDIR)/external/io_netcdf/wrf_io.F90";
+	# source common bash functions from scripts 
+	source ./newUserRegistration.sh && registerNewUserwrapper
 
-install_configs:
-	cp -v ./config/* ../run/
+install_registry: install_common
+	rm ./wrfgc_convert_state_mod.F
+	cp -v ./config/clim_p_trop.nc ../run/
+	cp -v ./config/species_database.yml ../run/
+	cp -v ./config/fullchem/* ../run/
+	ln -sf ./config/couplers/wrfgc_convert_state_mod.F.fullchem ./wrfgc_convert_state_mod.F
 	@echo "Configuration files copied successfully to your default WRF rundir"
 	@echo "If you are using a custom run directory, copy the files above for"
 	@echo "correct GEOS-Chem operation."
 
-compile_chem: install_registry install_configs
+install_registry_ch4: install_common
+	rm ./wrfgc_convert_state_mod.F
+	cp -v ./config/clim_p_trop.nc ../run/
+	cp -v ./config/species_database.yml ../run/
+	cp -v ./config/ch4/* ../run/
+	cp -v ./config/couplers/wrfgc_convert_state_mod.F.ch4 ./wrfgc_convert_state_mod.F
+	@echo "INSTALLED WRF-GC, CH4 specialty simulation"
+	@echo "Configuration files copied successfully to your default WRF rundir"
+	@echo "If you are using a custom run directory, copy the files above for"
+	@echo "correct GEOS-Chem operation."
+
+install_registry_co2: install_common
+	rm ./wrfgc_convert_state_mod.F
+	cp -v ./config/clim_p_trop.nc ../run/
+	cp -v ./config/species_database.yml ../run/
+	cp -v ./config/co2/* ../run/
+	cp -v ./config/couplers/wrfgc_convert_state_mod.F.co2 ./wrfgc_convert_state_mod.F
+	@echo "INSTALLED WRF-GC, CO2 specialty simulation"
+	@echo "Configuration files copied successfully to your default WRF rundir"
+	@echo "If you are using a custom run directory, copy the files above for"
+	@echo "correct GEOS-Chem operation."
+
+test_registry_dummy:
+	test -s ../Registry/registry.chem.bak || { echo "***** WRF-GC REGISTRY NOT FOUND: DO ./clean -a, cd chem/, make install_registry, THEN COME BACK AGAIN. *****"; false; }
+
+compile_chem: test_registry_dummy
 	@echo "*****************************************************************"
-	@echo "  __          _______  ______       _____  _____ _    _ _____    "
-	@echo "  \ \        / /  __ \|  ____|     / ____|/ ____| |  | |  __ \   "
-	@echo "   \ \  /\  / /| |__) | |__ ______| |  __| |    | |__| | |__) |  "
-	@echo "    \ \/  \/ / |  _  /|  __|______| | |_ | |    |  __  |  ___/   "
-	@echo "     \  /\  /  | | \ \| |         | |__| | |____| |  | | |       "
-	@echo "      \/  \/   |_|  \_\_|          \_____|\_____|_|  |_|_|       "
+	@echo "       __          _______  ______       _____  _____            "
+	@echo "       \ \        / /  __ \|  ____|     / ____|/ ____|           "
+	@echo "        \ \  /\  / /| |__) | |__ ______| |  __| |                "
+	@echo "         \ \/  \/ / |  _  /|  __|______| | |_ | |                "
+	@echo "          \  /\  /  | | \ \| |         | |__| | |____            "
+	@echo "           \/  \/   |_|  \_\_|          \_____|\_____|           "
 	@echo "*****************************************************************"
-	@echo "            THIS IS THE WRF-GC PROJECT FOR WRFV3+                "
+	@echo "            THIS IS THE WRF-GC PROJECT FOR WRFV4                 "
 	@echo "                  BASED ON GEOS-CHEM HP v12.0.0                  "
+	@echo "      GEOS-Chem Version: 14.1.1      WRF-GC 2023/03/08           "
 	@echo "*****************************************************************"
-	@echo " (c) 2018 Haipeng Lin, Xu Feng, Tzung-May Fu*                    "
-	@echo " Peking University, Atmospheric Chemistry and Climate Group      "
+	@echo " (c) 2018-2023 Haipeng Lin, Xu Feng, Tzung-May Fu*               "
 	@echo "*****************************************************************"
-	@echo "THIS COMMAND WILL PRE-COMPILE GEOS-CHEM IN THE gc SUBDIRECTORY   "
-	cd $(ROOTDIR)/chem/gc && FC=$(SFC) CC=$(SCC) F77=$(SFC) F90=$(SFC) CXX=$(OMPI_CXX) $(MAKE) $(J) NC_DIAG=y CHEM=Standard EXTERNAL_GRID=y DEBUG=n TRACEBACK=y BOUNDS=y MET=geos-fp GRID=4x5 NO_REDUCED=y UCX=yes NO_EXE=y hpc
+	@echo "THIS COMMAND WILL COMPILE GEOS-CHEM IN THE gc SUBDIRECTORY       "
+
+	# if you want to compile with LUO_WETDEP, add LUO_WETDEP=y here
+	cd $(ROOTDIR)/chem/gc && FC=$(SFC) CC=$(SCC) F77=$(SFC) F90=$(SFC) CXX=$(OMPI_CXX) $(MAKE) $(J) NC_DIAG=y CHEM=fullchem EXTERNAL_GRID=y DEBUG=n TRACEBACK=y BOUNDS=y MET=geos-fp GRID=4x5 NO_REDUCED=y UCX=yes NO_EXE=y hpc
 
 	@echo "*****************************************************************"
-	@echo " WE WILL NOW UPDATE WRFV3/main EM_REAL COMPILE RULES             "
+	@echo " WE WILL NOW UPDATE WRF/main EM_REAL COMPILE RULES               "
 	@echo " TO LINK AGAINST GEOS-CHEM LIBRARIES. "
 	@echo "        /everybody stand back/ I know regular expressions.       "
 	@echo "       - The original Makefile is at main/Makefile.bak -         "
@@ -266,18 +304,18 @@ compile_chem: install_registry install_configs
 	if ! grep -q DMODEL_WRF "$(ROOTDIR)/main/Makefile"; then cp $(ROOTDIR)/main/Makefile $(ROOTDIR)/main/Makefile.bak; sed -i -e "s@-o wrf\.exe .*@& -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -lGIGC $(MPI_OPT) -L$(ROOTDIR)/chem/gc/lib -lHistory -lGeosCore -lHistory -lKpp -lGeosCore -lIsorropia -lHCOI -lHCOX -lHCO -lGeosUtil -lKpp -lHeaders -lNcUtils -L$(NETCDFPATH) -lnetcdff -lnetcdf -L$(HDF5PATH)/lib -I$(ROOTDIR)/chem/gc/mod -lnetcdf@" "$(ROOTDIR)/main/Makefile"; sed -i -e "s@-o real\.exe .*@& -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -lGIGC $(MPI_OPT) -L$(ROOTDIR)/chem/gc/lib -lHistory -lGeosCore -lHistory -lKpp -lGeosCore -lIsorropia -lHCOI -lHCOX -lHCO -lGeosUtil -lKpp -lHeaders -lNcUtils -L$(NETCDFPATH) -lnetcdff -lnetcdf -L$(HDF5PATH)/lib -I$(ROOTDIR)/chem/gc/mod -lnetcdf@" "$(ROOTDIR)/main/Makefile"; sed -i -e "s@-o nup\.exe .*@& -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -lGIGC $(MPI_OPT) -L$(ROOTDIR)/chem/gc/lib -lHistory -lGeosCore -lHistory -lKpp -lGeosCore -lIsorropia -lHCOI -lHCOX -lHCO -lGeosUtil -lKpp -lHeaders -lNcUtils -L$(NETCDFPATH) -lnetcdff -lnetcdf -L$(HDF5PATH)/lib -I$(ROOTDIR)/chem/gc/mod -lnetcdf@" "$(ROOTDIR)/main/Makefile"; sed -i -e "s@-o ndown\.exe .*@& -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -lGIGC $(MPI_OPT) -L$(ROOTDIR)/chem/gc/lib -lHistory -lGeosCore -lHistory -lKpp -lGeosCore -lIsorropia -lHCOI -lHCOX -lHCO -lGeosUtil -lKpp -lHeaders -lNcUtils -L$(NETCDFPATH) -lnetcdff -lnetcdf -L$(HDF5PATH)/lib -I$(ROOTDIR)/chem/gc/mod -lnetcdf@" "$(ROOTDIR)/main/Makefile"; sed -i -e "s@-o tc\.exe .*@& -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -lGIGC $(MPI_OPT) -L$(ROOTDIR)/chem/gc/lib -lHistory -lGeosCore -lHistory -lKpp -lGeosCore -lIsorropia -lHCOI -lHCOX -lHCO -lGeosUtil -lKpp -lHeaders -lNcUtils -L$(NETCDFPATH) -lnetcdff -lnetcdf -L$(HDF5PATH)/lib -I$(ROOTDIR)/chem/gc/mod -lnetcdf@" "$(ROOTDIR)/main/Makefile"; fi
 
 	@echo "   *********** GEOS-CHEM HAS BEEN INSTALLED IN WRF ***********   "
-	@echo "   Please remember that:"
-	@echo "   - WRF-GC is a highly experimental project."
-	@echo "   - GEOS-Chem output species are different than in WRF-Chem."
-	@echo "   - You can configure GEOS-Chem in the input.geos file, except"
-	@echo "     individual process switches are in namelist.input as follows"
-	@echo "        gc_do_convection, _hemco, _pblmix, _chemistry, _drydep, _wetdep"
-	@echo "   - Not all HEMCO emissions are supported in all areas."
-	@echo "   - You have to use WRF-Chem style emissions, if you want to"
-	@echo "     run in multiple-domains. Turn on wrfgc_legacy_emis, and use"
-	@echo "     regular anthropogenic emissions inventory as WRF-Chem."
-	@echo "   With great power comes great responsibility."
-	@echo "   Please refer to 'make about' or contact WRF-GC team."
+	@echo "   Please remember that:                                         "
+	@echo "   - Documentation is at wrfgc.readthedocs.io.                   "
+	@echo "   - GEOS-Chem output species are different than in WRF-Chem.    "
+	@echo "   - You can configure GEOS-Chem in the geoschem_config.yml file,"
+	@echo "     but:                                                        "
+	@echo "     (1) individual process switches are in namelist.input       "
+	@echo "         gc_do_convection, _hemco, _pblmix, _chemistry, _drydep, _wetdep"
+	@echo "     (2) simulation types can only be switched with commands     "
+	@echo "         make_install_registry{_ch4/_co2} and a quick recompile  "
+	@echo "   - Not all HEMCO emissions are supported in all areas.         "
+	@echo "   With great power comes great responsibility.                  "
+	@echo "   Please refer to 'make about' or contact WRF-GC team.          "
 
 
 troubleshooting:
@@ -296,20 +334,20 @@ troubleshooting:
 
 about:
 	@echo "*****************************************************************"
-	@echo "  __          _______  ______       _____  _____ _    _ _____    "
-	@echo "  \ \        / /  __ \|  ____|     / ____|/ ____| |  | |  __ \   "
-	@echo "   \ \  /\  / /| |__) | |__ ______| |  __| |    | |__| | |__) |  "
-	@echo "    \ \/  \/ / |  _  /|  __|______| | |_ | |    |  __  |  ___/   "
-	@echo "     \  /\  /  | | \ \| |         | |__| | |____| |  | | |       "
-	@echo "      \/  \/   |_|  \_\_|          \_____|\_____|_|  |_|_|       "
+	@echo "       __          _______  ______       _____  _____            "
+	@echo "       \ \        / /  __ \|  ____|     / ____|/ ____|           "
+	@echo "        \ \  /\  / /| |__) | |__ ______| |  __| |                "
+	@echo "         \ \/  \/ / |  _  /|  __|______| | |_ | |                "
+	@echo "          \  /\  /  | | \ \| |         | |__| | |____            "
+	@echo "           \/  \/   |_|  \_\_|          \_____|\_____|           "
 	@echo "*****************************************************************"
 	@echo "   THIS IS THE WRF-GCHP 'PUMPKIN' CHEMISTRY ABSTRACTION LAYER    "
-	@echo "                    FOR THE WRF MODEL VERSION 3                  "
+	@echo "                    FOR THE WRF MODEL VERSION 4                  "
 	@echo "*****************************************************************"
 	@echo " FOR ERRORS, SUGGESTIONS AND FEEDBACK, CONTACT HAIPENG LIN AT    "
 	@echo "           HPLIN@SEAS.HARVARD.EDU | JIMMIE.LIN@GMAIL.COM         "
 	@echo "*****************************************************************"
-	@echo " (c) 2018-2020 Haipeng Lin, Xu Feng, Tzung-May Fu*               "
+	@echo " (c) 2018-2023 Haipeng Lin, Xu Feng, Tzung-May Fu*               "
 	@echo " Atmospheric Chemistry and Climate Group, SUSTech                "
 	@echo "*****************************************************************"
 	@echo "Commands:                                                        "
@@ -317,8 +355,7 @@ about:
 	@echo "    make clean - Clean chemistry (full, use with caution)        "
 	@echo "    make softclean - Soft clean 'Pumpkin' bindings only          "
 	@echo "    make install_registry - Install chemistry species into WRF   "
-	@echo "       (replacing existing Registry.chem)                        "
-	@echo "    make install_configs - Copies config files into run directory"
+	@echo "       (replacing existing Registry.chem) and configs into run   "
 	@echo "    make compile_chem - Compile target chemistry                 "
 	@echo "    make troubleshooting - Show debugging configuration info     "
 	@echo "    make devclean - Dev purposes only, get from git origin/master"
@@ -385,7 +422,7 @@ module_mixactivate_wrappers.o: ../phys/module_mixactivate.o module_data_gigc_ase
 
 mixactivate_driver.o: module_mixactivate_wrappers.o
 
-wrfgc_convert_state_mod.o: compile_chem module_input_chem_data.o module_tropopause.o module_upper_bc_driver.o
+wrfgc_history_mod.o: compile_chem 
 	$(RM) $@
 	$(CPP) -I$(WRF_SRC_ROOT_DIR)/inc $(CPPFLAGS) $(OMPCPP) $*.F > $*.G
 	$(SED_FTN) $*.G | $(CPP) $(TRADFLAG) > $*.f90
@@ -395,12 +432,55 @@ wrfgc_convert_state_mod.o: compile_chem module_input_chem_data.o module_tropopau
           $(WRF_SRC_ROOT_DIR)/var/build/da_name_space.pl $*.f90 > $*.f90.tmp ; \
           mv $*.f90.tmp $*.f90 ; \
         fi
-	$(FC) -o $@ -c $(FCFLAGS) -check bounds $(TRACEBACK_OPT) $(OMP) $(MODULE_DIRS) -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -I$(ROOTDIR)/chem/gc/mod $(PROMOTION) $(FCSUFFIX) $*.f90
+	$(FC) -o $@ -c $(FCFLAGS) -check bounds $(TRACEBACK_OPT) $(OMP) $(MODULE_DIRS) -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -L$(PNETCDF)/lib -I$(PNETCDF)/include -lpnetcdf -I$(ROOTDIR)/chem/gc/mod $(PROMOTION) $(FCSUFFIX) $*.f90
 
-chemics_init.o: compile_chem module_input_chem_data.o module_mixactivate_wrappers.o module_diag_aero_size_info.o module_tropopause.o module_upper_bc_driver.o wrfgc_convert_state_mod.o
+wrfgc_io_pnetcdf.o: compile_chem wrfgc_history_mod.o
+	$(RM) $@
+	$(CPP) -I$(WRF_SRC_ROOT_DIR)/inc $(CPPFLAGS) $(OMPCPP) $*.F > $*.G
+	$(SED_FTN) $*.G | $(CPP) $(TRADFLAG) > $*.f90
+	$(RM) $*.G
+	@ if echo $(ARCHFLAGS) | $(FGREP) 'DVAR4D'; then \
+          echo COMPILING $*.F for 4DVAR ; \
+          $(WRF_SRC_ROOT_DIR)/var/build/da_name_space.pl $*.f90 > $*.f90.tmp ; \
+          mv $*.f90.tmp $*.f90 ; \
+        fi
+	$(FC) -o $@ -c $(FCFLAGS) -check bounds $(TRACEBACK_OPT) $(OMP) $(MODULE_DIRS) -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -L$(PNETCDF)/lib -I$(PNETCDF)/include -lpnetcdf -I$(ROOTDIR)/chem/gc/mod $(PROMOTION) $(FCSUFFIX) $*.f90
+
+CONVERT_STATE_RELA = 	compile_chem \
+						module_input_chem_data.o \
+						module_tropopause.o \
+						module_upper_bc_driver.o 
+CHEMICS_INIT_RELA = 	compile_chem \
+						module_input_chem_data.o \
+						module_mixactivate_wrappers.o \
+						module_diag_aero_size_info.o \
+						module_tropopause.o \
+						module_upper_bc_driver.o \
+						wrfgc_convert_state_mod.o 
+
+ifdef PNETCDF
+CHEMICS_INIT_RELA += wrfgc_history_mod.o
+CONVERT_STATE_RELA += wrfgc_io_pnetcdf.o
+PNETCDFFLAG = -L$(PNETCDF)/lib -I$(PNETCDF)/include -lpnetcdf
+WRFGC_HISTORY_FLAG = -Duse_wrfgc_history_output
+endif
+
+wrfgc_convert_state_mod.o: $(CONVERT_STATE_RELA)
+	$(RM) $@
+	$(CPP) -I$(WRF_SRC_ROOT_DIR)/inc $(CPPFLAGS) $(OMPCPP) $(WRFGC_HISTORY_FLAG) $*.F > $*.G
+	$(SED_FTN) $*.G | $(CPP) $(TRADFLAG) > $*.f90
+	$(RM) $*.G
+	@ if echo $(ARCHFLAGS) | $(FGREP) 'DVAR4D'; then \
+          echo COMPILING $*.F for 4DVAR ; \
+          $(WRF_SRC_ROOT_DIR)/var/build/da_name_space.pl $*.f90 > $*.f90.tmp ; \
+          mv $*.f90.tmp $*.f90 ; \
+        fi
+	$(FC) -o $@ -c $(FCFLAGS) -check bounds $(TRACEBACK_OPT) $(OMP) $(MODULE_DIRS) -DLINUX_IFORT -DEXTERNAL_GRID -DNC_DIAG -DUCX -DGEOS_FP -DNC_HAS_COMPRESSION -DMODEL_ -DMODEL_WRF -DUSE_REAL8 -L$(PNETCDF)/lib -I$(PNETCDF)/include -lpnetcdf -I$(ROOTDIR)/chem/gc/mod $(PROMOTION) $(FCSUFFIX) $*.f90
+
+chemics_init.o: $(CHEMICS_INIT_RELA)
 	$(RM) $@
 	sed -e "s/grid%mu/gridmu/g" -e "s/grid%Mu/gridMu/g" -e "s/^\!.*'.*//" -e "s/^ *\!.*'.*//" $*.F > $*.G
-	$(CPP) -I$(WRF_SRC_ROOT_DIR)/inc $(CPPFLAGS) $(OMPCPP) $*.G  > $*.H
+	$(CPP) -I$(WRF_SRC_ROOT_DIR)/inc $(CPPFLAGS) $(OMPCPP)  $(WRFGC_HISTORY_FLAG) $*.G  > $*.H
 	sed -e "s/gridmu/grid%mu/g" -e "s/gridMu/grid%Mu/g" $*.H > $*.bb
 	$(SED_FTN) $*.bb | $(CPP) $(TRADFLAG) > $*.f90
 	$(RM) $*.G $*.H $*.bb

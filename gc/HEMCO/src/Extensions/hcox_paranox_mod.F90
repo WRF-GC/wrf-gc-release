@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -95,35 +95,7 @@ MODULE HCOX_ParaNOx_MOD
 !
 ! !REVISION HISTORY:
 !  06 Aug 2013 - C. Keller   - Initial version
-!  03 Jun 2013 - C. Holmes   - Rewritten to include wind speed in the look-up
-!                              table and to take input from netCDF
-!  15 Oct 2013 - C. Keller   - Now a HEMCO extension
-!  06 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  06 Jun 2014 - R. Yantosca - Now indended with F90 free-format
-!  25 Jun 2014 - R. Yantosca - Now pass the look-up-table filenames
-!  15 Jul 2014 - C. Holmes   - Make module variables allocatable, since they
-!                              are used only in full chemistry simulations.
-!  22 Jul 2014 - R. Yantosca - Added shadow copy of FAST-JX function FJXFUNC
-!  28 Jul 2014 - C. Keller   - Now pass J-Values through ExtState. This makes
-!                              the FJXFUNC shadow copy obsolete
-!  13 Aug 2014 - C. Keller   - Added manual diagnostics
-!  16 Oct 2014 - C. Keller   - Now store SUNCOSmid values internally over the
-!                              past 5 hours and use these values for SUNCOSmid5.
-!                              This is required for standalone mode.
-!  05 Feb 2015 - C. Keller   - Modified to bring in the updates from Chris
-!                              Holmes (input data in netCDF format, include
-!                              wind speed, calculated dry deposition freq.
-!                              using whole troposheric column mass).
-!  23 Feb 2015 - C. Keller   - Historic j-values can now be provided through
-!                              HEMCO configuration file.
-!  10 Apr 2015 - C. Keller   - Now exchange deposition fluxes via diagnostics.
-!                              Keep units of kg/m2/s for loss rates.
-!  20 Apr 2016 - M. Sulprizio- Get J(OH) directly from FAST-JX and remove all
-!                              references to J(O1D). In FlexChem, adjustment of
-!                              photolysis rates are now done in routine
-!                              PHOTRATE_ADJ (found in GeosCore/fast_jx_mod.F).
-!  14 Oct 2016 - C. Keller   - Now use HCO_EvalFld instead of HCO_GetPtr.
-!  12 Sep 2018 - C. Keller   - Added instance wrapper
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -145,6 +117,7 @@ MODULE HCOX_ParaNOx_MOD
      INTEGER               :: IDTHNO3
      INTEGER               :: IDTO3
      REAL*8                :: MW_O3
+
      REAL*8                :: MW_NO
      REAL*8                :: MW_NO2
      REAL*8                :: MW_HNO3
@@ -207,7 +180,7 @@ MODULE HCOX_ParaNOx_MOD
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -237,9 +210,7 @@ CONTAINS
 
 ! !REVISION HISTORY:
 !  06 Aug 2013 - C. Keller   - Initial Version
-!  06 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  06 Jun 2014 - R. Yantosca - Now indended with F90 free-format
-!  28 Jul 2014 - C. Keller   - Now call Hco_CalcEmis instead of Hco_Run.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -247,26 +218,30 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     LOGICAL               :: DefScaleEmis
-    CHARACTER(LEN=255)    :: MSG
+    CHARACTER(LEN=255)    :: MSG, LOC
     TYPE(MyInst), POINTER :: Inst
 
     !=================================================================
     ! HCOX_PARANOX_RUN begins here!
     !=================================================================
+    LOC = 'HCOX_PARANOX_RUN (HCOX_PARANOX_MOD.F90)'
 
     ! Return if extension disabled
     IF ( ExtState%ParaNOx <= 0 ) RETURN
 
     ! Enter
-    CALL HCO_ENTER(HcoState%Config%Err,'HCOX_ParaNOx_Run (hcox_paranox_mod.F90)', RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER(HcoState%Config%Err, LOC, RC)
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Get local instance
     Inst => NULL()
     CALL InstGet ( ExtState%ParaNOx, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        WRITE(MSG,*) 'Cannot find ParaNOx instance Nr. ', ExtState%ParaNOx
-       CALL HCO_ERROR(HcoState%Config%Err,MSG,RC)
+       CALL HCO_ERROR(MSG,RC)
        RETURN
     ENDIF
 
@@ -286,10 +261,8 @@ CONTAINS
     HcoState%Options%CatMax = -1
     HcoState%Options%ExtNr  = Inst%ExtNr
 
-    ! --> Define array to write emissions into. ShipNO is reset to
-    ! zero within subroutine EVOLVE_PLUME, so no need to do this
-    ! here.
-!    ShipNO                      = 0.0d0
+    ! --> Define array to write emissions into.
+    Inst%ShipNO                    = 0.0d0
     HcoState%Options%AutoFillDiagn = .FALSE.
     HcoState%Options%FillBuffer    =  .TRUE.
     HcoState%Buffer3D%Val          => Inst%ShipNO
@@ -297,7 +270,10 @@ CONTAINS
     ! Calculate ship NO emissions and write them into the ShipNO
     ! array [kg/m2/s].
     CALL HCO_CalcEmis( HcoState, .FALSE., RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Reset settings to standard
     HcoState%Buffer3D%Val          => NULL()
@@ -312,7 +288,10 @@ CONTAINS
     ! deposition), in which case these values will be added to the
     ! drydep array.
     CALL Evolve_Plume( ExtState, Inst%ShipNO, HcoState, Inst, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Leave w/ success
     Inst => NULL()
@@ -321,7 +300,7 @@ CONTAINS
   END SUBROUTINE HCOX_ParaNOx_Run
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -358,22 +337,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  06 Aug 2013 - C. Keller   - Initial Version
-!  06 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  06 Jun 2014 - R. Yantosca - Now indended with F90 free-format
-!  24 Jun 2014 - R. Yantosca - Now pass LUT_FILENAME to READ_PARANOX_LUT
-!  22 Jul 2014 - R. Yantosca - Comment out debug print statements
-!  28 Jul 2014 - C. Keller   - Now get J-values through ExtState
-!  12 Aug 2014 - R. Yantosca - READ_PARANOX_LUT is now called from Init phase
-!  10 Nov 2014 - C. Keller   - Added div-zero error trap for O3 deposition.
-!  25 Nov 2014 - C. Keller   - Now convert NO fluxes to HNO3 and O3 using
-!                              corresponding molecular weight ratios. Safe
-!                              division check for O3 deposition calculation.
-!  08 May 2015 - C. Keller   - Now read/write restart variables from here to
-!                              accomodate replay runs in GEOS-5.
-!  25 May 2015 - C. Keller   - Now calculate SC5 via HCO_GetSUNCOS
-!  29 Mar 2016 - C. Keller   - Bug fix: archive O3 deposition as positive flux.
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
-!  12 May 2017 - C. Keller   - Force option ScaleEmis to off.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -386,7 +350,7 @@ CONTAINS
     LOGICAL                  :: FIRST
     LOGICAL                  :: DefScaleEmis
     REAL(hp)                 :: iFlx, TMP
-    CHARACTER(LEN=255)       :: MSG
+    CHARACTER(LEN=255)       :: MSG, LOC
     CHARACTER(LEN=1)         :: CHAR1
 
     ! Arrays
@@ -394,8 +358,9 @@ CONTAINS
     REAL(hp), TARGET         :: FLUXNO2 (HcoState%NX,HcoState%NY)
     REAL(hp), TARGET         :: FLUXHNO3(HcoState%NX,HcoState%NY)
     REAL(hp), TARGET         :: FLUXO3  (HcoState%NX,HcoState%NY)
-!    REAL(hp), TARGET         :: DEPO3   (HcoState%NX,HcoState%NY)
-!    REAL(hp), TARGET         :: DEPHNO3 (HcoState%NX,HcoState%NY)
+!%%% Comment out unused code
+!%%%!    REAL(hp), TARGET         :: DEPO3   (HcoState%NX,HcoState%NY)
+!%%%!    REAL(hp), TARGET         :: DEPHNO3 (HcoState%NX,HcoState%NY)
 
     ! Pointers
     REAL(hp), POINTER        :: Arr2D(:,:)
@@ -411,23 +376,24 @@ CONTAINS
     REAL(dp)                 :: FNO_NOx
     REAL(hp)                 :: iMass
     REAL(hp)                 :: ExpVal
-
-!------------------------------------------------------------------------------
-!### DEBUG -- COMMENT OUT FOR NOW
-!    ! testing only
-!    REAL*8             :: FRAC, TOTPRES, DELTPRES
-!    INTEGER            :: TOP
-!    integer            :: ix, jx
-!    logical, parameter :: add2hemco = .true.
-!------------------------------------------------------------------------------
+!%%% Comment out debug code
+!%%%!    ! testing only
+!%%%!    REAL*8             :: FRAC, TOTPRES, DELTPRES
+!%%%!    INTEGER            :: TOP
+!%%%!    integer            :: ix, jx
+!%%%!    logical, parameter :: add2hemco = .true.
 
     !=================================================================
     ! EVOLVE_PLUME begins here!
     !=================================================================
+    LOC = 'EVOLVE_PLUE (HCOX_PARANOX_MOD.F90)'
 
     ! Enter
-    CALL HCO_ENTER(HcoState%Config%Err,'Evolve_Plume (hcox_paranox_mod.F90)', RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER(HcoState%Config%Err, LOC, RC)
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Leave here if none of the tracers defined
     IF ( Inst%IDTNO <= 0 .AND. Inst%IDTO3 <= 0 .AND. Inst%IDTHNO3 <= 0 ) THEN
@@ -485,31 +451,33 @@ CONTAINS
     ! ------------------------------------------------------------------
     ! SC5 holds the SUNCOS values of 5 hours ago.
     CALL HCO_getSUNCOS( HcoState, Inst%SC5, -5, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 4', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Error check
     ERR = .FALSE.
 
-    ! Init
-    FLUXNO   = 0.0_hp
-    FLUXNO2  = 0.0_hp
-    FLUXHNO3 = 0.0_hp
-    FLUXO3   = 0.0_hp
+    ! Initialize
+    FLUXNO       = 0.0_hp
+    FLUXNO2      = 0.0_hp
+    FLUXHNO3     = 0.0_hp
+    FLUXO3       = 0.0_hp
 
     ! Deposition fluxes
-    Inst%DEPO3    = 0.0_sp
-    Inst%DEPHNO3  = 0.0_sp
+    Inst%DEPO3   = 0.0_sp
+    Inst%DEPHNO3 = 0.0_sp
 
-!------------------------------------------------------------------------
-!    ! Debug
-!    print*, '### In EVOLVE_PLUME:'
-!    print*, '### JOH: ',  SUM   ( ExtState%JOH%Arr%Val ),  &
-!                          MAXVAL( ExtState%JOH%Arr%Val )
-!    print*, '### JNO2: ', SUM   ( ExtState%JNO2%Arr%Val ),  &
-!                          MAXVAL( ExtState%JNO2%Arr%Val )
-!    print*, '### SC5 : ', SUM   ( SC5 ), MAXVAL(SC5)
-!    print*, '### EMIS: ', SUM   ( SHIPNOEMIS(:,:,1) ), MAXVAL(SHIPNOEMIS(:,:,1))
-!------------------------------------------------------------------------
+!%%% Comment out debug code
+!%%%!    ! Debug
+!%%%!    print*, '### In EVOLVE_PLUME:'
+!%%%!    print*, '### JOH: ',  SUM   ( ExtState%JOH%Arr%Val ),  &
+!%%%!                          MAXVAL( ExtState%JOH%Arr%Val )
+!%%%!    print*, '### JNO2: ', SUM   ( ExtState%JNO2%Arr%Val ),  &
+!%%%!                          MAXVAL( ExtState%JNO2%Arr%Val )
+!%%%!    print*, '### SC5 : ', SUM   ( SC5 ), MAXVAL(SC5)
+!%%%!    print*, '### EMIS: ', SUM   ( SHIPNOEMIS(:,:,1) ), MAXVAL(SHIPNOEMIS(:,:,1))
 
     ! Loop over all grid boxes
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -529,44 +497,65 @@ CONTAINS
     DO J = 1, HcoState%NY
     DO I = 1, HcoState%NX
 
-       ! Skip if no ship emissions in this grid box
-       IF ( ShipNoEmis(I,J,1) == 0d0 ) CYCLE
+       ! Zero private variables for safety's sake
+       FNO_NOx   = 0.0_dp
+       iFlx      = 0.0_hp
+       iMass     = 0.0_hp
+       SHIP_FNOx = 0.0_dp
+       SHIP_DNOx = 0.0_dp
+       SHIP_OPE  = 0.0_dp
+       SHIP_MOE  = 0.0_dp
+       TMP       = 0.0_hp
 
+       !---------------------------------------------------------------------
+       ! Skip if no ship emissions in this grid box
+       !---------------------------------------------------------------------
+       IF ( .not. ( ShipNoEmis(I,J,1) > 0.0_hp ) ) CYCLE
+
+       !---------------------------------------------------------------------
        ! Production Efficiency for ship emiss (gvinken,mpayer,2/7/12)
        ! Updated to include effects of wind speed (cdh, 3/25/2014)
        ! Updated for HEMCO (ckeller, 02/04/2015)
-       CALL PARANOX_LUT( ExtState,  HcoState, Inst, I, J, RC, &
-                         SHIP_FNOx, SHIP_DNOx, SHIP_OPE, SHIP_MOE )
+       !---------------------------------------------------------------------
+       CALL PARANOX_LUT( ExtState,  HcoState,  Inst,      I,                  &
+                         J,         RC,        SHIP_FNOx, SHIP_DNOx,          &
+                         SHIP_OPE,  SHIP_MOE                                 )
        IF ( RC /= HCO_SUCCESS ) THEN
           ERR = .TRUE.; EXIT
        ENDIF
 
-!       ! for debugging only
-!       if(I==3.and.J==35)then
-!          write(*,*) 'PARANOX ship emissions @',I,J
-!          write(*,*) 'Emis [kg/m2/s]: ', ShipNoEmis(I,J,1)
-!          write(*,*) 'SHIP_FNOx: ', SHIP_FNOx
-!          write(*,*) 'SHIP_DNOx: ', SHIP_DNOx
-!          write(*,*) 'SHIP_OPE : ', SHIP_OPE
-!          write(*,*) 'SHIP_MOE : ', SHIP_MOE
-!       endif
+!%%% Comment out debug code
+!%%%!       ! for debugging only
+!%%%!       if(I==3.and.J==35)then
+!%%%!          write(*,*) 'PARANOX ship emissions @',I,J
+!%%%!          write(*,*) 'Emis [kg/m2/s]: ', ShipNoEmis(I,J,1)
+!%%%!          write(*,*) 'SHIP_FNOx: ', SHIP_FNOx
+!%%%!          write(*,*) 'SHIP_DNOx: ', SHIP_DNOx
+!%%%!          write(*,*) 'SHIP_OPE : ', SHIP_OPE
+!%%%!          write(*,*) 'SHIP_MOE : ', SHIP_MOE
+!%%%!       endif
 
+       !---------------------------------------------------------------------
        ! Split the ship NOx emission into NO and NO2
        ! following the ambient ratio
        ! Now check for zero ambient air concentrations. In this
        ! case, arbitrarily emit everything as NO (ckeller, 04/10/15).
-       IF ( ExtState%NO%Arr%Val (I,J,1) > 0.0_hp .OR. &
+       !
+       ! Bug fix: Make sure NO and NO2 are both positive
+       ! See https://github.com/geoschem/geos-chem/issues/380
+       !  -- Bob Yantosca (24 Jul 2020)
+       !---------------------------------------------------------------------
+       FNO_NOx = 1.0_hp
+       IF ( ExtState%NO%Arr%Val (I,J,1) > 0.0_hp .and.                       &
             ExtState%NO2%Arr%Val(I,J,1) > 0.0_hp       ) THEN
-          FNO_NOx = (ExtState%NO%Arr%Val(I,J,1)/Inst%MW_NO) / &
-                  ( (ExtState%NO%Arr%Val(I,J,1)/Inst%MW_NO) + &
-                    (ExtState%NO2%Arr%Val(I,J,1)/Inst%MW_NO2) )
-       ELSE
-          FNO_NOx = 1.0_hp
+          FNO_NOx = (   ExtState%NO%Arr%Val(I,J,1)  / Inst%MW_NO    )        &
+                  / ( ( ExtState%NO%Arr%Val(I,J,1)  / Inst%MW_NO  )          &
+                  +   ( ExtState%NO2%Arr%Val(I,J,1) / Inst%MW_NO2 ) )
        ENDIF
 
-       !---------------------------
+       !---------------------------------------------------------------------
        ! Calculate NO emissions
-       !---------------------------
+       !---------------------------------------------------------------------
        IF ( Inst%IDTNO > 0 ) THEN
 
            ! Of the total ship NOx, the fraction SHIP_FNOx
@@ -577,27 +566,30 @@ CONTAINS
 
        ENDIF
 
-       !---------------------------
+       !---------------------------------------------------------------------
        ! Calculate NO2 emissions
-       !---------------------------
+       !---------------------------------------------------------------------
        IF ( Inst%IDTNO2 > 0 ) THEN
 
            ! NO2 emissions complement NO emissions, so that total NOx
            ! emissions are preserved.
-           FLUXNO2(I,J) = ShipNoEmis(I,J,1) * SHIP_FNOx * (1.d0-FNO_NOx) &
+           FLUXNO2(I,J) = ShipNoEmis(I,J,1)                                  &
+                        * SHIP_FNOx                                          &
+                        * ( 1.0d0 - FNO_NOx          )                       &
                         * ( Inst%MW_NO2 / Inst%MW_NO )
        ENDIF
 
-       !---------------------------
+       !---------------------------------------------------------------------
        ! Calculate HNO3 emissions
-       !---------------------------
+       !---------------------------------------------------------------------
        IF ( Inst%IDTHNO3 > 0 ) THEN
 
           ! Of the total ship NOx, the fraction 1-SHIP_FNOx-SHIP_DNOx
           ! is converted to HNO3 during plume dilution and chemistry.
           ! Unit: kg/m2/s
-          FLUXHNO3(I,J) = ShipNoEmis(I,J,1) * ( 1d0-SHIP_FNOx-SHIP_DNOx ) &
-                        * ( Inst%MW_HNO3 / Inst%MW_NO )
+          FLUXHNO3(I,J) = ShipNoEmis(I,J,1)                                  &
+                        * ( 1d0 - SHIP_FNOx - SHIP_DNOx )                    &
+                        * ( Inst%MW_HNO3 / Inst%MW_NO   )
        ENDIF
 
        !--------------------------------------------------------------------
@@ -613,48 +605,54 @@ CONTAINS
        IF ( (Inst%IDTHNO3 > 0) .AND. (SHIP_DNOx > 0.0_dp) ) THEN
 
           ! Deposition flux in kg/m2/s.
-          Inst%DEPHNO3(I,J) = ShipNoEmis(I,J,1) * SHIP_DNOx * ( Inst%MW_HNO3 / Inst%MW_NO )
-!          iFlx = ShipNoEmis(I,J,1) * SHIP_DNOx * ( MW_HNO3 / MW_NO )
-!
-!          ! Get mass of species. This can either be the total PBL
-!          ! column mass or the first layer only, depending on the
-!          ! HEMCO setting.
-!          iMass = ExtState%HNO3%Arr%Val(I,J,1) &
-!                * ExtState%FRAC_OF_PBL%Arr%Val(I,J,1)
-!          IF ( HcoState%Options%PBL_DRYDEP ) THEN
-!             DO L = 1, HcoState%NZ
-!                IF ( ExtState%FRAC_OF_PBL%Arr%Val(I,J,L) == 0.0_hp ) EXIT
-!                iMass = iMass + ( ExtState%HNO3%Arr%Val(I,J,L) *       &
-!                                  ExtState%FRAC_OF_PBL%Arr%Val(I,J,L) )
-!             ENDDO
-!          ENDIF
-!
-!          ! Calculate deposition velocity (1/s) from flux
-!          ! Now avoid div-zero error (ckeller, 11/10/2014).
-!          IF ( iMass > TINY(1.0_hp) ) THEN
-!             TMP = ABS(iFlx) * HcoState%Grid%AREA_M2%Val(I,J)
-!
-!             ! Check if it's safe to do division
-!             IF ( (EXPONENT(TMP)-EXPONENT(iMass)) < MAXEXPONENT(TMP) ) THEN
-!                DEPHNO3(I,J) = TMP / iMass
-!             ENDIF
-!
-!             ! Check deposition velocity
-!             CALL HCO_CheckDepv( HcoState, DEPHNO3(I,J), RC )
-!          ENDIF
+          Inst%DEPHNO3(I,J) = ShipNoEmis(I,J,1)                              &
+                            * SHIP_DNOx                                      &
+                            * ( Inst%MW_HNO3 / Inst%MW_NO )
+
+!%%% Comment out unused code
+!%%%!          iFlx = ShipNoEmis(I,J,1) * SHIP_DNOx * ( MW_HNO3 / MW_NO )
+!%%%!
+!%%%!          ! Get mass of species. This can either be the total PBL
+!%%%!          ! column mass or the first layer only, depending on the
+!%%%!          ! HEMCO setting.
+!%%%!          iMass = ExtState%HNO3%Arr%Val(I,J,1) &
+!%%%!                * ExtState%FRAC_OF_PBL%Arr%Val(I,J,1)
+!%%%!          IF ( HcoState%Options%PBL_DRYDEP ) THEN
+!%%%!             DO L = 1, HcoState%NZ
+!%%%!                IF ( ExtState%FRAC_OF_PBL%Arr%Val(I,J,L) == 0.0_hp ) EXIT
+!%%%!                iMass = iMass + ( ExtState%HNO3%Arr%Val(I,J,L) *       &
+!%%%!                                  ExtState%FRAC_OF_PBL%Arr%Val(I,J,L) )
+!%%%!             ENDDO
+!%%%!          ENDIF
+!%%%!
+!%%%!          ! Calculate deposition velocity (1/s) from flux
+!%%%!          ! Now avoid div-zero error (ckeller, 11/10/2014).
+!%%%!          IF ( iMass > TINY(1.0_hp) ) THEN
+!%%%!             TMP = ABS(iFlx) * HcoState%Grid%AREA_M2%Val(I,J)
+!%%%!
+!%%%!             ! Check if it's safe to do division
+!%%%!             IF ( (EXPONENT(TMP)-EXPONENT(iMass)) < MAXEXPONENT(TMP) ) THEN
+!%%%!                DEPHNO3(I,J) = TMP / iMass
+!%%%!             ENDIF
+!%%%!
+!%%%!             ! Check deposition velocity
+!%%%!             CALL HCO_CheckDepv( HcoState, DEPHNO3(I,J), RC )
+!%%%!          ENDIF
 
        ENDIF
 
-       !---------------------------
+       !---------------------------------------------------------------------
        ! Calculate O3 emissions
-       !---------------------------
+       !---------------------------------------------------------------------
        IF ( Inst%IDTO3 > 0 ) THEN
 
           ! Of the total ship NOx, the fraction
           ! (1-FRACTION_NOX)*INT_OPE is converted to O3 during
           ! plume dilution and chemistry.
           ! Unit: kg/m2/s
-          iFlx = ShipNoEmis(I,J,1) * (1d0-SHIP_FNOx) * SHIP_OPE &
+          iFlx = ShipNoEmis(I,J,1)                                           &
+               * ( 1d0 - SHIP_FNOx         )                                 &
+               * SHIP_OPE                                                    &
                * ( Inst%MW_O3 / Inst%MW_NO )
 
           ! For positive fluxes, add to emission flux array
@@ -673,37 +671,40 @@ CONTAINS
              !DEPO3(I,J) = iFlx
              Inst%DEPO3(I,J) = ABS(iFlx)
 
-!             ! Get mass of species. This can either be the total PBL
-!             ! column mass or the first layer only, depending on the
-!             ! HEMCO setting.
-!             iMass = ExtState%O3%Arr%Val(I,J,1) &
-!                   * ExtState%FRAC_OF_PBL%Arr%Val(I,J,1)
-!             IF ( HcoState%Options%PBL_DRYDEP ) THEN
-!                DO L = 1, HcoState%NZ
-!                   IF ( ExtState%FRAC_OF_PBL%Arr%Val(I,J,L) == 0.0_hp ) EXIT
-!                   iMass = iMass + ( ExtState%O3%Arr%Val(I,J,L) *       &
-!                                     ExtState%FRAC_OF_PBL%Arr%Val(I,J,L) )
-!                ENDDO
-!             ENDIF
-!
-!             ! Calculate deposition velocity (1/s) from flux
-!             ! Now avoid div-zero error (ckeller, 11/10/2014).
-!             IF ( iMass > TINY(1.0_hp) ) THEN
-!                TMP = ABS(iFlx) * HcoState%Grid%AREA_M2%Val(I,J)
-!
-!                ! Check if it's safe to do division
-!                IF ( (EXPONENT(TMP)-EXPONENT(iMass)) < MAXEXPONENT(TMP) ) THEN
-!                   DEPO3(I,J) = TMP / iMass
-!                ENDIF
-!
-!                ! Check deposition velocity
-!                CALL HCO_CheckDepv( HcoState, DEPO3(I,J), RC )
-!             ENDIF
+!%%% Comment out unused code
+!%%%!             ! Get mass of species. This can either be the total PBL
+!%%%!             ! column mass or the first layer only, depending on the
+!%%%!             ! HEMCO setting.
+!%%%!             iMass = ExtState%O3%Arr%Val(I,J,1) &
+!%%%!                   * ExtState%FRAC_OF_PBL%Arr%Val(I,J,1)
+!%%%!             IF ( HcoState%Options%PBL_DRYDEP ) THEN
+!%%%!                DO L = 1, HcoState%NZ
+!%%%!                   IF ( ExtState%FRAC_OF_PBL%Arr%Val(I,J,L) == 0.0_hp ) EXIT
+!%%%!                   iMass = iMass + ( ExtState%O3%Arr%Val(I,J,L) *       &
+!%%%!                                     ExtState%FRAC_OF_PBL%Arr%Val(I,J,L) )
+!%%%!                ENDDO
+!%%%!             ENDIF
+!%%%!
+!%%%!             ! Calculate deposition velocity (1/s) from flux
+!%%%!             ! Now avoid div-zero error (ckeller, 11/10/2014).
+!%%%!             IF ( iMass > TINY(1.0_hp) ) THEN
+!%%%!                TMP = ABS(iFlx) * HcoState%Grid%AREA_M2%Val(I,J)
+!%%%!
+!%%%!                ! Check if it's safe to do division
+!%%%!                IF ( (EXPONENT(TMP)-EXPONENT(iMass)) < MAXEXPONENT(TMP) ) THEN
+!%%%!                   DEPO3(I,J) = TMP / iMass
+!%%%!                ENDIF
+!%%%!
+!%%%!                ! Check deposition velocity
+!%%%!                CALL HCO_CheckDepv( HcoState, DEPO3(I,J), RC )
+!%%%!             ENDIF
 
           ENDIF
        ENDIF
 
+       !---------------------------------------------------------------------
        ! Eventually write out into diagnostics array
+       !---------------------------------------------------------------------
        IF ( DoDiagn ) THEN
           DIAGN(I,J,1) = SHIP_FNOx
           DIAGN(I,J,2) = SHIP_OPE
@@ -712,8 +713,10 @@ CONTAINS
           DIAGN(I,J,5) = FLUXNO(I,J)
        ENDIF
 
+       !---------------------------------------------------------------------
        ! Reset ship NO emissions to zero. Will be refilled on next
        ! emission step!
+       !---------------------------------------------------------------------
        ShipNoEmis(I,J,1) = 0.0d0
 
     ENDDO !I
@@ -758,7 +761,7 @@ CONTAINS
        CALL HCO_EmisAdd( HcoState, FLUXNO, Inst%IDTNO, &
                          RC,       ExtNr=Inst%ExtNr )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'HCO_EmisAdd error: FLUXNO', RC )
+          CALL HCO_ERROR( 'HCO_EmisAdd error: FLUXNO', RC )
           RETURN
        ENDIF
     ENDIF
@@ -794,35 +797,50 @@ CONTAINS
        Arr2D     => DIAGN(:,:,1)
        CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
                           cName=TRIM(DiagnName), Array2D=Arr2D, RC=RC)
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 5', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
        Arr2D => NULL()
 
        DiagnName =  'PARANOX_OPE'
        Arr2D     => DIAGN(:,:,2)
        CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
                           cName=TRIM(DiagnName), Array2D=Arr2D, RC=RC)
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 6', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
        Arr2D => NULL()
 
        DiagnName =  'PARANOX_O3_PRODUCTION'
        Arr2D     => DIAGN(:,:,3)
        CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
                           cName=TRIM(DiagnName), Array2D=Arr2D, RC=RC)
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 7', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
        Arr2D => NULL()
 
        DiagnName =  'PARANOX_TOTAL_SHIPNOX'
        Arr2D     => DIAGN(:,:,4)
        CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
                           cName=TRIM(DiagnName), Array2D=Arr2D, RC=RC)
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 8', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
        Arr2D => NULL()
 
        DiagnName =  'PARANOX_NO_PRODUCTION'
        Arr2D     => DIAGN(:,:,5)
        CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
                           cName=TRIM(DiagnName), Array2D=Arr2D, RC=RC)
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 9', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
        Arr2D => NULL()
     ENDIF
 
@@ -835,7 +853,7 @@ CONTAINS
   END SUBROUTINE Evolve_Plume
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -871,15 +889,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  06 Aug 2013 - C. Keller   - Initial Version
-!  06 Jun 2014 - R. Yantosca - Cosmetic changes in ProTex Headers
-!  06 Jun 2014 - R. Yantosca - Now indented using F90 free-format
-!  13 Aug 2014 - R. Yantosca - Now read the PARANOX look-up tables here
-!  14 Aug 2014 - R. Yantosca - Minor fix, read the PARANOX look-up tables
-!                              after displaying text about PARANOX extension
-!  16 Oct 2014 - C. Keller   - Added error check after READ_PARANOX_LUT
-!  17 Oct 2014 - C. Keller   - Now parse input files via HCO_CharParse
-!  17 Apr 2015 - C. Keller   - Now assign PARANOX_SUNCOS1 to SC5(:,:,1), etc.
-!  25 May 2015 - C. Keller   - Now calculate SC5 via HCO_GetSUNCOS
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -898,6 +908,7 @@ CONTAINS
    !========================================================================
    ! HCOX_PARANOX_INIT begins here!
    !========================================================================
+   LOC = 'HCOX_PARANOX_INIT (HCOX_PARANOX_MOD.F90)'
 
    ! Assume success
    RC = HCO_SUCCESS
@@ -907,15 +918,17 @@ CONTAINS
    IF ( ExtNr <= 0 ) RETURN
 
    ! Enter
-   CALL HCO_ENTER( HcoState%Config%Err,                                      &
-                   'HCOX_ParaNOx_Init (hcox_paranox_mod.F90)', RC           )
-   IF ( RC /= HCO_SUCCESS ) RETURN
+   CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+   IF ( RC /= HCO_SUCCESS ) THEN
+       CALL HCO_ERROR( 'ERROR 10', RC, THISLOC=LOC )
+       RETURN
+   ENDIF
 
    ! Create local instance
    Inst => NULL()
    CALL InstCreate( ExtNr, ExtState%ParaNOx, Inst, RC                       )
    IF ( RC /= HCO_SUCCESS ) THEN
-      CALL HCO_ERROR( HcoState%Config%Err,                                   &
+      CALL HCO_ERROR(                                   &
                       'Cannot create ParaNOx instance', RC                  )
       RETURN
    ENDIF
@@ -976,7 +989,10 @@ CONTAINS
 
       ! Get HEMCO species IDs
       CALL HCO_GetExtHcoID( HcoState, ExtNr, HcoIDs, SpcNames, nSpc, RC )
-      IF ( RC /= HCO_SUCCESS ) RETURN
+      IF ( RC /= HCO_SUCCESS ) THEN
+          CALL HCO_ERROR( 'ERROR 11', RC, THISLOC=LOC )
+          RETURN
+      ENDIF
 
       ! Check for NO, NO2, O3, and HNO3
       DO I = 1, nSpc
@@ -1085,35 +1101,35 @@ CONTAINS
       ! FNOX
       ALLOCATE( Inst%FRACNOX_LUT02(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'FRACNOX_LUT02', RC )
+         CALL HCO_ERROR ( 'FRACNOX_LUT02', RC )
          RETURN
       ENDIF
       Inst%FRACNOX_LUT02 = 0.0_sp
 
       ALLOCATE( Inst%FRACNOX_LUT06(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'FRACNOX_LUT06', RC )
+         CALL HCO_ERROR ( 'FRACNOX_LUT06', RC )
          RETURN
       ENDIF
       Inst%FRACNOX_LUT06 = 0.0_sp
 
       ALLOCATE( Inst%FRACNOX_LUT10(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'FRACNOX_LUT10', RC )
+         CALL HCO_ERROR ( 'FRACNOX_LUT10', RC )
          RETURN
       ENDIF
       Inst%FRACNOX_LUT10 = 0.0_sp
 
       ALLOCATE( Inst%FRACNOX_LUT14(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'FRACNOX_LUT014', RC )
+         CALL HCO_ERROR ( 'FRACNOX_LUT014', RC )
          RETURN
       ENDIF
       Inst%FRACNOX_LUT14 = 0.0_sp
 
       ALLOCATE( Inst%FRACNOX_LUT18(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'FRACNOX_LUT18', RC )
+         CALL HCO_ERROR ( 'FRACNOX_LUT18', RC )
          RETURN
       ENDIF
       Inst%FRACNOX_LUT18 = 0.0_sp
@@ -1121,35 +1137,35 @@ CONTAINS
       ! OPE
       ALLOCATE( Inst%OPE_LUT02(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'OPE_LUT02', RC )
+         CALL HCO_ERROR ( 'OPE_LUT02', RC )
          RETURN
       ENDIF
       Inst%OPE_LUT02 = 0.0_sp
 
       ALLOCATE( Inst%OPE_LUT06(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'OPE_LUT06', RC )
+         CALL HCO_ERROR ( 'OPE_LUT06', RC )
          RETURN
       ENDIF
       Inst%OPE_LUT06 = 0.0_sp
 
       ALLOCATE( Inst%OPE_LUT10(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= 0 ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'OPE_LUT10', RC )
+         CALL HCO_ERROR ( 'OPE_LUT10', RC )
          RETURN
       ENDIF
       Inst%OPE_LUT10 = 0.0_sp
 
       ALLOCATE( Inst%OPE_LUT14(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= 0 ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'OPE_LUT014', RC )
+         CALL HCO_ERROR ( 'OPE_LUT014', RC )
          RETURN
       ENDIF
       Inst%OPE_LUT14 = 0.0_sp
 
       ALLOCATE( Inst%OPE_LUT18(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'OPE_LUT18', RC )
+         CALL HCO_ERROR ( 'OPE_LUT18', RC )
          RETURN
       ENDIF
       Inst%OPE_LUT18 = 0.0_sp
@@ -1157,35 +1173,35 @@ CONTAINS
       ! MOE
       ALLOCATE( Inst%MOE_LUT02(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'MOE_LUT02', RC )
+         CALL HCO_ERROR ( 'MOE_LUT02', RC )
          RETURN
       ENDIF
       Inst%MOE_LUT02 = 0.0_sp
 
       ALLOCATE( Inst%MOE_LUT06(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'MOE_LUT06', RC )
+         CALL HCO_ERROR ( 'MOE_LUT06', RC )
          RETURN
       ENDIF
       Inst%MOE_LUT06 = 0.0_sp
 
       ALLOCATE( Inst%MOE_LUT10(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'MOE_LUT10', RC )
+         CALL HCO_ERROR ( 'MOE_LUT10', RC )
          RETURN
       ENDIF
       Inst%MOE_LUT10 = 0.0_sp
 
       ALLOCATE( Inst%MOE_LUT14(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'MOE_LUT014', RC )
+         CALL HCO_ERROR ( 'MOE_LUT014', RC )
          RETURN
       ENDIF
       Inst%MOE_LUT14 = 0.0_sp
 
       ALLOCATE( Inst%MOE_LUT18(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'MOE_LUT18', RC )
+         CALL HCO_ERROR ( 'MOE_LUT18', RC )
          RETURN
       ENDIF
       Inst%MOE_LUT18 = 0.0_sp
@@ -1193,35 +1209,35 @@ CONTAINS
       ! DNOx
       ALLOCATE( Inst%DNOx_LUT02(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'DNOx_LUT02', RC )
+         CALL HCO_ERROR ( 'DNOx_LUT02', RC )
          RETURN
       ENDIF
       Inst%DNOx_LUT02 = 0.0_sp
 
       ALLOCATE( Inst%DNOx_LUT06(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'DNOx_LUT06', RC )
+         CALL HCO_ERROR ( 'DNOx_LUT06', RC )
          RETURN
       ENDIF
       Inst%DNOx_LUT06 = 0.0_sp
 
       ALLOCATE( Inst%DNOx_LUT10(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'DNOx_LUT10', RC )
+         CALL HCO_ERROR ( 'DNOx_LUT10', RC )
          RETURN
       ENDIF
       Inst%DNOx_LUT10 = 0.0_sp
 
       ALLOCATE( Inst%DNOx_LUT14(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'DNOx_LUT014', RC )
+         CALL HCO_ERROR ( 'DNOx_LUT014', RC )
          RETURN
       ENDIF
       Inst%DNOx_LUT14 = 0.0_sp
 
       ALLOCATE( Inst%DNOx_LUT18(nT,nJ,nO3,nSEA,nSEA,nJ,nNOx), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'DNOx_LUT18', RC )
+         CALL HCO_ERROR ( 'DNOx_LUT18', RC )
          RETURN
       ENDIF
       Inst%DNOx_LUT18 = 0.0_sp
@@ -1229,7 +1245,7 @@ CONTAINS
       ALLOCATE(Inst%DEPO3  (HcoState%NX,HcoState%NY),        &
                Inst%DEPHNO3(HcoState%NX,HcoState%NY), STAT=RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'Deposition arrays', RC )
+         CALL HCO_ERROR ( 'Deposition arrays', RC )
          RETURN
       ENDIF
       Inst%DEPO3   = 0.0_sp
@@ -1238,14 +1254,14 @@ CONTAINS
    !   ! O3 loss and HNO3 deposition
    !   ALLOCATE( Inst%SHIPO3LOSS(HcoState%NX,HcoState%NY), STAT=RC )
    !   IF ( RC /= HCO_SUCCESS ) THEN
-   !      CALL HCO_ERROR ( HcoState%Config%Err, 'SHIPO3LOSS', RC )
+   !      CALL HCO_ERROR ( 'SHIPO3LOSS', RC )
    !      RETURN
    !   ENDIF
    !   Inst%SHIPO3LOSS = 0d0
 
    !   ALLOCATE( Inst%SHIPHNO3DEP(HcoState%NX,HcoState%NY), STAT=RC )
    !   IF ( RC /= HCO_SUCCESS ) THEN
-   !        CALL HCO_ERROR ( HcoState%Config%Err, 'SHIPHNO3DEP', RC ); RETURN
+   !        CALL HCO_ERROR ( 'SHIPHNO3DEP', RC ); RETURN
    !   ENDIF
    !   Inst%SHIPHNO3DEP = 0d0
 
@@ -1258,19 +1274,28 @@ CONTAINS
    ! LUT data directory
    CALL GetExtOpt( HcoState%Config, Inst%ExtNr, 'LUT source dir', &
                    OptValChar=Inst%LutDir, RC=RC)
-   IF ( RC /= HCO_SUCCESS ) RETURN
+   IF ( RC /= HCO_SUCCESS ) THEN
+       CALL HCO_ERROR( 'ERROR 12', RC, THISLOC=LOC )
+       RETURN
+   ENDIF
 
    ! Call HEMCO parser to replace tokens such as $ROOT, $MET, or $RES.
    ! There shouldn't be any date token in there ($YYYY, etc.), so just
    ! provide some dummy variables here
    CALL HCO_CharParse( HcoState%Config, Inst%LutDir, -999, -1, -1, -1, -1, RC )
-   IF ( RC /= HCO_SUCCESS ) RETURN
+   IF ( RC /= HCO_SUCCESS ) THEN
+       CALL HCO_ERROR( 'ERROR 13', RC, THISLOC=LOC )
+       RETURN
+   ENDIF
 
    ! Data format: ncdf (default) or txt
    Inst%IsNc = .TRUE.
    CALL GetExtOpt( HcoState%Config, Inst%ExtNr, 'LUT data format', &
                    OptValChar=Dummy, RC=RC)
-   IF ( RC /= HCO_SUCCESS ) RETURN
+   IF ( RC /= HCO_SUCCESS ) THEN
+       CALL HCO_ERROR( 'ERROR 14', RC, THISLOC=LOC )
+       RETURN
+   ENDIF
    IF ( TRIM(Dummy) == 'txt' ) Inst%IsNc = .FALSE.
 
    ! Read PARANOX look-up tables from disk. This can be netCDF or txt
@@ -1281,10 +1306,16 @@ CONTAINS
    ! but will not actually read any data.
    IF ( Inst%IsNc ) THEN
       CALL READ_PARANOX_LUT_NC( HcoState, Inst, RC )
-      IF ( RC /= HCO_SUCCESS ) RETURN
+      IF ( RC /= HCO_SUCCESS ) THEN
+          CALL HCO_ERROR( 'ERROR 15', RC, THISLOC=LOC )
+          RETURN
+      ENDIF
    ELSE
       CALL READ_PARANOX_LUT_TXT( HcoState, Inst, RC )
-      IF ( RC /= HCO_SUCCESS ) RETURN
+      IF ( RC /= HCO_SUCCESS ) THEN
+          CALL HCO_ERROR( 'ERROR 16', RC, THISLOC=LOC )
+          RETURN
+      ENDIF
    ENDIF
 
    !========================================================================
@@ -1305,7 +1336,7 @@ CONTAINS
    !------------------------------------------------------------------------
    ALLOCATE ( Inst%ShipNO(HcoState%NX,HcoState%NY,HcoState%NZ), STAT=RC )
    IF ( RC /= HCO_SUCCESS ) THEN
-      CALL HCO_ERROR ( HcoState%Config%Err, 'ShipNO', RC )
+      CALL HCO_ERROR ( 'ShipNO', RC )
       RETURN
    ENDIF
    Inst%ShipNO = 0.0_hp
@@ -1313,7 +1344,7 @@ CONTAINS
    ! Allocate variables for SunCosMid from 5 hours ago.
    ALLOCATE ( Inst%SC5(HcoState%NX,HcoState%NY), STAT=RC )
    IF ( RC /= HCO_SUCCESS ) THEN
-      CALL HCO_ERROR ( HcoState%Config%Err, 'SC5', RC )
+      CALL HCO_ERROR ( 'SC5', RC )
       RETURN
    ENDIF
    Inst%SC5 = 0.0_hp
@@ -1341,7 +1372,10 @@ CONTAINS
                        OutUnit  = 'kg/m2/s',                                 &
                        COL = HcoState%Diagn%HcoDiagnIDManual,                &
                        RC       = RC                                        )
-   IF ( RC /= HCO_SUCCESS ) RETURN
+   IF ( RC /= HCO_SUCCESS ) THEN
+       CALL HCO_ERROR( 'ERROR 17', RC, THISLOC=LOC )
+       RETURN
+   ENDIF
 
    CALL Diagn_Create ( HcoState,                                             &
                        cName    = 'PARANOX_HNO3_DEPOSITION_FLUX',            &
@@ -1350,7 +1384,10 @@ CONTAINS
                        OutUnit  = 'kg/m2/s',                                 &
                        COL = HcoState%Diagn%HcoDiagnIDManual,                &
                        RC       = RC                                         )
-   IF ( RC /= HCO_SUCCESS ) RETURN
+   IF ( RC /= HCO_SUCCESS ) THEN
+       CALL HCO_ERROR( 'ERROR 18', RC, THISLOC=LOC )
+       RETURN
+   ENDIF
 
    !------------------------------------------------------------------------
    ! Set HEMCO extension variables
@@ -1384,7 +1421,7 @@ CONTAINS
  END SUBROUTINE HCOX_ParaNOx_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1412,8 +1449,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  06 Aug 2013 - C. Keller - Initial Version
-!  06 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  06 Jun 2014 - R. Yantosca - Now indended with F90 free-format
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1459,10 +1495,7 @@ CONTAINS
 ! !REVISION HISTORY:
 !  06 Feb 2012 - M. Payer    - Initial version modified from code provided by
 !                              G.C.M. Vinken
-!  01 Aug 2012 - R. Yantosca - Add reference to findFreeLUN from inqure_mod.F90
-!  03 Aug 2012 - R. Yantosca - Move calls to findFreeLUN out of DEVEL block
-!  03 Jun 2013 - C. Holmes   - Rewritten to include wind speed in the look-up
-!                              table and to take input from netCDF
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1482,7 +1515,7 @@ CONTAINS
    MSG = 'In ESMF, cannot read PARANOX look-up-table in netCDF ' // &
          'format. Please set `LUT data format` to `txt` in the ' // &
          'HEMCO configuration file.'
-   CALL HCO_ERROR(HcoState%Config%Err,MSG, RC, &
+   CALL HCO_ERROR(MSG, RC, &
            THISLOC = 'READ_PARANOX_LUT_NC (hcox_paranox_mod.F90)' )
    RETURN
 #else
@@ -1586,11 +1619,11 @@ CONTAINS
 ! !USES:
 !
    ! Modules for netCDF read
-   USE m_netcdf_io_open
-   USE m_netcdf_io_get_dimlen
-   USE m_netcdf_io_read
-   USE m_netcdf_io_readattr
-   USE m_netcdf_io_close
+   USE HCO_m_netcdf_io_open
+   USE HCO_m_netcdf_io_get_dimlen
+   USE HCO_m_netcdf_io_read
+   USE HCO_m_netcdf_io_readattr
+   USE HCO_m_netcdf_io_close
 
 #  include "netcdf.inc"
 !
@@ -1610,10 +1643,7 @@ CONTAINS
 ! !REVISION HISTORY:
 !  06 Feb 2012 - M. Payer    - Initial version modified from code provided by
 !                              G.C.M. Vinken
-!  01 Aug 2012 - R. Yantosca - Add reference to findFreeLUN from inqure_mod.F90
-!  03 Aug 2012 - R. Yantosca - Move calls to findFreeLUN out of DEVEL block
-!  03 Jun 2013 - C. Holmes   - Rewritten to include wind speed in the look-up
-!                              table and to take input from netCDF
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1661,7 +1691,7 @@ CONTAINS
    ELSE
       IF ( .not. FileExists ) THEN
          WRITE( MSG, 300 ) TRIM( FileMsg ), TRIM( FileName )
-         CALL HCO_ERROR(HcoState%Config%Err, MSG, HMRC )
+         CALL HCO_ERROR(MSG, HMRC )
          IF ( PRESENT( RC ) ) RC = HMRC
          RETURN
       ENDIF
@@ -1807,6 +1837,7 @@ CONTAINS
 ! !REVISION HISTORY:
 !  05 Feb 2015 - C. Keller   - Initial version modified from code provided by
 !                              G.C.M. Vinken and C. Holmes
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1814,12 +1845,13 @@ CONTAINS
 ! !LOCAL VARIABLES:
    INTEGER             :: IOS
    CHARACTER(LEN=255)  :: FILENAME
-   CHARACTER(LEN=255)  :: MSG
+   CHARACTER(LEN=255)  :: MSG, LOC
    INTEGER             :: fID
 
    !=================================================================
    ! READ_PARANOX_LUT_TXT begins here
    !=================================================================
+   LOC = 'READ_PARANOX_LUT_TXT (HCOX_PARANOX_MOD.F90)'
 
    ! Clear FILENAME
    FILENAME = ''
@@ -1835,31 +1867,46 @@ CONTAINS
    CALL READ_LUT_TXTFILE( HcoState, TRIM( FILENAME ), &
         Inst%FRACNOX_LUT02, Inst%DNOx_LUT02, Inst%OPE_LUT02, Inst%MOE_LUT02, RC, &
         Inst%Tlev, Inst%JNO2lev, Inst%O3lev, Inst%SEA0lev, Inst%SEA5lev, Inst%JRATIOlev, Inst%NOXlev )
-   IF ( RC /= HCO_SUCCESS ) RETURN
+   IF ( RC /= HCO_SUCCESS ) THEN
+       CALL HCO_ERROR( 'ERROR 19', RC, THISLOC=LOC )
+       RETURN
+   ENDIF
 
    ! Read 6 m/s LUT
    WRITE( FILENAME, 101 ) TRIM(Inst%LutDir), 6
    CALL READ_LUT_TXTFILE( HcoState, TRIM( FILENAME ), &
         Inst%FRACNOX_LUT06, Inst%DNOx_LUT06, Inst%OPE_LUT06, Inst%MOE_LUT06, RC )
-   IF ( RC /= HCO_SUCCESS ) RETURN
+   IF ( RC /= HCO_SUCCESS ) THEN
+       CALL HCO_ERROR( 'ERROR 20', RC, THISLOC=LOC )
+       RETURN
+   ENDIF
 
    ! Read 10 m/s LUT
    WRITE( FILENAME, 101 ) TRIM(Inst%LutDir), 10
    CALL READ_LUT_TXTFILE( HcoState, TRIM( FILENAME ), &
         Inst%FRACNOX_LUT10, Inst%DNOx_LUT10, Inst%OPE_LUT10, Inst%MOE_LUT10, RC )
-   IF ( RC /= HCO_SUCCESS ) RETURN
+   IF ( RC /= HCO_SUCCESS ) THEN
+       CALL HCO_ERROR( 'ERROR 21', RC, THISLOC=LOC )
+       RETURN
+   ENDIF
 
    ! Read 14 m/s LUT
    WRITE( FILENAME, 101 ) TRIM(Inst%LutDir), 14
    CALL READ_LUT_TXTFILE( HcoState, TRIM( FILENAME ), &
         Inst%FRACNOX_LUT14, Inst%DNOx_LUT14, Inst%OPE_LUT14, Inst%MOE_LUT14, RC )
-   IF ( RC /= HCO_SUCCESS ) RETURN
+   IF ( RC /= HCO_SUCCESS ) THEN
+       CALL HCO_ERROR( 'ERROR 22', RC, THISLOC=LOC )
+       RETURN
+   ENDIF
 
    ! Read 18 m/s LUT
    WRITE( FILENAME, 101 ) TRIM(Inst%LutDir), 18
    CALL READ_LUT_TXTFILE( HcoState, TRIM( FILENAME ), &
         Inst%FRACNOX_LUT18, Inst%DNOx_LUT18, Inst%OPE_LUT18, Inst%MOE_LUT18, RC )
-   IF ( RC /= HCO_SUCCESS ) RETURN
+   IF ( RC /= HCO_SUCCESS ) THEN
+       CALL HCO_ERROR( 'ERROR 23', RC, THISLOC=LOC )
+       RETURN
+   ENDIF
 
    ! Return w/ success
    RC = HCO_SUCCESS
@@ -1884,7 +1931,7 @@ CONTAINS
 !
 ! !USES:
 !
-   USE inquireMod, ONLY : findFreeLUN
+   USE HCO_inquireMod, ONLY : findFreeLUN
 !
 ! !INPUT PARAMETERS:
 !
@@ -1905,6 +1952,7 @@ CONTAINS
 ! !REVISION HISTORY:
 !  05 Feb 2015 - C. Keller   - Initial version modified from code provided by
 !                              G.C.M. Vinken and C. Holmes
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1956,7 +2004,7 @@ CONTAINS
    ELSE
       IF ( .not. FileExists ) THEN
          WRITE( MSG, 300 ) TRIM( FileMsg ), TRIM( FileName )
-         CALL HCO_ERROR(HcoState%Config%Err, MSG, RC )
+         CALL HCO_ERROR(MSG, RC )
          RETURN
       ENDIF
    ENDIF
@@ -1971,35 +2019,35 @@ CONTAINS
    ! Open file for reading
    OPEN ( fID, FILE=TRIM(FILENAME), FORM="FORMATTED", IOSTAT=IOS )
    IF ( IOS /= 0 ) THEN
-      CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile:1', RC, THISLOC=LOC )
+      CALL HCO_ERROR( 'read_lut_txtfile:1', RC, THISLOC=LOC )
       RETURN
    ENDIF
 
    ! Read FNOx
    READ( fId, FMT=FMAT, IOSTAT=IOS ) FNOx
    IF ( IOS /= 0 ) THEN
-      CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: FNOx', RC, THISLOC=LOC )
+      CALL HCO_ERROR( 'read_lut_txtfile: FNOx', RC, THISLOC=LOC )
       RETURN
    ENDIF
 
    ! Read OPE
    READ( fId, FMT=FMAT, IOSTAT=IOS ) OPE
    IF ( IOS /= 0 ) THEN
-      CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: OPE', RC, THISLOC=LOC )
+      CALL HCO_ERROR( 'read_lut_txtfile: OPE', RC, THISLOC=LOC )
       RETURN
    ENDIF
 
    ! Read MOE
    READ( fId, FMT=FMAT, IOSTAT=IOS ) MOE
    IF ( IOS /= 0 ) THEN
-      CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: MOE', RC, THISLOC=LOC )
+      CALL HCO_ERROR( 'read_lut_txtfile: MOE', RC, THISLOC=LOC )
       RETURN
    ENDIF
 
    ! Read DNOx
    READ( fId, FMT=FMAT, IOSTAT=IOS ) DNOx
    IF ( IOS /= 0 ) THEN
-      CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: DNOx', RC, THISLOC=LOC )
+      CALL HCO_ERROR( 'read_lut_txtfile: DNOx', RC, THISLOC=LOC )
       RETURN
    ENDIF
 
@@ -2007,7 +2055,7 @@ CONTAINS
    IF ( PRESENT(T) ) THEN
       READ( fId, FMT=FMAT, IOSTAT=IOS ) T
       IF ( IOS /= 0 ) THEN
-         CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: T', RC, THISLOC=LOC )
+         CALL HCO_ERROR( 'read_lut_txtfile: T', RC, THISLOC=LOC )
          RETURN
       ENDIF
    ENDIF
@@ -2015,7 +2063,7 @@ CONTAINS
    IF ( PRESENT(JNO2) ) THEN
       READ( fId, FMT=FMAT, IOSTAT=IOS ) JNO2
       IF ( IOS /= 0 ) THEN
-         CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: JNO2', RC, THISLOC=LOC )
+         CALL HCO_ERROR( 'read_lut_txtfile: JNO2', RC, THISLOC=LOC )
          RETURN
       ENDIF
    ENDIF
@@ -2023,7 +2071,7 @@ CONTAINS
    IF ( PRESENT(O3) ) THEN
       READ( fId, FMT=FMAT, IOSTAT=IOS ) O3
       IF ( IOS /= 0 ) THEN
-         CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: O3', RC, THISLOC=LOC )
+         CALL HCO_ERROR( 'read_lut_txtfile: O3', RC, THISLOC=LOC )
          RETURN
       ENDIF
    ENDIF
@@ -2031,7 +2079,7 @@ CONTAINS
    IF ( PRESENT(SEA0) ) THEN
       READ( fId, FMT=FMAT, IOSTAT=IOS ) SEA0
       IF ( IOS /= 0 ) THEN
-         CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: SEA0', RC, THISLOC=LOC )
+         CALL HCO_ERROR( 'read_lut_txtfile: SEA0', RC, THISLOC=LOC )
          RETURN
       ENDIF
    ENDIF
@@ -2039,7 +2087,7 @@ CONTAINS
    IF ( PRESENT(SEA5) ) THEN
       READ( fId, FMT=FMAT, IOSTAT=IOS ) SEA5
       IF ( IOS /= 0 ) THEN
-         CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: SEA5', RC, THISLOC=LOC )
+         CALL HCO_ERROR( 'read_lut_txtfile: SEA5', RC, THISLOC=LOC )
          RETURN
       ENDIF
    ENDIF
@@ -2047,7 +2095,7 @@ CONTAINS
    IF ( PRESENT(JRATIO) ) THEN
       READ( fId, FMT=FMAT, IOSTAT=IOS ) JRATIO
       IF ( IOS /= 0 ) THEN
-         CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: JRATIO', RC, THISLOC=LOC )
+         CALL HCO_ERROR( 'read_lut_txtfile: JRATIO', RC, THISLOC=LOC )
          RETURN
       ENDIF
    ENDIF
@@ -2055,7 +2103,7 @@ CONTAINS
    IF ( PRESENT(NOX) ) THEN
       READ( fId, FMT=FMAT, IOSTAT=IOS ) NOX
       IF ( IOS /= 0 ) THEN
-         CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: NOX', RC, THISLOC=LOC )
+         CALL HCO_ERROR( 'read_lut_txtfile: NOX', RC, THISLOC=LOC )
          RETURN
       ENDIF
    ENDIF
@@ -2074,7 +2122,7 @@ CONTAINS
 !         CASE ( 4 )
 !            TMPARR => DNOx
 !         CASE DEFAULT
-!            CALL HCO_ERROR( HcoState%Config%Err, 'I > 4', RC, THISLOC=LOC )
+!            CALL HCO_ERROR( 'I > 4', RC, THISLOC=LOC )
 !            RETURN
 !      END SELECT
 !
@@ -2120,7 +2168,7 @@ CONTAINS
 !
 ! !USES:
 !
-   USE inquireMod, ONLY : findFreeLUN
+   USE HCO_inquireMod, ONLY : findFreeLUN
 !
 ! !INPUT PARAMETERS:
 !
@@ -2141,6 +2189,7 @@ CONTAINS
 ! !REVISION HISTORY:
 !  05 Feb 2015 - C. Keller   - Initial version modified from code provided by
 !                              G.C.M. Vinken and C. Holmes
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2173,35 +2222,35 @@ CONTAINS
    ! Open file for reading
    OPEN ( fID, FILE=TRIM(FILENAME), ACTION="WRITE", FORM="FORMATTED", IOSTAT=IOS )
    IF ( IOS /= 0 ) THEN
-      CALL HCO_ERROR( HcoState%Config%Err, 'write_lut_txtfile:1', RC, THISLOC=LOC )
+      CALL HCO_ERROR( 'write_lut_txtfile:1', RC, THISLOC=LOC )
       RETURN
    ENDIF
 
    ! Read FNOx
    WRITE( fId, FMT=FMAT, IOSTAT=IOS ) FNOx
    IF ( IOS /= 0 ) THEN
-      CALL HCO_ERROR( HcoState%Config%Err, 'write_lut_txtfile: FNOx', RC, THISLOC=LOC )
+      CALL HCO_ERROR( 'write_lut_txtfile: FNOx', RC, THISLOC=LOC )
       RETURN
    ENDIF
 
    ! Read OPE
    WRITE( fId, FMT=FMAT, IOSTAT=IOS ) OPE
    IF ( IOS /= 0 ) THEN
-      CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: OPE', RC, THISLOC=LOC )
+      CALL HCO_ERROR( 'read_lut_txtfile: OPE', RC, THISLOC=LOC )
       RETURN
    ENDIF
 
    ! Read MOE
    WRITE( fId, FMT=FMAT, IOSTAT=IOS ) MOE
    IF ( IOS /= 0 ) THEN
-      CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: MOE', RC, THISLOC=LOC )
+      CALL HCO_ERROR( 'read_lut_txtfile: MOE', RC, THISLOC=LOC )
       RETURN
    ENDIF
 
    ! Read DNOx
    WRITE( fId, FMT=FMAT, IOSTAT=IOS ) DNOx
    IF ( IOS /= 0 ) THEN
-      CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: DNOx', RC, THISLOC=LOC )
+      CALL HCO_ERROR( 'read_lut_txtfile: DNOx', RC, THISLOC=LOC )
       RETURN
    ENDIF
 
@@ -2209,7 +2258,7 @@ CONTAINS
    IF ( PRESENT(T) ) THEN
       WRITE( fId, FMT=FMAT, IOSTAT=IOS ) T
       IF ( IOS /= 0 ) THEN
-         CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: T', RC, THISLOC=LOC )
+         CALL HCO_ERROR( 'read_lut_txtfile: T', RC, THISLOC=LOC )
          RETURN
       ENDIF
    ENDIF
@@ -2217,7 +2266,7 @@ CONTAINS
    IF ( PRESENT(JNO2) ) THEN
       WRITE( fId, FMT=FMAT, IOSTAT=IOS ) JNO2
       IF ( IOS /= 0 ) THEN
-         CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: JNO2', RC, THISLOC=LOC )
+         CALL HCO_ERROR( 'read_lut_txtfile: JNO2', RC, THISLOC=LOC )
          RETURN
       ENDIF
    ENDIF
@@ -2225,7 +2274,7 @@ CONTAINS
    IF ( PRESENT(O3) ) THEN
       WRITE( fId, FMT=FMAT, IOSTAT=IOS ) O3
       IF ( IOS /= 0 ) THEN
-         CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: O3', RC, THISLOC=LOC )
+         CALL HCO_ERROR( 'read_lut_txtfile: O3', RC, THISLOC=LOC )
          RETURN
       ENDIF
    ENDIF
@@ -2233,7 +2282,7 @@ CONTAINS
    IF ( PRESENT(SEA0) ) THEN
       WRITE( fId, FMT=FMAT, IOSTAT=IOS ) SEA0
       IF ( IOS /= 0 ) THEN
-         CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: SEA0', RC, THISLOC=LOC )
+         CALL HCO_ERROR( 'read_lut_txtfile: SEA0', RC, THISLOC=LOC )
          RETURN
       ENDIF
    ENDIF
@@ -2241,7 +2290,7 @@ CONTAINS
    IF ( PRESENT(SEA5) ) THEN
       WRITE( fId, FMT=FMAT, IOSTAT=IOS ) SEA5
       IF ( IOS /= 0 ) THEN
-         CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: SEA5', RC, THISLOC=LOC )
+         CALL HCO_ERROR( 'read_lut_txtfile: SEA5', RC, THISLOC=LOC )
          RETURN
       ENDIF
    ENDIF
@@ -2249,7 +2298,7 @@ CONTAINS
    IF ( PRESENT(JRATIO) ) THEN
       WRITE( fId, FMT=FMAT, IOSTAT=IOS ) JRATIO
       IF ( IOS /= 0 ) THEN
-         CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: JRATIO', RC, THISLOC=LOC )
+         CALL HCO_ERROR( 'read_lut_txtfile: JRATIO', RC, THISLOC=LOC )
          RETURN
       ENDIF
    ENDIF
@@ -2257,7 +2306,7 @@ CONTAINS
    IF ( PRESENT(NOX) ) THEN
       WRITE( fId, FMT=FMAT, IOSTAT=IOS ) NOX
       IF ( IOS /= 0 ) THEN
-         CALL HCO_ERROR( HcoState%Config%Err, 'read_lut_txtfile: NOX', RC, THISLOC=LOC )
+         CALL HCO_ERROR( 'read_lut_txtfile: NOX', RC, THISLOC=LOC )
          RETURN
       ENDIF
    ENDIF
@@ -2317,6 +2366,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  03 Jun 2013 - C. Holmes      - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2417,21 +2467,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !     Jun 2010 - G.C.M. Vinken - Initial version
-!  03 Jun 2013 - C. Holmes     - Heavily modified and simplified from previous
-!                                LUT interpolation code by G.C.M. Vinken and
-!                                M. Payer. LUT now includes wind speed.
-!  04 Feb 2015 - C. Keller     - Updated for use in HEMCO.
-!  24 Sep 2015 - E. Lundgren   - ExtState vars O3, NO2, and NO now in
-!                                kg/kg dry air (previously kg)
-!  07 Jan 2016 - E. Lundgren   - Update H2O molec wt to match GC value
-!  20 Apr 2016 - M. Sulprizio  - Remove calculation of J(OH). We now get J(OH),
-!                                the effective rate for O3+hv(+H2O)->OH+OH,
-!                                directly from FAST-JX. In FlexChem, adjustment
-!                                of the photolysis rates are done in routine
-!                                PHOTRATE_ADJ (found in GeosCore/fast_jx_mod.F).
-!  20 Sep 2016 - R. Yantosca   - Replace non-standard ASIND function with ASIN,
-!                                and convert to degrees (divide by PI/180)
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2694,7 +2730,7 @@ CONTAINS
             MOE_LUT     => Inst%MOE_LUT18
          CASE DEFAULT
              MSG = 'LUT error: Wind speed interpolation error!'
-             CALL HCO_ERROR(HcoState%Config%Err,MSG, RC, THISLOC=LOC )
+             CALL HCO_ERROR(MSG, RC, THISLOC=LOC )
              RETURN
       END SELECT
 
@@ -2766,7 +2802,7 @@ CONTAINS
             !print*, VARS
 
             MSG = 'LUT error: Fracnox should be between 0 and 1!'
-            CALL HCO_ERROR(HcoState%Config%Err,MSG, RC, THISLOC=LOC )
+            CALL HCO_ERROR(MSG, RC, THISLOC=LOC )
             RETURN
          ENDIF
 
@@ -2816,7 +2852,7 @@ CONTAINS
  END SUBROUTINE PARANOX_LUT
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2838,6 +2874,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2870,7 +2907,7 @@ CONTAINS
   END SUBROUTINE InstGet
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2898,7 +2935,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2946,7 +2983,7 @@ CONTAINS
   END SUBROUTINE InstCreate
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2965,7 +3002,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2987,46 +3024,144 @@ CONTAINS
     ! Instance-specific deallocation
     IF ( ASSOCIATED(Inst) ) THEN
 
+       !---------------------------------------------------------------------
+       ! Deallocate fields of Inst before popping off from the list
+       ! in order to avoid memory leaks (Bob Yantosca (17 Aug 2022)
+       !---------------------------------------------------------------------
+       IF ( ASSOCIATED( Inst%ShipNO ) ) THEN
+          DEALLOCATE ( Inst%ShipNO )
+       ENDIF
+       Inst%ShipNO => NULL()
+
+       IF ( ASSOCIATED( Inst%SC5 ) ) THEN
+          DEALLOCATE ( Inst%SC5 )
+       ENDIF
+       Inst%SC5 => NULL()
+
+       IF ( ASSOCIATED( Inst%FRACNOX_LUT02 ) ) THEN
+          DEALLOCATE( Inst%FRACNOX_LUT02 )
+       ENDIF
+       Inst%FRACNOX_LUT02 => NULL()
+
+       IF ( ASSOCIATED( Inst%FRACNOX_LUT06 ) ) THEN
+          DEALLOCATE( Inst%FRACNOX_LUT06 )
+       ENDIF
+       Inst%FRACNOX_LUT06 => NULL()
+
+       IF ( ASSOCIATED( Inst%FRACNOX_LUT10 ) ) THEN
+          DEALLOCATE( Inst%FRACNOX_LUT10 )
+       ENDIF
+       Inst%FRACNOX_LUT10 => NULL()
+
+       IF ( ASSOCIATED( Inst%FRACNOX_LUT14 ) ) THEN
+          DEALLOCATE( Inst%FRACNOX_LUT14 )
+       ENDIF
+       Inst%FRACNOX_LUT14 => NULL()
+
+       IF ( ASSOCIATED( Inst%FRACNOX_LUT18 ) ) THEN
+          DEALLOCATE( Inst%FRACNOX_LUT18 )
+       ENDIF
+       Inst%FRACNOX_LUT18 => NULL()
+
+       IF ( ASSOCIATED( Inst%OPE_LUT02 ) ) THEN
+          DEALLOCATE( Inst%OPE_LUT02 )
+       ENDIF
+       Inst%OPE_LUT02 => NULL()
+
+       IF ( ASSOCIATED( Inst%OPE_LUT06 ) ) THEN
+          DEALLOCATE( Inst%OPE_LUT06 )
+       ENDIF
+       Inst%OPE_LUT06 => NULL()
+
+       IF ( ASSOCIATED( Inst%OPE_LUT10 ) ) THEN
+          DEALLOCATE( Inst%OPE_LUT10 )
+       ENDIF
+       Inst%OPE_LUT10 => NULL()
+
+       IF ( ASSOCIATED( Inst%OPE_LUT14 ) ) THEN
+          DEALLOCATE( Inst%OPE_LUT14 )
+       ENDIF
+       Inst%OPE_LUT14 => NULL()
+
+       IF ( ASSOCIATED( Inst%OPE_LUT18 ) ) THEN
+          DEALLOCATE( Inst%OPE_LUT18 )
+       ENDIF
+       Inst%OPE_LUT18 => NULL()
+
+       IF ( ASSOCIATED( Inst%MOE_LUT02 ) ) THEN
+          DEALLOCATE( Inst%MOE_LUT02 )
+       ENDIF
+       Inst%MOE_LUT02 => NULL()
+
+       IF ( ASSOCIATED( Inst%MOE_LUT06 ) ) THEN
+          DEALLOCATE( Inst%MOE_LUT06 )
+       ENDIF
+       Inst%MOE_LUT06 => NULL()
+
+       IF ( ASSOCIATED( Inst%MOE_LUT10 ) ) THEN
+          DEALLOCATE( Inst%MOE_LUT10 )
+       ENDIF
+       Inst%MOE_LUT10 => NULL()
+
+       IF ( ASSOCIATED( Inst%MOE_LUT14 ) ) THEN
+          DEALLOCATE( Inst%MOE_LUT14 )
+       ENDIF
+       Inst%MOE_LUT14 => NULL()
+
+       IF ( ASSOCIATED( Inst%MOE_LUT18 ) ) THEN
+          DEALLOCATE( Inst%MOE_LUT18 )
+       ENDIF
+       Inst%MOE_LUT18 => NULL()
+
+       IF ( ASSOCIATED( Inst%DNOx_LUT02 ) ) THEN
+          DEALLOCATE( Inst%DNOx_LUT02 )
+       ENDIF
+       Inst%DNOx_LUT02 => NULL()
+
+       IF ( ASSOCIATED( Inst%DNOx_LUT06 ) ) THEN
+          DEALLOCATE( Inst%DNOx_LUT06 )
+       ENDIF
+       Inst%DNOx_LUT06 => NULL()
+
+       IF ( ASSOCIATED( Inst%DNOx_LUT10 ) ) THEN
+          DEALLOCATE( Inst%DNOx_LUT10 )
+       ENDIF
+       Inst%DNOx_LUT10 => NULL()
+
+       IF ( ASSOCIATED( Inst%DNOx_LUT14 ) ) THEN
+          DEALLOCATE( Inst%DNOx_LUT14 )
+       ENDIF
+       Inst%DNOx_LUT14 => NULL()
+
+       IF ( ASSOCIATED( Inst%DNOx_LUT18 ) ) THEN
+          DEALLOCATE( Inst%DNOx_LUT18 )
+       ENDIF
+       Inst%DNOx_LUT18 => NULL()
+
+       IF ( ASSOCIATED( Inst%DEPO3 ) ) THEN
+          DEALLOCATE( Inst%DEPO3  )
+       ENDIF
+       Inst%DEPO3 => NULL()
+
+       IF ( ASSOCIATED( Inst%DEPHNO3 ) ) THEN
+          DEALLOCATE( Inst%DEPHNO3 )
+       ENDIF
+       Inst%DEPHNO3 => NULL()
+
+       !---------------------------------------------------------------------
        ! Pop off instance from list
+       !---------------------------------------------------------------------
        IF ( ASSOCIATED(PrevInst) ) THEN
-
-          IF ( ASSOCIATED( Inst%ShipNO) ) DEALLOCATE ( Inst%ShipNO )
-          IF ( ASSOCIATED( Inst%SC5   ) ) DEALLOCATE ( Inst%SC5    )
-
-          IF ( ASSOCIATED( Inst%FRACNOX_LUT02 ) ) DEALLOCATE( Inst%FRACNOX_LUT02 )
-          IF ( ASSOCIATED( Inst%FRACNOX_LUT06 ) ) DEALLOCATE( Inst%FRACNOX_LUT06 )
-          IF ( ASSOCIATED( Inst%FRACNOX_LUT10 ) ) DEALLOCATE( Inst%FRACNOX_LUT10 )
-          IF ( ASSOCIATED( Inst%FRACNOX_LUT14 ) ) DEALLOCATE( Inst%FRACNOX_LUT14 )
-          IF ( ASSOCIATED( Inst%FRACNOX_LUT18 ) ) DEALLOCATE( Inst%FRACNOX_LUT18 )
-
-          IF ( ASSOCIATED( Inst%OPE_LUT02     ) ) DEALLOCATE( Inst%OPE_LUT02     )
-          IF ( ASSOCIATED( Inst%OPE_LUT06     ) ) DEALLOCATE( Inst%OPE_LUT06     )
-          IF ( ASSOCIATED( Inst%OPE_LUT10     ) ) DEALLOCATE( Inst%OPE_LUT10     )
-          IF ( ASSOCIATED( Inst%OPE_LUT14     ) ) DEALLOCATE( Inst%OPE_LUT14     )
-          IF ( ASSOCIATED( Inst%OPE_LUT18     ) ) DEALLOCATE( Inst%OPE_LUT18     )
-
-          IF ( ASSOCIATED( Inst%MOE_LUT02     ) ) DEALLOCATE( Inst%MOE_LUT02     )
-          IF ( ASSOCIATED( Inst%MOE_LUT06     ) ) DEALLOCATE( Inst%MOE_LUT06     )
-          IF ( ASSOCIATED( Inst%MOE_LUT10     ) ) DEALLOCATE( Inst%MOE_LUT10     )
-          IF ( ASSOCIATED( Inst%MOE_LUT14     ) ) DEALLOCATE( Inst%MOE_LUT14     )
-          IF ( ASSOCIATED( Inst%MOE_LUT18     ) ) DEALLOCATE( Inst%MOE_LUT18     )
-
-          IF ( ASSOCIATED( Inst%DNOx_LUT02    ) ) DEALLOCATE( Inst%DNOx_LUT02    )
-          IF ( ASSOCIATED( Inst%DNOx_LUT06    ) ) DEALLOCATE( Inst%DNOx_LUT06    )
-          IF ( ASSOCIATED( Inst%DNOx_LUT10    ) ) DEALLOCATE( Inst%DNOx_LUT10    )
-          IF ( ASSOCIATED( Inst%DNOx_LUT14    ) ) DEALLOCATE( Inst%DNOx_LUT14    )
-          IF ( ASSOCIATED( Inst%DNOx_LUT18    ) ) DEALLOCATE( Inst%DNOx_LUT18    )
-
-          IF ( ASSOCIATED( Inst%DEPO3         ) ) DEALLOCATE( Inst%DEPO3         )
-          IF ( ASSOCIATED( Inst%DEPHNO3       ) ) DEALLOCATE( Inst%DEPHNO3       )
-
           PrevInst%NextInst => Inst%NextInst
        ELSE
           AllInst => Inst%NextInst
        ENDIF
        DEALLOCATE(Inst)
-       Inst => NULL()
     ENDIF
+
+    ! Free pointers before exiting
+    PrevInst => NULL()
+    Inst     => NULL()
 
    END SUBROUTINE InstRemove
 !EOC

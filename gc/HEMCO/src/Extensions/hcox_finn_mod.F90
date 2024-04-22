@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -80,18 +80,7 @@ MODULE HcoX_FINN_Mod
 !
 ! !REVISION HISTORY:
 !  02 Jan 2013 - J. Mao & J.A. Fisher - Initial version, based on GFED3
-!  01 Oct 2013 - J.A. Fisher - Update to only use one input file
-!  05 May 2014 - J.A. Fisher - Replace NOx emissions with NO emissions as part
-!                              of removal of NOx-Ox partitioning
-!  18 Jun 2014 - C. Keller   - Now a HEMCO extension.
-!  03 Jul 2014 - C. Keller   - Added 13 new FINN species
-!  11 Aug 2014 - R. Yantosca - Now get emission factors and NMOC ratios from
-!                              hard-coded statements in hcox_finn_include.H
-!  11 Aug 2014 - R. Yantosca - Now use F90 free-form indentation
-!  11 Aug 2014 - R. Yantosca - Cosmetic changes to ProTeX subroutine headers
-!  11 Jun 2015 - C. Keller   - Update to include individual scale factors and
-!                              masks.
-!  14 Oct 2016 - C. Keller   - Now use HCO_EvalFld instead of HCO_GetPtr.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -185,7 +174,7 @@ MODULE HcoX_FINN_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -220,13 +209,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  02 Jan 2012 - J. Mao & J. Fisher - Initial version, based on GFED3
-!  18 Jun 2014 - C. Keller          - Now a HEMCO extension.
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
-!  10 Mar 2017 - M. Sulprizio- Add SpcArr3D for emitting 65% of biomass
-!                              burning emissions into the PBL and 35% into the
-!                              free troposphere, following code from E.Fischer
-!  24 Apr 2017 - M. Sulprizio- Comment out vertical distribution of biomass
-!                              burning emissions for now.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -242,7 +225,7 @@ CONTAINS
     CHARACTER(LEN=31)   :: PREFIX, FLDNME
     INTEGER             :: NDAYS, cYYYY, cMM, cDD
     REAL(dp)            :: TOTAL
-    CHARACTER(LEN=255)  :: MSG
+    CHARACTER(LEN=255)  :: MSG, LOC
 
     ! Arrays
     REAL(hp), TARGET    :: SpcArr(HcoState%NX,HcoState%NY)
@@ -267,13 +250,17 @@ CONTAINS
     !=======================================================================
     ! HCOX_FINN_Run begins here!
     !=======================================================================
+    LOC = 'HCOX_FINN_Run (HCOX_FINN_MOD.F90)'
 
     ! Return if extension disabled
     IF ( ExtState%FINN <= 0 ) RETURN
 
     ! Enter
-    CALL HCO_ENTER( HcoState%Config%Err, 'HCOX_FINN_RUN (hcox_finn_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Init
     THISTYP => NULL()
@@ -283,7 +270,7 @@ CONTAINS
     CALL InstGet ( ExtState%FINN, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        WRITE(MSG,*) 'Cannot find FINN instance Nr. ', ExtState%FINN
-       CALL HCO_ERROR(HcoState%Config%Err,MSG,RC)
+       CALL HCO_ERROR(MSG,RC)
        RETURN
     ENDIF
 
@@ -307,27 +294,45 @@ CONTAINS
 
        FLDNME = TRIM(PREFIX) // 'VEGTYP1'
        CALL HCO_EvalFld( HcoState, TRIM(FLDNME), Inst%VEGTYP1, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        FLDNME = TRIM(PREFIX) // 'VEGTYP2'
        CALL HCO_EvalFld( HcoState, TRIM(FLDNME), Inst%VEGTYP2, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        FLDNME = TRIM(PREFIX) // 'VEGTYP3'
        CALL HCO_EvalFld( HcoState, TRIM(FLDNME), Inst%VEGTYP3, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        FLDNME = TRIM(PREFIX) // 'VEGTYP4'
        CALL HCO_EvalFld( HcoState, TRIM(FLDNME), Inst%VEGTYP4, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 4', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        FLDNME = TRIM(PREFIX) // 'VEGTYP5'
        CALL HCO_EvalFld( HcoState, TRIM(FLDNME), Inst%VEGTYP5, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 5', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        FLDNME = TRIM(PREFIX) // 'VEGTYP9'
        CALL HCO_EvalFld( HcoState, TRIM(FLDNME), Inst%VEGTYP9, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 6', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
 !       FIRST = .FALSE.
     !ENDIF
@@ -401,7 +406,7 @@ CONTAINS
           ELSEIF ( NF == 6 ) THEN
              THISTYP => Inst%VEGTYP9
           ELSE
-             CALL HCO_ERROR ( HcoState%Config%Err, 'Undefined emission factor', RC )
+             CALL HCO_ERROR ( 'Undefined emission factor', RC )
              RETURN
           ENDIF
 
@@ -422,7 +427,10 @@ CONTAINS
 
        ! Check for masking
        CALL HCOX_SCALE( HcoState, SpcArr, TRIM(Inst%SpcScalFldNme(N)), RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 7', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        SELECT CASE ( Inst%SpcNames(N) )
           CASE ( 'OCPI' )
@@ -512,7 +520,7 @@ CONTAINS
                          RC,       ExtNr=Inst%ExtNr, Cat=-1, Hier=-1 )
        IF ( RC /= HCO_SUCCESS ) THEN
           MSG = 'HCO_EmisAdd error: ' // TRIM(HcoState%Spc(HcoID)%SpcName)
-          CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+          CALL HCO_ERROR(MSG, RC )
           RETURN
        ENDIF
 
@@ -549,7 +557,7 @@ CONTAINS
   END SUBROUTINE HCOX_FINN_Run
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -582,12 +590,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  02 Jan 2013 - J. Mao & J. Fisher - Initial version, based on GFED3
-!  05 May 2014 - J.A. Fisher - Replace NOx emissions with NO emissions as part
-!                              of removal of NOx-Ox partitioning
-!  18 Jun 2014 - C. Keller   - Now a HEMCO extension.
-!  11 Aug 2014 - R. Yantosca - Now get FINN emission factors and species names
-!                              from include file hcox_finn_include.H.
-!  11 Nov 2014 - C. Keller   - Now get hydrophilic fractions through config file
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -612,7 +615,7 @@ CONTAINS
     REAL*8                :: C_MOLEC
     REAL(dp)              :: AdjFact
     REAL(sp)              :: ValSp
-    CHARACTER(LEN=255)    :: MSG, EF_CO2_FILE, VOC_SPEC_FILE
+    CHARACTER(LEN=255)    :: MSG, EF_CO2_FILE, VOC_SPEC_FILE, LOC
 
     ! Temporary variables. These values will be passed to module
     ! array nSpc, SpcNames, etc.
@@ -633,20 +636,24 @@ CONTAINS
     !=======================================================================
     ! HCOX_FINN_INIT begins here!
     !=======================================================================
+    LOC = 'HCOX_FINN_INIT (HCOX_FINN_MOD.F90)'
 
     ! Extension Nr.
     ExtNr = GetExtNr( HcoState%Config%ExtList, TRIM(ExtName) )
     IF ( ExtNr <= 0 ) RETURN
 
     ! Enter
-    CALL HCO_ENTER( HcoState%Config%Err, 'HCOX_FINN_INIT (hcox_finn_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 8', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Create local instance for this simulation
     Inst => NULL()
     CALL InstCreate ( ExtNr, ExtState%FINN, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot create FINN instance', RC )
+       CALL HCO_ERROR ( 'Cannot create FINN instance', RC )
        RETURN
     ENDIF
 
@@ -669,7 +676,10 @@ CONTAINS
     ! Try to read hydrophilic fractions of BC. Defaults to 0.2.
     CALL GetExtOpt( HcoState%Config, ExtNr, 'hydrophilic BC', &
                      OptValSp=ValSp, FOUND=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 9', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. FOUND ) THEN
        Inst%BCPIfrac = 0.2
     ELSE
@@ -679,7 +689,10 @@ CONTAINS
     ! Try to read hydrophilic fractions of OC. Defaults to 0.5.
     CALL GetExtOpt( HcoState%Config, ExtNr, 'hydrophilic OC', &
                      OptValSp=ValSp, FOUND=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 10', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. FOUND ) THEN
        Inst%OCPIfrac = 0.5
     ELSE
@@ -691,14 +704,17 @@ CONTAINS
          Inst%BCPIfrac < 0.0_sp .OR. Inst%BCPIfrac > 1.0_sp     ) THEN
        WRITE(MSG,*) 'hydrophilic fractions must be between 0-1: ', &
           Inst%OCPIfrac, Inst%BCPIfrac
-       CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+       CALL HCO_ERROR(MSG, RC )
        RETURN
     ENDIF
 
     ! Use daily data?
     CALL GetExtOpt( HcoState%Config, ExtNr, 'FINN_daily', &
                      OptValBool=Inst%UseDay, FOUND=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 11', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. FOUND ) THEN
        Inst%UseDay = .FALSE.
     ENDIF
@@ -710,7 +726,7 @@ CONTAINS
     ! FINN species names
     ALLOCATE ( Inst%FINN_SPEC_NAME ( N_SPEC ), STAT=AS )
     IF ( AS/=0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'Cannot allocate FINN_SPEC_NAME', RC )
+       CALL HCO_ERROR( 'Cannot allocate FINN_SPEC_NAME', RC )
        RETURN
     ENDIF
     Inst%FINN_SPEC_NAME = ''
@@ -719,7 +735,7 @@ CONTAINS
     ! scale factors for all FINN species.
     ALLOCATE ( Inst%FINN_EMFAC ( N_SPEC, N_EMFAC ), STAT=AS )
     IF ( AS/=0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'Cannot allocate FINN_EMFAC', RC )
+       CALL HCO_ERROR( 'Cannot allocate FINN_EMFAC', RC )
        RETURN
     ENDIF
     Inst%FINN_EMFAC = 0.0_dp
@@ -730,7 +746,7 @@ CONTAINS
                Inst%SpcScal(nSpcMax), Inst%SpcScalFldNme(nSpcMax), STAT=AS )
 
     IF ( AS/=0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'Cannot allocate FinnIDs', RC )
+       CALL HCO_ERROR( 'Cannot allocate FinnIDs', RC )
        RETURN
     ENDIF
     Inst%nSpc             = 0
@@ -747,7 +763,7 @@ CONTAINS
                Inst%VEGTYP5(HcoState%NX,HcoState%NY), &
                Inst%VEGTYP9(HcoState%NX,HcoState%NY), STAT=AS )
     IF ( AS/=0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'Cannot allocate VEGTYP', RC )
+       CALL HCO_ERROR( 'Cannot allocate VEGTYP', RC )
        RETURN
     ENDIF
     Inst%VEGTYP1 = 0.0_hp
@@ -866,22 +882,31 @@ CONTAINS
 
     ! Get HEMCO species IDs of all species specified in configuration file
     CALL HCO_GetExtHcoID( HcoState, ExtNr, tHcoIDs, tSpcNames, tnSpc, RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 12', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( tnSpc == 0 ) THEN
        MSG = 'No FINN species specified'
-       CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+       CALL HCO_ERROR(MSG, RC )
        RETURN
     ENDIF
 
     ! Get species scale factors
     CALL GetExtSpcVal( HcoState%Config, ExtNr, tnSpc, &
                        tSpcNames, 'Scaling', 1.0_sp, tSpcScal, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 13', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Get species mask fields
     CALL GetExtSpcVal( HcoState%Config, ExtNr, tnSpc, &
                        tSpcNames, 'ScaleField', HCOX_NOSCALE, tSpcScalFldNme, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 14', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Error trap: in previous versions, CO, POA and NAP scale factor were given as
     ! 'CO scale factor', etc. Make sure those attributes do not exist any more!
@@ -900,7 +925,7 @@ CONTAINS
              'This version of HEMCO expects species scale factors to be ' // &
              'set as `Scaling_XX` instead of `XX scale factor`. '         // &
              'Please update the FINN settings section accordingly.'
-       CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+       CALL HCO_ERROR(MSG, RC )
        RETURN
     ENDIF
 
@@ -964,7 +989,7 @@ CONTAINS
                 IF ( Inst%nSpc > nSpcMax ) THEN
                    MSG = 'nSpc greater than nSpcMax, please increase ' // &
                          'parameter `nSpcMax` in hcox_finn_mod.F90'
-                   CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC )
+                   CALL HCO_ERROR ( MSG, RC )
                    RETURN
                 ENDIF
 
@@ -1020,7 +1045,7 @@ CONTAINS
                       ! Normalize by species' molecular weight.
                       ELSE
                          AdjFact = 1.0_dp / MW_CO2 * &
-                                   HcoState%Spc(Inst%HcoIDs(Inst%nSpc))%EmMW_g
+                                   HcoState%Spc(Inst%HcoIDs(Inst%nSpc))%MW_g
                       ENDIF
                       Inst%FINN_EMFAC(N,:) = AdjFact / EMFAC_IN(M,:)
                       IF ( HcoState%amIRoot ) THEN
@@ -1059,15 +1084,12 @@ CONTAINS
                 ! NMOC_RATIO is [mole X] / [kg NMOC]
                 ! To convert NMOC_RATIO to [kg X] / [kg NMOC], we need to
                 ! multiply by the MW of X (kg/mol this time).
-                ! Most (not all) of these species are carried as atoms C,
-                ! so we also multiply here by the number of carbon atoms/molec.
                 IF ( IS_NMOC ) THEN
                    DO M = 1, N_EMFAC
-                      C_MOLEC              = HcoState%Spc(Inst%HcoIDs(Inst%nSpc))%MolecRatio
-                      AdjFact              = HcoState%Spc(Inst%HcoIDs(Inst%nSpc))%EmMW_g
-                      Inst%FINN_EMFAC(N,M) = NMOC_EMFAC(M)             * &
-                                           ( NMOC_RATIO(M) * C_MOLEC ) * &
-                                           ( AdjFact       * 1e-3_hp )
+                      AdjFact = HcoState%Spc(Inst%HcoIDs(Inst%nSpc))%MW_g
+                      Inst%FINN_EMFAC(N,M) = NMOC_EMFAC(M) * &
+                                             NMOC_RATIO(M) * &
+                                             ( AdjFact * 1e-3_hp )
                    ENDDO
                 ENDIF
              ENDIF
@@ -1124,7 +1146,7 @@ CONTAINS
        ! in FINN.
        IF ( .NOT. Matched ) THEN
           MSG = 'Species '// TRIM(SpcName) //' not found in FINN'
-          CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+          CALL HCO_ERROR(MSG, RC )
           RETURN
        ENDIF
     ENDDO !L
@@ -1155,7 +1177,7 @@ CONTAINS
   END SUBROUTINE HCOX_FINN_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1175,7 +1197,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  02 Jan 2013 - J. Mao & J. Fisher - Initial version, based on GFED3
-!  18 Jun 2014 - C. Keller          - Now a HEMCO extension.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1189,7 +1211,7 @@ CONTAINS
   END SUBROUTINE HCOX_FINN_Final
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1211,6 +1233,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1243,7 +1266,7 @@ CONTAINS
   END SUBROUTINE InstGet
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1271,7 +1294,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1319,7 +1342,7 @@ CONTAINS
   END SUBROUTINE InstCreate
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1338,7 +1361,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1360,33 +1383,89 @@ CONTAINS
     ! Instance-specific deallocation
     IF ( ASSOCIATED(Inst) ) THEN
 
+       !---------------------------------------------------------------------
+       ! Deallocate fields of Inst before popping off from the list
+       ! in order to avoid memory leaks (Bob Yantosca (17 Aug 2022)
+       !---------------------------------------------------------------------
+       IF ( ASSOCIATED( Inst%VEGTYP1 ) ) THEN
+          DEALLOCATE( Inst%VEGTYP1 )
+       ENDIF
+       Inst%VEGTYP1 => NULL()
+
+       IF ( ASSOCIATED( Inst%VEGTYP2 ) ) THEN
+          DEALLOCATE( Inst%VEGTYP2 )
+       ENDIF
+       Inst%VEGTYP2 => NULL()
+
+       IF ( ASSOCIATED( Inst%VEGTYP3 ) ) THEN
+          DEALLOCATE( Inst%VEGTYP3 )
+       ENDIF
+       Inst%VEGTYP3 => NULL()
+
+       IF ( ASSOCIATED( Inst%VEGTYP4 ) ) THEN
+          DEALLOCATE(Inst%VEGTYP4 )
+       ENDIF
+       Inst%VEGTYP4 => NULL()
+
+       IF ( ASSOCIATED( Inst%VEGTYP5 ) ) THEN
+          DEALLOCATE( Inst%VEGTYP5 )
+       ENDIF
+       Inst%VEGTYP5 => NULL()
+
+       IF ( ASSOCIATED( Inst%VEGTYP9 ) ) THEN
+          DEALLOCATE( Inst%VEGTYP9 )
+       ENDIF
+       Inst%VEGTYP9 => NULL()
+
+       IF ( ASSOCIATED( Inst%FINN_EMFAC ) ) THEN
+          DEALLOCATE( Inst%FINN_EMFAC )
+       ENDIF
+       Inst%FINN_EMFAC => NULL()
+
+       IF ( ASSOCIATED( Inst%FinnIDs ) ) THEN
+          DEALLOCATE( Inst%FinnIDs )
+       ENDIF
+       Inst%FinnIDs => NULL()
+
+       IF ( ASSOCIATED( Inst%HcoIDs ) ) THEN 
+          DEALLOCATE( Inst%HcoIDs )
+       ENDIF
+       Inst%HcoIDs => NULL()
+
+       IF ( ASSOCIATED( Inst%SpcNames ) ) THEN
+          DEALLOCATE( Inst%SpcNames )
+       ENDIF
+       Inst%SpcNames => NULL()
+
+       IF ( ASSOCIATED( Inst%SpcScalFldNme ) ) THEN
+          DEALLOCATE( Inst%SpcScalFldNme )
+       ENDIF
+       Inst%SpcScalFldNme  => NULL()
+
+       IF ( ASSOCIATED( Inst%SpcScal ) ) THEN
+          DEALLOCATE( Inst%SpcScal )
+       ENDIF
+       Inst%SpcScal => NULL()
+
+       IF ( ASSOCIATED( Inst%FINN_SPEC_NAME ) ) THEN
+          DEALLOCATE( Inst%FINN_SPEC_NAME )
+       ENDIF
+       Inst%FINN_SPEC_NAME => NULL()
+
+       !---------------------------------------------------------------------
        ! Pop off instance from list
+       !---------------------------------------------------------------------
        IF ( ASSOCIATED(PrevInst) ) THEN
-
-          ! Free pointers
-          IF ( ASSOCIATED( Inst%VEGTYP1 ) ) DEALLOCATE( Inst%VEGTYP1 )
-          IF ( ASSOCIATED( Inst%VEGTYP2 ) ) DEALLOCATE( Inst%VEGTYP2 )
-          IF ( ASSOCIATED( Inst%VEGTYP3 ) ) DEALLOCATE( Inst%VEGTYP3 )
-          IF ( ASSOCIATED( Inst%VEGTYP4 ) ) DEALLOCATE( Inst%VEGTYP4 )
-          IF ( ASSOCIATED( Inst%VEGTYP5 ) ) DEALLOCATE( Inst%VEGTYP5 )
-          IF ( ASSOCIATED( Inst%VEGTYP9 ) ) DEALLOCATE( Inst%VEGTYP9 )
-
-          ! Cleanup module arrays
-          IF ( ASSOCIATED( Inst%FINN_EMFAC     )) DEALLOCATE( Inst%FINN_EMFAC     )
-          IF ( ASSOCIATED( Inst%FinnIDs        )) DEALLOCATE( Inst%FinnIDs        )
-          IF ( ASSOCIATED( Inst%HcoIDs         )) DEALLOCATE( Inst%HcoIDs         )
-          IF ( ASSOCIATED( Inst%SpcNames       )) DEALLOCATE( Inst%SpcNames       )
-          IF ( ASSOCIATED( Inst%SpcScalFldNme  )) DEALLOCATE( Inst%SpcScalFldNme  )
-          IF ( ASSOCIATED( Inst%SpcScal        )) DEALLOCATE( Inst%SpcScal        )
-          IF ( ASSOCIATED( Inst%FINN_SPEC_NAME )) DEALLOCATE( Inst%FINN_SPEC_NAME )
-
           PrevInst%NextInst => Inst%NextInst
        ELSE
           AllInst => Inst%NextInst
        ENDIF
        DEALLOCATE(Inst)
-       Inst => NULL()
     ENDIF
+
+    ! Free pointers before exiting
+    PrevInst => NULL()
+    Inst     => NULL()
 
    END SUBROUTINE InstRemove
 !EOC

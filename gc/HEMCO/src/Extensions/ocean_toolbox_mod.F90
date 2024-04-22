@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -69,8 +69,7 @@ MODULE Ocean_ToolBox_Mod
 !
 ! !REVISION HISTORY:
 !  11 Apr 2013 - C. Keller: Adapted from F. Paulot
-!  03 Oct 2-14 - C. Keller: Added error trap for negative Schmidt numbers
-!  10 Mar 2017 - M. Sulprizio- Add function Schmidt_Ald2
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -78,7 +77,7 @@ MODULE Ocean_ToolBox_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -128,11 +127,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2013 - C. Keller: Adapted from F. Paulot
-!  21 May 2013 - C. Keller: SCW added to argument list
-!  15 Aug 2014 - C. Keller: Now limit temperature to -40 degC to avoid overflow
-!                           error. Also added error trap for temperatures
-!                           between -10.7 and -10.9 degrees that cause a div-zero
-!                           error in subroutine N_SW.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -196,7 +191,7 @@ CONTAINS
   END SUBROUTINE Calc_Kg
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -220,6 +215,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2013 - C. Keller: Adapted from F. Paulot
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -255,7 +251,7 @@ CONTAINS
   END FUNCTION Calc_Ka
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -281,6 +277,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2013 - C. Keller: Adapted from F. Paulot
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -330,7 +327,7 @@ CONTAINS
   END FUNCTION Calc_Kl
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -354,7 +351,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2013 - C. Keller   - Adapted from F. Paulot
-!   1 Jul 2014 - R. Yantosca - Bug fix: Don't take LOG(NI) if NI is zero
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -430,7 +427,7 @@ CONTAINS
   END FUNCTION N_SW
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -454,6 +451,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2013 - C. Keller: Adapted from F. Paulot
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -482,7 +480,7 @@ CONTAINS
   END FUNCTION P_SW
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -505,6 +503,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2013 - C. Keller: Adapted from F. Paulot
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -525,7 +524,7 @@ CONTAINS
   END FUNCTION  V_SW
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -549,6 +548,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2013 - C. Keller: Adapted from F. Paulot
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -566,7 +566,7 @@ CONTAINS
   END FUNCTION D_WC
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -590,6 +590,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2013 - C. Keller: Adapted from F. Paulot
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -608,7 +609,7 @@ CONTAINS
   END FUNCTION D_HM
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -632,6 +633,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2013 - C. Keller: Adapted from F. Paulot
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -645,7 +647,7 @@ CONTAINS
   END FUNCTION Schmidt_W
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -669,6 +671,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2013 - C. Keller: Adapted from F. Paulot
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -682,7 +685,7 @@ CONTAINS
   END FUNCTION Schmidt_Saltzmann
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -712,6 +715,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Aug 2013 - C. Keller: Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -725,7 +729,7 @@ CONTAINS
   END FUNCTION Schmidt_Acet
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -760,6 +764,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Mar 2017 - M. Sulprizio- Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -773,7 +778,7 @@ CONTAINS
   END FUNCTION Schmidt_Ald2
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -796,6 +801,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2013 - C. Keller: Adapted from F. Paulot
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -820,7 +826,7 @@ CONTAINS
   END FUNCTION N_Air
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -843,6 +849,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2013 - C. Keller: Adapted from F. Paulot
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -864,7 +871,7 @@ CONTAINS
   END FUNCTION P_Air
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -887,6 +894,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2013 - C. Keller: Adapted from F. Paulot
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -900,7 +908,7 @@ CONTAINS
   END FUNCTION V_Air
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -927,6 +935,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2013 - C. Keller: Adapted from F. Paulot
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -954,7 +963,7 @@ CONTAINS
   END FUNCTION D_Air
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -977,6 +986,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2013 - C. Keller: Adapted from F. Paulot
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC

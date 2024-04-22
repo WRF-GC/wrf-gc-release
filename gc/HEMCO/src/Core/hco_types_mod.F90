@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -63,33 +63,22 @@ MODULE HCO_TYPES_MOD
   INTEGER, PARAMETER, PUBLIC  :: HCO_DCTTYPE_SCAL = 2
   INTEGER, PARAMETER, PUBLIC  :: HCO_DCTTYPE_MASK = 3
 
-  ! PBL level flag
+  ! Emission level unit flag
   INTEGER, PARAMETER, PUBLIC  :: HCO_EMISL_PBL = 0
   INTEGER, PARAMETER, PUBLIC  :: HCO_EMISL_LEV = 1
   INTEGER, PARAMETER, PUBLIC  :: HCO_EMISL_M   = 2
+  INTEGER, PARAMETER, PUBLIC  :: HCO_EMISL_TOP = 3
 !
 ! !PUBLIC TYPES:
 !
   !=========================================================================
   ! HcoSpc: Derived type for HEMCO species
-  !
-  ! Notes:
-  ! **1 The emission molecular weight is the molecular weight of the
-  !     emitted compound. This value is only different to MW_g if the
-  !     emitted compound does not correspond to the transported species,
-  !     e.g. if emissions are in kg C4H10 but the corresponding species
-  !     is transported as mass Carbon.
-  ! **2 MolecRatio is the ratio between # of species molecules per emitted
-  !       molecule, e.g. 4 if emissions are kg C4H10 but model species
-  !       are kg C.
   !=========================================================================
   TYPE :: HcoSpc
      INTEGER                 :: HcoID      ! HEMCO species ID
      INTEGER                 :: ModID      ! Model species ID
      CHARACTER(LEN= 31)      :: SpcName    ! species names
-     REAL(hp)                :: MW_g       ! species molecular wt.     (g/mol)
-     REAL(hp)                :: EmMW_g     ! emission molecular wt.**1 (g/mol)
-     REAL(hp)                :: MolecRatio ! molecule emission ratio**2 (-)
+     REAL(hp)                :: MW_g       ! species molecular weight [g/mol]
      REAL(hp)                :: HenryK0    ! liq. over gas Henry const [M/atm]
      REAL(hp)                :: HenryCR    ! K0 temp. dependency [K]
      REAL(hp)                :: HenryPKA   ! pKa for Henry const. correction
@@ -105,6 +94,11 @@ MODULE HCO_TYPES_MOD
      INTEGER                 :: HcoID      ! HEMCO species ID
      INTEGER                 :: ModID      ! Model species ID
      CHARACTER(LEN= 31)      :: SpcName    ! species names
+#ifdef MODEL_CESM
+     INTEGER                 :: DimMax     ! Maximum dimensions supported: 2 (2-D), 3 (3-D)
+                                           ! CESM model only, as 3-D emissions must be listed
+                                           ! in extfrc_list to be supported by CESM/CAM.
+#endif
   END TYPE ModSpc
 
   !=========================================================================
@@ -370,6 +364,7 @@ MODULE HCO_TYPES_MOD
      REAL(hp)                    :: EmisL2     ! emission level 2
      INTEGER                     :: EmisL1Unit ! emission level 1 unit
      INTEGER                     :: EmisL2Unit ! emission level 2 unit
+     INTEGER                     :: EmisLmode  ! emission level mode: 1 or 2
      INTEGER                     :: nt        ! time dimension: length of Arr
      INTEGER                     :: DeltaT    ! temp. resolution of array [h]
      LOGICAL                     :: IsLocTime ! local time?
@@ -534,17 +529,15 @@ MODULE HCO_TYPES_MOD
      INTEGER                        :: HcoDiagnIDDefault = -999
      INTEGER                        :: HcoDiagnIDRestart = -999
      INTEGER                        :: HcoDiagnIDManual  = -999
+#ifdef ADJOINT
+     INTEGER                        :: HcoDiagnIDAdjoint = -999
+#endif
      INTEGER                        :: nnCollections     = 0
   END TYPE DiagnBundle
 !
 ! !REVISION HISTORY:
 !  15 Feb 2016 - C. Keller   - Initial version (collected from various modules)
-!  12 May 2017 - C. Keller   - Added option ScaleEmis
-!  05 Oct 2018 - R. Yantosca - Added HCO_UFLAG_ONCE parameter
-!  23 Oct 2018 - M. Sulprizio- Added derived type for external model species
-!                              to ConfigObj to facilitate reading GEOS-Chem
-!                              restart file via HEMCO.
-!  07 Feb 2019 - C. Keller   - Added ReadList read counter.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC

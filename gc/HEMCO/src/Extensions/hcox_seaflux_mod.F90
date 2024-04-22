@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -91,16 +91,7 @@ MODULE HCOX_SeaFlux_Mod
 !
 ! !REVISION HISTORY:
 !  16 Apr 2013 - C. Keller   - Initial version
-!  01 Oct 2013 - C. Keller   - Now a HEMCO extension module
-!  11 Dec 2013 - C. Keller   - Now define container name during initialization
-!  01 Jul 2014 - R. Yantosca - Now use F90 free-format indentation
-!  01 Jul 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  06 Nov 2015 - C. Keller   - Now use land type definitions instead of FRCLND
-!  14 Oct 2016 - C. Keller   - Now use HCO_EvalFld instead of HCO_GetPtr.
-!  10 Mar 2017 - M. Sulprizio- Add fix for acetone parameterization of Schmidt
-!                              number - use SCWPAR = 3 instead of 1
-!  11 Sep 2018 - C. Keller   - Added instances wrapper
-!  08 May 2019 - J. Fisher   - Add C1-C2 alkyl nitrates (MENO3, ETNO3)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !
@@ -131,7 +122,7 @@ MODULE HCOX_SeaFlux_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -163,7 +154,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  16 Apr 2013 - C. Keller - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -177,7 +168,7 @@ CONTAINS
     REAL(hp), TARGET      :: SINK  (HcoState%NX,HcoState%NY)
     REAL(hp), TARGET      :: SeaConc(HcoState%NX,HcoState%NY)
     CHARACTER(LEN=255)    :: ContName
-    CHARACTER(LEN=255)    :: MSG
+    CHARACTER(LEN=255)    :: MSG, LOC
     LOGICAL               :: VERBOSE
 
     ! Pointers
@@ -186,10 +177,14 @@ CONTAINS
     !=================================================================
     ! HCOX_SeaFlux_Run begins here!
     !=================================================================
+    LOC = 'HCOX_SeaFlux_Run (HCOX_SEAFLUX_MOD.F90)'
 
     ! Enter
-    CALL HCO_ENTER( HcoState%Config%Err, 'HCOX_SeaFlux_Run (hcox_seaflux_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Return if extension disabled
     IF ( ExtState%SeaFlux <= 0 ) RETURN
@@ -205,7 +200,7 @@ CONTAINS
     CALL InstGet ( ExtState%SeaFlux, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        WRITE(MSG,*) 'Cannot find SeaFlux instance Nr. ', ExtState%SeaFlux
-       CALL HCO_ERROR(HcoState%Config%Err,MSG,RC)
+       CALL HCO_ERROR(MSG,RC)
        RETURN
     ENDIF
 
@@ -236,27 +231,39 @@ CONTAINS
        ! Get seawater concentration of given compound (from HEMCO core).
        ContName = TRIM(Inst%OcSpecs(OcID)%OcDataName)
        CALL HCO_EvalFld ( HcoState, ContName, SeaConc, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        ! Calculate oceanic source (kg/m2/s) as well as the deposition
        ! velocity (1/s).
        CALL Calc_SeaFlux ( HcoState, ExtState, Inst,    &
                            SOURCE,   SINK,     SeaConc, &
                            OcID,     HcoID,    RC       )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        ! Set flux in HEMCO object [kg/m2/s]
        CALL HCO_EmisAdd ( HcoState, SOURCE, HcoID, RC, ExtNr=Inst%ExtNr )
        IF ( RC /= HCO_SUCCESS ) THEN
           MSG = 'HCO_EmisAdd error: ' // TRIM(Inst%OcSpecs(OcID)%OcSpcName)
-          CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+          CALL HCO_ERROR(MSG, RC )
           RETURN
        ENDIF
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        ! Set deposition velocity in HEMCO object [1/s]
        CALL HCO_DepvAdd ( HcoState, SINK, HcoID, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 4', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        ! Free pointers
        !SeaConc => NULL()
@@ -281,7 +288,7 @@ CONTAINS
   END SUBROUTINE HCOX_SeaFlux_Run
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -305,8 +312,9 @@ CONTAINS
 !
 ! !USES:
 !
+    USE ieee_arithmetic,    ONLY : ieee_is_finite
     USE Ocean_ToolBox_Mod,  ONLY : CALC_KG
-    USE Henry_Mod,          ONLY : CALC_KH, CALC_HEFF
+    USE Hco_Henry_Mod,      ONLY : CALC_KH, CALC_HEFF
     USE HCO_CALC_MOD,       ONLY : HCO_CheckDepv
     USE HCO_GeoTools_Mod,   ONLY : HCO_LANDTYPE
 !
@@ -337,15 +345,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  16 Apr 2013 - C. Keller   - Initial version
-!  15 Aug 2014 - C. Keller   - Now restrict calculations to temperatures above
-!                              10 deg C.
-!  03 Oct 2014 - C. Keller   - Added surface temperature limit of 45 degrees C
-!                              to avoid negative Schmidt numbers.
-!  07 Oct 2014 - C. Keller   - Now use skin temperature instead of air temperature
-!  06 Mar 2015 - C. Keller   - Now calculate deposition rate over entire PBL.
-!  14 Oct 2015 - R. Yantosca - Pulled variables MW, VB, SCW out of the parallel
-!                              loop.
-!  06 Nov 2015 - C. Keller   - Now use HCO_LANDTYPE instead of FRCLND
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -375,15 +375,19 @@ CONTAINS
     REAL(dp), PARAMETER :: TMAX = 318.15_dp
 
     ! Error handling
-    CHARACTER(LEN=255)  :: MSG
+    CHARACTER(LEN=255)  :: MSG, LOC
 
     !=================================================================
     ! CALC_SEAFLUX begins here!
     !=================================================================
+    LOC = 'CALC_SEAFLUX (HCOX_SEAFLUX_MOD.F90)'
 
     ! Enter
-    CALL HCO_ENTER( HcoState%Config%Err, 'Calc_SeaFlux (hcox_seaflux_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 5', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Init
     SOURCE  = 0.0_hp
@@ -426,14 +430,14 @@ CONTAINS
     DO I = 1, HcoState%NX
 
        ! Make sure we have no negative seawater concentrations
-       IF ( SeaConc(I,J) < 0.0_sp ) SeaConc(I,J) = 0.0_sp
-
-       ! Assume no air-sea exchange over snow/ice (ALBEDO > 0.4)
-       IF ( ExtState%ALBD%Arr%Val(I,J) > 0.4_hp ) CYCLE
+       IF ( SeaConc(I,J) < 0.0_hp ) SeaConc(I,J) = 0.0_hp
 
        ! Do only over the ocean:
-       IF ( HCO_LANDTYPE( ExtState%WLI%Arr%Val(I,J), &
-                          ExtState%ALBD%Arr%Val(I,J) ) == 0 ) THEN
+       IF ( HCO_LANDTYPE( ExtState%FRLAND%Arr%Val(I,J),   &
+                          ExtState%FRLANDIC%Arr%Val(I,J), &
+                          ExtState%FROCEAN%Arr%Val(I,J),  &
+                          ExtState%FRSEAICE%Arr%Val(I,J), &
+                          ExtState%FRLAKE%Arr%Val(I,J)) == 0 ) THEN
 
           !-----------------------------------------------------------
           ! Get grid box and species specific quantities
@@ -553,7 +557,7 @@ CONTAINS
 
     ! Check exit status
     IF ( RC /= HCO_SUCCESS ) THEN
-       CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+       CALL HCO_ERROR(MSG, RC )
        RETURN
     ENDIF
 
@@ -569,7 +573,7 @@ CONTAINS
   END SUBROUTINE Calc_SeaFlux
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -655,6 +659,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  16 Apr 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -664,7 +669,7 @@ CONTAINS
     ! Scalars
     TYPE(MyInst), POINTER          :: Inst
     INTEGER                        :: ExtNr, I, J, nSpc
-    CHARACTER(LEN=255)             :: NAME_OC, MSG, ERR
+    CHARACTER(LEN=255)             :: NAME_OC, MSG, ERR, LOC
 
     ! Arrays
     INTEGER,           ALLOCATABLE :: HcoIDs(:)
@@ -673,20 +678,24 @@ CONTAINS
     !=================================================================
     ! HCOX_SeaFlux_Init begins here!
     !=================================================================
+    LOC = 'HCOX_SeaFlux_Init (HCOX_SEAFLUX_MOD.F90)'
 
     ! Extension Nr.
     ExtNr = GetExtNr( HcoState%Config%ExtList, TRIM(ExtName) )
     IF ( ExtNr <= 0 ) RETURN
 
     ! Enter
-    CALL HCO_ENTER( HcoState%Config%Err, 'HCOX_SeaFlux_Init (hcox_seaflux_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 6', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     ERR = 'nOcSpc too low!'
 
     ! Create instance for this simulation
     CALL InstCreate ( ExtNr, ExtState%SeaFlux, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot create SeaFlux instance', RC )
+       CALL HCO_ERROR ( 'Cannot create SeaFlux instance', RC )
        RETURN
     ENDIF
 
@@ -724,7 +733,7 @@ CONTAINS
 
     I = I + 1
     IF ( I > Inst%nOcSpc ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, ERR, RC )
+       CALL HCO_ERROR ( ERR, RC )
        RETURN
     ENDIF
 
@@ -739,7 +748,7 @@ CONTAINS
 
     I = I + 1
     IF ( I > Inst%nOcSpc ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, ERR, RC )
+       CALL HCO_ERROR ( ERR, RC )
        RETURN
     ENDIF
 
@@ -754,7 +763,7 @@ CONTAINS
 
     I = I + 1
     IF ( I > Inst%nOcSpc ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, ERR, RC )
+       CALL HCO_ERROR ( ERR, RC )
        RETURN
     ENDIF
 
@@ -769,7 +778,7 @@ CONTAINS
 
     I = I + 1
     IF ( I > Inst%nOcSpc ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, ERR, RC )
+       CALL HCO_ERROR ( ERR, RC )
        RETURN
     ENDIF
 
@@ -830,7 +839,10 @@ CONTAINS
 
     ! HEMCO species IDs of species names defined in config. file
     CALL HCO_GetExtHcoID( HcoState, ExtNr, HcoIDs, SpcNames, nSpc, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 7', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Set information in module variables
     DO I = 1, Inst%nOcSpc
@@ -863,8 +875,11 @@ CONTAINS
     ExtState%U10M%DoUse        = .TRUE.
     ExtState%V10M%DoUse        = .TRUE.
     ExtState%TSKIN%DoUse       = .TRUE.
-    ExtState%ALBD%DoUse        = .TRUE.
-    ExtState%WLI%DoUse         = .TRUE.
+    ExtState%FRLAND%DoUse      = .TRUE.
+    ExtState%FRLANDIC%DoUse    = .TRUE.
+    ExtState%FROCEAN%DoUse     = .TRUE.
+    ExtState%FRSEAICE%DoUse    = .TRUE.
+    ExtState%FRLAKE%DoUse      = .TRUE.
     IF ( HcoState%Options%PBL_DRYDEP ) THEN
        ExtState%FRAC_OF_PBL%DoUse = .TRUE.
     ENDIF
@@ -881,7 +896,7 @@ CONTAINS
   END SUBROUTINE HCOX_SeaFlux_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -901,6 +916,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  16 Apr 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -915,7 +931,7 @@ CONTAINS
   END SUBROUTINE HCOX_SeaFlux_Final
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -937,6 +953,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -969,7 +986,7 @@ CONTAINS
   END SUBROUTINE InstGet
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -997,7 +1014,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1046,7 +1063,7 @@ CONTAINS
   END SUBROUTINE InstCreate
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1065,7 +1082,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1087,16 +1104,29 @@ CONTAINS
     ! Instance-specific deallocation
     IF ( ASSOCIATED(Inst) ) THEN
 
+       !---------------------------------------------------------------------
+       ! Deallocate fields of Inst before popping off from the list
+       ! in order to avoid memory leaks (Bob Yantosca (17 Aug 2022)
+       !---------------------------------------------------------------------
+       IF ( ASSOCIATED( Inst%OcSpecs ) ) THEN
+          DEALLOCATE( Inst%OcSpecs )
+       ENDIF
+       Inst%OcSpecs => NULL()
+
+       !---------------------------------------------------------------------
        ! Pop off instance from list
+       !---------------------------------------------------------------------
        IF ( ASSOCIATED(PrevInst) ) THEN
-          IF ( ASSOCIATED( Inst%OcSpecs )) DEALLOCATE( Inst%OcSpecs )
           PrevInst%NextInst => Inst%NextInst
        ELSE
           AllInst => Inst%NextInst
        ENDIF
        DEALLOCATE(Inst)
-       Inst => NULL()
     ENDIF
+
+    ! Free pointers before exiting
+    PrevInst => NULL()
+    Inst     => NULL()
 
    END SUBROUTINE InstRemove
 !EOC

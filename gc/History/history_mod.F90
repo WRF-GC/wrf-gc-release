@@ -66,6 +66,7 @@ MODULE History_Mod
   INTEGER,                 ALLOCATABLE :: CollectionSubsetInd  (:,:)
   CHARACTER(LEN=255),      ALLOCATABLE :: CollectionLevels     (:  )
   INTEGER,                 ALLOCATABLE :: CollectionLevelInd   (:,:)
+  CHARACTER(LEN=255),      ALLOCATABLE :: CollectionHrRange    (:  )
 
   ! Objects
   TYPE(MetaHistContainer), POINTER     :: CollectionList
@@ -104,7 +105,8 @@ CONTAINS
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE History_Init( Input_Opt, State_Met, State_Chm, State_Diag, RC )
+  SUBROUTINE History_Init( Input_Opt,  State_Met,  State_Chm,                &
+                           State_Diag, State_Grid, RC                       )
 !
 ! !USES:
 !
@@ -113,18 +115,23 @@ CONTAINS
     USE Input_Opt_Mod,      ONLY : OptInput
     USE State_Chm_Mod ,     ONLY : ChmState
     USE State_Diag_Mod,     ONLY : DgnState
+    USE State_Grid_Mod,     ONLY : GrdState
     USE State_Met_Mod,      ONLY : MetState
 !
 ! !INPUT PARAMETERS:
 !
-    TYPE(OptInput),   INTENT(IN)  :: Input_Opt
-    TYPE(ChmState),   INTENT(IN)  :: State_Chm
-    TYPE(DgnState),   INTENT(IN)  :: State_Diag
-    TYPE(MetState),   INTENT(IN)  :: State_Met
+    TYPE(OptInput),   INTENT(IN)    :: Input_Opt    ! Input Option object
+    TYPE(ChmState),   INTENT(IN)    :: State_Chm    ! Chemistry State object
+    TYPE(GrdState),   INTENT(IN)    :: State_Grid   ! Grid State object
+    TYPE(MetState),   INTENT(IN)    :: State_Met    ! Meteorology State object
+!
+! !INPUT/OUTPUT PARAMETERS:
+!
+    TYPE(DgnState),   INTENT(INOUT) :: State_Diag   ! Diagnostics State object
 !
 ! !OUTPUT PARAMETERS:
 !
-    INTEGER,          INTENT(OUT) :: RC
+    INTEGER,          INTENT(OUT)   :: RC           ! Success or failure
 !
 ! !REMARKS:
 !  Calls internal routines History_ReadCollectionNames and
@@ -155,8 +162,8 @@ CONTAINS
     ! ("collection" = a netCDF file with a specific update frequency)
     !=======================================================================
     IF ( .not. Input_Opt%DryRun ) THEN
-       CALL History_ReadCollectionNames( Input_Opt,  State_Chm, &
-                                         State_Diag, State_Met, RC )
+       CALL History_ReadCollectionNames( Input_Opt,  State_Chm,             &
+                                         State_Diag, State_Met, RC         )
 
        ! Trap potential errors
        IF ( RC /= GC_SUCCESS ) THEN
@@ -170,8 +177,8 @@ CONTAINS
     ! Then determine the fields that will be saved to each collection
     ! NOTE: For dry-run, enter to print out file name & status
     !=======================================================================
-    CALL History_ReadCollectionData( Input_Opt,  State_Chm, &
-                                     State_Diag, State_Met, RC )
+    CALL History_ReadCollectionData( Input_Opt,  State_Chm, State_Diag,      &
+                                     State_Grid, State_Met, RC              )
 
     ! Trap potential errors
     IF ( RC /= GC_SUCCESS ) THEN
@@ -196,8 +203,8 @@ CONTAINS
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE History_ReadCollectionNames( Input_Opt, State_Chm,  &
-                                          State_Diag, State_Met, RC )
+  SUBROUTINE History_ReadCollectionNames( Input_Opt,  State_Chm,             &
+                                          State_Diag, State_Met, RC         )
 !
 ! !USES:
 !
@@ -452,6 +459,17 @@ CONTAINS
        CollectionLevelInd = UNDEFINED_INT
     ENDIF
 
+    ! Allocate CollectionHrRange
+    IF ( .not. ALLOCATED( CollectionHrRange ) ) THEN
+       ALLOCATE( CollectionHrRange( CollectionCount ), STAT=RC )
+       IF ( RC /= GC_SUCCESS ) THEN
+          ErrMsg = 'Could not allocate "CollectionHrRange"!'
+          CALL GC_Error( ErrMsg, RC, ThisLoc )
+          RETURN
+       ENDIF
+       CollectionHrRange = UNDEFINED_STR
+    ENDIF
+
   END SUBROUTINE History_ReadCollectionNames
 !EOC
 !------------------------------------------------------------------------------
@@ -469,8 +487,8 @@ CONTAINS
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE History_ReadCollectionData( Input_Opt, State_Chm,  &
-                                         State_Diag, State_Met, RC )
+  SUBROUTINE History_ReadCollectionData( Input_Opt,  State_Chm, State_Diag,  &
+                                         State_Grid, State_Met, RC          )
 !
 ! !USES:
 !
@@ -488,13 +506,15 @@ CONTAINS
     USE Species_Mod,           ONLY : Species
     USE State_Chm_Mod
     USE State_Diag_Mod
+    USE State_Grid_Mod,        ONLY : GrdState
     USE State_Met_Mod
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(OptInput),   INTENT(IN)  :: Input_Opt    ! Input Options object
     TYPE(ChmState),   INTENT(IN)  :: State_Chm    ! Chemistry State object
-    TYPE(DgnState),   INTENT(IN)  :: State_Diag   ! Diagnostic State object
+    TYPE(DgnState),   INTENT(INOUT)  :: State_Diag   ! Diagnostic State object
+    TYPE(GrdState),   INTENT(IN)  :: State_Grid   ! Grid State Object object
     TYPE(MetState),   INTENT(IN)  :: State_Met    ! Meteorology State object
 !
 ! !OUTPUT PARAMETERS:
@@ -638,7 +658,7 @@ CONTAINS
        Description    =  ''
        ErrMsg         =  ''
        Contact        =  &
-         'GEOS-Chem Support Team (geos-chem-support@as.harvard.edu)'
+         'GEOS-Chem Support Team (geos-chem-support@g.harvard.edu)'
        Reference      =  'www.geos-chem.org; wiki.geos-chem.org'
        ThisLoc        =  &
          ' -> at History_ReadCollectionData (in module History/history_mod.F90)'
@@ -1010,8 +1030,8 @@ CONTAINS
 
              ! Error check longitudes
              DO N = 1, 2
-                IF ( CollectionSubsetInd(N,C) < -180.0_f8  .or.              &
-                     CollectionSubsetInd(N,C) >  180.0_f8 ) THEN
+                IF ( CollectionSubsetInd(N,C) < 1               .or.         &
+                     CollectionSubsetInd(N,C) > State_Grid%NX ) THEN
                    ErrMsg = 'Invalid longitude subset values for '   //      &
                             'collection "'// TRIM(CollectionName(C)) // '"!'
                    WRITE( ErrorLine, 250 ) LineNum
@@ -1063,8 +1083,8 @@ CONTAINS
 
              ! Error check latitudes
              DO N = 3, 4
-                IF ( CollectionSubsetInd(N,C) < -90.0_f8  .or.               &
-                     CollectionSubsetInd(N,C) >  90.0_f8 ) THEN
+                IF ( CollectionSubsetInd(N,C) < 1               .or.         &
+                     CollectionSubsetInd(N,C) > State_Grid%NY ) THEN
                    ErrMsg = 'Invalid latitude subset values for '     //     &
                             'collection " '// TRIM(CollectionName(C)) // '"!'
                    WRITE( ErrorLine, 250 ) LineNum
@@ -1121,6 +1141,34 @@ CONTAINS
              CollectionLevelInd(2,C) = MAXVAL( Levels(1:nSubs2) )
           ENDIF
        ENDIF
+
+       ! "hrrange": Specifies an hour range for the satellite
+       ! diagnostic. The required order is: hrMin, hrMax
+       Pattern = 'hrrange'
+       Subset  =  UNDEFINED_DBL
+       IF ( INDEX( TRIM( Line ), TRIM( Pattern ) ) > 0 ) THEN
+
+          ! First split the line by colon
+          CALL StrSplit( Line, ":", Subs1, nSubs1 )
+
+          ! Split by spaces and convert to FLOAT:
+          CALL StrSplit( Subs1(2), " ", Subs2, nSubs2 )
+          IF ( nSubs2 == 2 ) THEN
+             DO N = 1, nSubs2
+                READ( Subs2(N), '(f6.0)' ) Subset(N)
+             ENDDO
+          ELSE
+             ErrMsg = 'Subsets must be specified as: hrmin, hrmax!'
+             WRITE( ErrorLine, 250 ) LineNum
+             CALL GC_Error( ErrMsg, RC, ThisLoc, ErrorLine )
+             RETURN
+          ENDIF
+
+          ! Assign hour range to State_Diag:
+          State_Diag%SatDiagn_StartHr = Subset(1)
+          State_Diag%SatDiagn_EndHr   = Subset(2)
+             
+       ENDIF       
 
        !====================================================================
        ! NOTE: We assume FIELDS is the last metadata tag for the
@@ -1413,6 +1461,24 @@ CONTAINS
           ENDIF
 
           !=================================================================
+          ! Sanity check for the Restart collection
+          ! Make sure that frequency and duration are the same
+          !=================================================================
+          CName = To_UpperCase( CollectionName(C) )
+          IF ( TRIM( CName ) == 'RESTART' ) THEN
+             IF ( FileWriteYmd /= FileCloseYmd  .and.                        &
+                  FileWriteHms /= FileCloseHms ) THEN
+                WRITE( ErrMsg, 260 )                                         &
+                   'Incompatible Restart collection metadata!           ',   &
+                   'Restart.frequency = ',     FileWriteYmd, FileWriteHms,   &
+                   'but Restart.duration  = ', FileCloseYmd, FileCloseHms
+ 260             FORMAT( a, a, i8.8, 1x, i6.6, 1x, a, i8.8, 1x, i6.6 )
+                CALL GC_Error( ErrMsg, RC, ThisLoc )
+                RETURN
+             ENDIF
+          ENDIF
+
+          !=================================================================
           ! Create a HISTORY CONTAINER object for this collection
           !=================================================================
 
@@ -1485,12 +1551,12 @@ CONTAINS
              ErrMsg =                                                        &
                 'No diagnostic output will be created for collection: "'  // &
                  TRIM( CollectionName(C) ) // '"!  Make sure that the '   // &
-                'length of the simulation as specified in "input.geos" '  // &
-                '(check the start and end times) is not shorter than '    // &
-                'the frequency setting in HISTORY.rc!  For example, if '  // &
-                'the frequency is 010000 (1 hour) but the simulation '    // &
-                'is set up to run for only 20 minutes, then this error '  // &
-                'will occur.'
+                'length of the simulation as specified in '               // &
+                'geoschem_config.yml (check the start and end dates) is ' // &
+                'not shorter than the frequency setting in HISTORY.rc! '  // &
+                'For example, if the frequency is 010000 (1 hour) but '   // &
+                'the simulation is set up to run for only 20 minutes, '   // &
+                'then this error will occur.'
 
              ! Return error
              WRITE( ErrorLine, 250 ) LineNum
@@ -1674,7 +1740,7 @@ CONTAINS
 
           !=================================================================
           ! Add this HISTORY CONTAINER object (i.e. this collection) into
-          ! the METAHISTORY OBJECT (i.e. the master list of collections).
+          ! the METAHISTORY OBJECT (i.e. the main list of collections).
           !=================================================================
           CALL MetaHistContainer_AddNew( Input_Opt   = Input_Opt,            &
                                          Node        = CollectionList,       &
@@ -1747,7 +1813,6 @@ CONTAINS
              RETURN
           ENDIF
        ENDIF
-
     ENDDO
 
     !=======================================================================
@@ -1778,7 +1843,9 @@ CONTAINS
           IF ( CollectionAccInterval(C) /= UNDEFINED_STR ) THEN
              print*, '  -> Acc_Interval ', TRIM( CollectionAccInterval(C) )
           ENDIF
+          IF ( CollectionDuration(C) /= UNDEFINED_STR ) THEN
           print*, '  -> Duration     ', TRIM( CollectionDuration   (C) )
+          ENDIF
           print*, '  -> Mode         ', TRIM( CollectionMode       (C) )
           IF ( CollectionLonRange(C) /= UNDEFINED_STR ) THEN
              print*, '  -> LON_RANGE    ',                                   &
@@ -1793,6 +1860,9 @@ CONTAINS
           IF ( CollectionLevels(C) /= UNDEFINED_STR ) THEN
              print*, '  -> Levels    ' , TRIM( CollectionLevels(C) )
              print*, '     -> Z0 Z1  ', ((CollectionLevelInd(N,C)), N=1,2)
+          ENDIF
+          IF ( CollectionHrRange(C) /= UNDEFINED_STR ) THEN
+             print*, '  -> hrrange  ' , TRIM( CollectionHrRange(C) )
           ENDIF
 
           ! Trap error if the collection frequency is undefined
@@ -1891,7 +1961,8 @@ CONTAINS
 !
     ! Scalars
     LOGICAL                      :: OnLevelEdges
-    INTEGER                      :: KindVal
+    INTEGER                      :: Source_KindVal
+    INTEGER                      :: Output_KindVal
     INTEGER                      :: Rank
     INTEGER                      :: NX, X0, X1
     INTEGER                      :: NY, Y0, Y1
@@ -1937,34 +2008,37 @@ CONTAINS
     !=======================================================================
     ! Initialize
     !=======================================================================
-    RC          =  GC_SUCCESS
-    Description =  ''
-    Dimensions  =  0
-    KindVal     =  0
-    Rank        =  0
-    Units       =  ''
-    ErrMsg      =  ''
-    ThisLoc     =  &
-                ' -> History_AddItemToCollection (in History/history_mod.F90)'
-    ItemNameUC  = To_UpperCase( ItemName )
-    StateMetUC  = State_Met%State // '_'   ! State_Met%State is uppercase
-    StateChmUC  = State_Chm%State // '_'   ! State_Chm%State is uppercase
-    Ptr0d       => NULL()
-    Ptr0d_8     => NULL()
-    Ptr0d_4     => NULL()
-    Ptr0d_I     => NULL()
-    Ptr1d       => NULL()
-    Ptr1d_8     => NULL()
-    Ptr1d_4     => NULL()
-    Ptr1d_I     => NULL()
-    Ptr2d       => NULL()
-    Ptr2d_8     => NULL()
-    Ptr2d_4     => NULL()
-    Ptr2d_I     => NULL()
-    Ptr3d       => NULL()
-    Ptr3d_8     => NULL()
-    Ptr3d_4     => NULL()
-    Ptr3d_I     => NULL()
+    RC             =  GC_SUCCESS
+    Description    =  ''
+    Dimensions     =  0
+    Source_KindVal =  0
+    Output_KindVal =  0
+    Rank           =  0
+    Units          =  ''
+    ErrMsg         =  ''
+    ThisLoc        =  &
+         ' -> History_AddItemToCollection (in History/history_mod.F90)'
+    ItemNameUC     = To_UpperCase( ItemName )
+    StateMetUC     = State_Met%State // '_'   ! State_Met%State is uppercase
+    StateChmUC     = State_Chm%State // '_'   ! State_Chm%State is uppercase
+
+    ! Free pointers
+    Ptr0d    => NULL()
+    Ptr0d_8  => NULL()
+    Ptr0d_4  => NULL()
+    Ptr0d_I  => NULL()
+    Ptr1d    => NULL()
+    Ptr1d_8  => NULL()
+    Ptr1d_4  => NULL()
+    Ptr1d_I  => NULL()
+    Ptr2d    => NULL()
+    Ptr2d_8  => NULL()
+    Ptr2d_4  => NULL()
+    Ptr2d_I  => NULL()
+    Ptr3d    => NULL()
+    Ptr3d_8  => NULL()
+    Ptr3d_4  => NULL()
+    Ptr3d_I  => NULL()
 
     !=======================================================================
     ! For each HISTORY ITEM, find the matching entry in the relevant
@@ -1976,34 +2050,31 @@ CONTAINS
        !--------------------------------------------------------------------
        ! Chemistry State
        !--------------------------------------------------------------------
-       CALL Registry_Lookup( am_I_Root    = Input_Opt%amIRoot,               &
-                             Registry     = State_Chm%Registry,              &
-                             RegDict      = State_Chm%RegDict,               &
-                             State        = State_Chm%State,                 &
-                             Variable     = ItemName,                        &
-                             Description  = Description,                     &
-                             Dimensions   = Dimensions,                      &
-                             KindVal      = KindVal,                         &
-                             Rank         = Rank,                            &
-                             Units        = Units,                           &
-                             OnLevelEdges = OnLevelEdges,                    &
-                             Ptr0d        = Ptr0d,                           &
-                             Ptr1d        = Ptr1d,                           &
-                             Ptr2d        = Ptr2d,                           &
-                             Ptr3d        = Ptr3d,                           &
-                             Ptr0d_8      = Ptr0d_8,                         &
-                             Ptr1d_8      = Ptr1d_8,                         &
-                             Ptr2d_8      = Ptr2d_8,                         &
-                             Ptr3d_8      = Ptr3d_8,                         &
-                             Ptr0d_4      = Ptr0d_4,                         &
-                             Ptr1d_4      = Ptr1d_4,                         &
-                             Ptr2d_4      = Ptr2d_4,                         &
-                             Ptr3d_4      = Ptr3d_4,                         &
-                             Ptr0d_I      = Ptr0d_I,                         &
-                             Ptr1d_I      = Ptr1d_I,                         &
-                             Ptr2d_I      = Ptr2d_I,                         &
-                             Ptr3d_I      = Ptr3d_I,                         &
-                             RC           = RC                                 )
+       CALL Registry_Lookup( am_I_Root      = Input_Opt%amIRoot,             &
+                             Registry       = State_Chm%Registry,            &
+                             RegDict        = State_Chm%RegDict,             &
+                             State          = State_Chm%State,               &
+                             Variable       = ItemName,                      &
+                             Description    = Description,                   &
+                             Dimensions     = Dimensions,                    &
+                             Source_KindVal = Source_KindVal,                &
+                             Output_KindVal = Output_KindVal,                &
+                             Rank           = Rank,                          &
+                             Units          = Units,                         &
+                             OnLevelEdges   = OnLevelEdges,                  &
+                             Ptr0d_8        = Ptr0d_8,                       &
+                             Ptr1d_8        = Ptr1d_8,                       &
+                             Ptr2d_8        = Ptr2d_8,                       &
+                             Ptr3d_8        = Ptr3d_8,                       &
+                             Ptr0d_4        = Ptr0d_4,                       &
+                             Ptr1d_4        = Ptr1d_4,                       &
+                             Ptr2d_4        = Ptr2d_4,                       &
+                             Ptr3d_4        = Ptr3d_4,                       &
+                             Ptr0d_I        = Ptr0d_I,                       &
+                             Ptr1d_I        = Ptr1d_I,                       &
+                             Ptr2d_I        = Ptr2d_I,                       &
+                             Ptr3d_I        = Ptr3d_I,                       &
+                             RC             = RC                            )
 
        ! Trap potential not found error
        IF ( RC /= GC_SUCCESS ) THEN
@@ -2018,34 +2089,31 @@ CONTAINS
        !--------------------------------------------------------------------
        ! Meteorology State
        !--------------------------------------------------------------------
-       CALL Registry_Lookup( am_I_Root    = Input_Opt%amIRoot,               &
-                             Registry     = State_Met%Registry,              &
-                             RegDict      = State_Met%RegDict,               &
-                             State        = State_Met%State,                 &
-                             Variable     = ItemName,                        &
-                             Description  = Description,                     &
-                             Dimensions   = Dimensions,                      &
-                             KindVal      = KindVal,                         &
-                             Rank         = Rank,                            &
-                             Units        = Units,                           &
-                             OnLevelEdges = OnLevelEdges,                    &
-                             Ptr0d        = Ptr0d,                           &
-                             Ptr1d        = Ptr1d,                           &
-                             Ptr2d        = Ptr2d,                           &
-                             Ptr3d        = Ptr3d,                           &
-                             Ptr0d_8      = Ptr0d_8,                         &
-                             Ptr1d_8      = Ptr1d_8,                         &
-                             Ptr2d_8      = Ptr2d_8,                         &
-                             Ptr3d_8      = Ptr3d_8,                         &
-                             Ptr0d_4      = Ptr0d_4,                         &
-                             Ptr1d_4      = Ptr1d_4,                         &
-                             Ptr2d_4      = Ptr2d_4,                         &
-                             Ptr3d_4      = Ptr3d_4,                         &
-                             Ptr0d_I      = Ptr0d_I,                         &
-                             Ptr1d_I      = Ptr1d_I,                         &
-                             Ptr2d_I      = Ptr2d_I,                         &
-                             Ptr3d_I      = Ptr3d_I,                         &
-                             RC           = RC                                 )
+       CALL Registry_Lookup( am_I_Root      = Input_Opt%amIRoot,             &
+                             Registry       = State_Met%Registry,            &
+                             RegDict        = State_Met%RegDict,             &
+                             State          = State_Met%State,               &
+                             Variable       = ItemName,                      &
+                             Description    = Description,                   &
+                             Dimensions     = Dimensions,                    &
+                             Source_KindVal = Source_KindVal,                &
+                             Output_KindVal = Output_KindVal,                &
+                             Rank           = Rank,                          &
+                             Units          = Units,                         &
+                             OnLevelEdges   = OnLevelEdges,                  &
+                             Ptr0d_8        = Ptr0d_8,                       &
+                             Ptr1d_8        = Ptr1d_8,                       &
+                             Ptr2d_8        = Ptr2d_8,                       &
+                             Ptr3d_8        = Ptr3d_8,                       &
+                             Ptr0d_4        = Ptr0d_4,                       &
+                             Ptr1d_4        = Ptr1d_4,                       &
+                             Ptr2d_4        = Ptr2d_4,                       &
+                             Ptr3d_4        = Ptr3d_4,                       &
+                             Ptr0d_I        = Ptr0d_I,                       &
+                             Ptr1d_I        = Ptr1d_I,                       &
+                             Ptr2d_I        = Ptr2d_I,                       &
+                             Ptr3d_I        = Ptr3d_I,                       &
+                             RC             = RC                            )
 
        ! Trap potential not found error
        IF ( RC /= GC_SUCCESS ) THEN
@@ -2060,34 +2128,31 @@ CONTAINS
        !--------------------------------------------------------------------
        ! Diagnostic State
        !--------------------------------------------------------------------
-       CALL Registry_Lookup( am_I_Root    = Input_Opt%amIRoot,               &
-                             Registry     = State_Diag%Registry,             &
-                             RegDict      = State_Diag%RegDict,              &
-                             State        = State_Diag%State,                &
-                             Variable     = ItemName,                        &
-                             Description  = Description,                     &
-                             Dimensions   = Dimensions,                      &
-                             KindVal      = KindVal,                         &
-                             Rank         = Rank,                            &
-                             Units        = Units,                           &
-                             OnLevelEdges = OnLevelEdges,                    &
-                             Ptr0d        = Ptr0d,                           &
-                             Ptr1d        = Ptr1d,                           &
-                             Ptr2d        = Ptr2d,                           &
-                             Ptr3d        = Ptr3d,                           &
-                             Ptr0d_8      = Ptr0d_8,                         &
-                             Ptr1d_8      = Ptr1d_8,                         &
-                             Ptr2d_8      = Ptr2d_8,                         &
-                             Ptr3d_8      = Ptr3d_8,                         &
-                             Ptr0d_4      = Ptr0d_4,                         &
-                             Ptr1d_4      = Ptr1d_4,                         &
-                             Ptr2d_4      = Ptr2d_4,                         &
-                             Ptr3d_4      = Ptr3d_4,                         &
-                             Ptr0d_I      = Ptr0d_I,                         &
-                             Ptr1d_I      = Ptr1d_I,                         &
-                             Ptr2d_I      = Ptr2d_I,                         &
-                             Ptr3d_I      = Ptr3d_I,                         &
-                             RC           = RC                                 )
+       CALL Registry_Lookup( am_I_Root      = Input_Opt%amIRoot,             &
+                             Registry       = State_Diag%Registry,           &
+                             RegDict        = State_Diag%RegDict,            &
+                             State          = State_Diag%State,              &
+                             Variable       = ItemName,                      &
+                             Description    = Description,                   &
+                             Dimensions     = Dimensions,                    &
+                             Source_KindVal = Source_KindVal,                &
+                             Output_KindVal = Output_KindVal,                &
+                             Rank           = Rank,                          &
+                             Units          = Units,                         &
+                             OnLevelEdges   = OnLevelEdges,                  &
+                             Ptr0d_8        = Ptr0d_8,                       &
+                             Ptr1d_8        = Ptr1d_8,                       &
+                             Ptr2d_8        = Ptr2d_8,                       &
+                             Ptr3d_8        = Ptr3d_8,                       &
+                             Ptr0d_4        = Ptr0d_4,                       &
+                             Ptr1d_4        = Ptr1d_4,                       &
+                             Ptr2d_4        = Ptr2d_4,                       &
+                             Ptr3d_4        = Ptr3d_4,                       &
+                             Ptr0d_I        = Ptr0d_I,                       &
+                             Ptr1d_I        = Ptr1d_I,                       &
+                             Ptr2d_I        = Ptr2d_I,                       &
+                             Ptr3d_I        = Ptr3d_I,                       &
+                             RC             = RC                            )
 
        ! Trap potential not found error
        IF ( RC /= GC_SUCCESS ) THEN
@@ -2187,7 +2252,7 @@ CONTAINS
     ! corresponding to the given diagnostic quantity, use that to create
     ! a HISTORY ITEM object for that diagnostic quantity.
     !=======================================================================
-    CALL HistItem_Create( Input_Opt      = Input_Opt,                       &
+    CALL HistItem_Create( Input_Opt      = Input_Opt,                        &
                           Item           = Item,                             &
                           Id             = ItemCount,                        &
                           ContainerId    = CollectionId,                     &
@@ -2200,17 +2265,15 @@ CONTAINS
                           Subset_X       = Subset_X,                         &
                           Subset_Y       = Subset_Y,                         &
                           Subset_Z       = Subset_Z,                         &
-                          Source_KindVal = KindVal,                          &
+                          Source_KindVal = Source_KindVal,                   &
+                          Output_KindVal = Output_KindVal,                   &
                           Source_0d_8    = Ptr0d_8,                          &
-                          Source_1d      = Ptr1d,                            &
                           Source_1d_8    = Ptr1d_8,                          &
                           Source_1d_4    = Ptr1d_4,                          &
                           Source_1d_I    = Ptr1d_I,                          &
-                          Source_2d      = Ptr2d,                            &
                           Source_2d_8    = Ptr2d_8,                          &
                           Source_2d_4    = Ptr2d_4,                          &
                           Source_2d_I    = Ptr2d_I,                          &
-                          Source_3d      = Ptr3d,                            &
                           Source_3d_8    = Ptr3d_8,                          &
                           Source_3d_4    = Ptr3d_4,                          &
                           Source_3d_I    = Ptr3d_I,                          &
@@ -2295,6 +2358,11 @@ CONTAINS
        Collection%OnLevelEdges = Item%OnLevelEdges
     ENDIF
 
+    ! NB is always two (lon0, lon1) or (lat0, lat1)
+    IF ( Collection%NB == UNDEFINED_INT ) THEN
+       Collection%NB = 2
+    ENDIF
+
     !=======================================================================
     ! Make sure that all the HISTORY ITEMS in this collection are
     ! placed on the level centers or edges, but not both.  The netCDF
@@ -2323,6 +2391,10 @@ CONTAINS
 
     ! Increment number of HISTORY ITEMS in this collection
     Collection%nHistItems = Collection%nHistItems + 1
+
+    ! Free Item (we have added it to the container and don't need it anymore)
+    DEALLOCATE( Item )
+    Item => NULL()
 
     ! Free pointers
     Ptr0d   => NULL()
@@ -2404,10 +2476,10 @@ CONTAINS
     ThisLoc    =  ' -> at History_SetTime (in History/history_mod.F90)'
 
     !=======================================================================
-    ! Loop through each DIAGNOSTIC COLLECTION in the master list
+    ! Loop through each DIAGNOSTIC COLLECTION in the main list
     !=======================================================================
 
-    ! Point to the first COLLECTION in the master collection list
+    ! Point to the first COLLECTION in the main collection list
     Collection => CollectionList
 
     ! As long as this current COLLECTION is valid ...
@@ -2453,7 +2525,7 @@ CONTAINS
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE History_Update( Input_Opt, RC )
+  SUBROUTINE History_Update( Input_Opt, State_Diag, RC )
 !
 ! !USES:
 !
@@ -2463,6 +2535,7 @@ CONTAINS
     USE HistContainer_Mod,     ONLY : HistContainer_UpdateIvalSet
     USE History_Util_Mod
     USE Input_Opt_Mod,         ONLY : OptInput
+    USE State_Diag_Mod,        ONLY : DgnState
     USE MetaHistContainer_Mod, ONLY : MetaHistContainer
     USE MetaHistItem_Mod,      ONLY : MetaHistItem
     USE Registry_Params_Mod
@@ -2470,6 +2543,7 @@ CONTAINS
 ! !INPUT PARAMETERS:
 !
     TYPE(OptInput), INTENT(IN)    :: Input_Opt   ! Input Options object
+    TYPE(DgnState), INTENT(IN)    :: State_Diag     ! Diagnostics state obj
 !
 ! !OUTPUT PARAMETERS:
 !
@@ -2514,12 +2588,12 @@ CONTAINS
     ThisLoc    =  ' -> at History_Update (in History/history_mod.F90)'
 
     !=======================================================================
-    ! Loop through each DIAGNOSTIC COLLECTION in the master list, and
+    ! Loop through each DIAGNOSTIC COLLECTION in the main list, and
     ! then loop through the HISTORY ITEMS belonnging to each COLLECTION.
     ! Update each HISTORY ITEM if it is the proper time.
     !=======================================================================
 
-    ! Point to the first COLLECTION in the master collection list
+    ! Point to the first COLLECTION in the main collection list
     Collection => CollectionList
 
     ! As long as this current COLLECTION is valid ...
@@ -2534,6 +2608,12 @@ CONTAINS
 
        ! Test if the "UpdateAlarm" is ringing
        DoUpdate = ( ( Container%UpdateAlarm - Container%ElapsedSec ) < EPS )
+
+       IF ( TRIM(Container%Name) .eq. 'BoundaryConditions'   .and.   &
+            Container%ElapsedSec .eq. 0.0 ) THEN
+          Container%UpdateAlarm = 0.0
+          DoUpdate = .TRUE.
+       ENDIF
 
        ! Skip to next collection if it isn't
        IF ( .not. DoUpdate ) THEN
@@ -2573,19 +2653,8 @@ CONTAINS
              !--------------------------------------------------------------
              CASE( 3 )
 
-                ! Flex-precision floating point
-                IF ( Item%Source_KindVal == KINDVAL_FP ) THEN
-
-                   IF ( Item%Operation == COPY_FROM_SOURCE ) THEN
-                      Item%Data_3d  = Item%Source_3d
-                      Item%nUpdates = 1.0_f8
-                   ELSE
-                      Item%Data_3d  = Item%Data_3d  + Item%Source_3d
-                      Item%nUpdates = Item%nUpdates + 1.0_f8
-                   ENDIF
-
                 ! 8-byte floating point
-                ELSE IF ( Item%Source_KindVal == KINDVAL_F8 ) THEN
+                IF ( Item%Source_KindVal == KINDVAL_F8 ) THEN
 
                    IF ( Item%Operation == COPY_FROM_SOURCE ) THEN
                       Item%Data_3d = Item%Source_3d_8
@@ -2624,19 +2693,8 @@ CONTAINS
              !--------------------------------------------------------------
              CASE( 2 )
 
-                ! Flex-precision floating point
-                IF ( Item%Source_KindVal == KINDVAL_FP ) THEN
-
-                   IF ( Item%Operation == COPY_FROM_SOURCE ) THEN
-                      Item%Data_2d  = Item%Source_2d
-                      Item%nUpdates = 1.0_f8
-                   ELSE
-                      Item%Data_2d  = Item%Data_2d  + Item%Source_2d
-                      Item%nUpdates = Item%nUpdates + 1.0_f8
-                   ENDIF
-
                 ! 8-byte floating point
-                ELSE IF ( Item%Source_KindVal == KINDVAL_F8 ) THEN
+                IF ( Item%Source_KindVal == KINDVAL_F8 ) THEN
 
                    IF ( Item%Operation == COPY_FROM_SOURCE ) THEN
                       Item%Data_2d  = Item%Source_2d_8
@@ -2675,19 +2733,8 @@ CONTAINS
              !--------------------------------------------------------------
              CASE( 1 )
 
-                ! Flex-precision floating point
-                IF ( Item%Source_KindVal == KINDVAL_FP ) THEN
-
-                   IF ( Item%Operation == COPY_FROM_SOURCE ) THEN
-                      Item%Data_1d  = Item%Source_1d
-                      Item%nUpdates = 1.0_f8
-                   ELSE
-                      Item%Data_1d  = Item%Data_1d  + Item%Source_1d
-                      Item%nUpdates = Item%nUpdates + 1.0_f8
-                   ENDIF
-
                 ! 8-byte floating point
-                ELSE IF ( Item%Source_KindVal == KINDVAL_F8 ) THEN
+                IF ( Item%Source_KindVal == KINDVAL_F8 ) THEN
 
                    IF ( Item%Operation == COPY_FROM_SOURCE ) THEN
                       Item%Data_1d  = Item%Source_1d_8
@@ -2761,7 +2808,7 @@ CONTAINS
        ! Prepare to go to the next collection
        !------------------------------------------------------------------
 
-       ! Recompute the update alarm interval if it 1 month or longer,
+       ! Recompute the update alarm interval if it is 1 month or longer,
        ! as we will have to take into account leap years, etc.
        IF ( Container%UpdateYmd >= 000100 ) THEN
           CALL HistContainer_UpdateIvalSet( Input_Opt, Container, RC )
@@ -2805,24 +2852,30 @@ CONTAINS
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE History_Write( Input_Opt, Spc_Units, RC )
+  SUBROUTINE History_Write( Input_Opt, State_Chm, State_Diag, RC )
 !
 ! !USES:
 !
+    USE Charpak_Mod,           ONLY : To_UpperCase
     USE ErrCode_Mod
     USE HistContainer_Mod
     USE HistItem_Mod,          ONLY : HistItem
     USE History_Netcdf_Mod
     USE History_Util_Mod
     USE Input_Opt_Mod,         ONLY : OptInput
+    USE State_Diag_Mod,        ONLY : DgnState
     USE MetaHistContainer_Mod, ONLY : MetaHistContainer
     USE MetaHistItem_Mod,      ONLY : MetaHistItem
+    USE PhysConstants,         ONLY : AIRMW
     USE Registry_Params_Mod
+    USE State_Chm_Mod,         ONLY : ChmState
+    USE State_Diag_Mod,        ONLY : DgnMap, DgnState
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(OptInput),   INTENT(IN)  :: Input_Opt   ! Input Options object
-    CHARACTER(LEN=*), INTENT(IN)  :: Spc_Units   ! Units of SC%Species array
+    TYPE(ChmState),   INTENT(IN)  :: State_Chm   ! Chemistry State object
+    TYPE(DgnState),   INTENT(IN)  :: State_Diag  ! Diagnsotics State object
 !
 ! !OUTPUT PARAMETERS:
 !
@@ -2844,16 +2897,22 @@ CONTAINS
     ! Scalars
     LOGICAL                          :: DoClose
     LOGICAL                          :: DoWrite
+    LOGICAL                          :: isBndCond
+    LOGICAL                          :: isRestart
+    INTEGER                          :: S, N
+
 
     ! Strings
     CHARACTER(LEN=20)                :: TmpUnits
     CHARACTER(LEN=255)               :: ErrMsg
     CHARACTER(LEN=255)               :: ThisLoc
+    CHARACTER(LEN=255)               :: cName
 
     ! Objects
     TYPE(MetaHistContainer), POINTER :: Collection
     TYPE(HistContainer),     POINTER :: Container
     TYPE(MetaHistItem),      POINTER :: Current
+    TYPE(DgnMap),            POINTER :: mapData
 
     !=======================================================================
     ! Initialize
@@ -2867,11 +2926,11 @@ CONTAINS
     ThisLoc    =  ' -> at History_Write (in History/history_mod.F90)'
 
     !=======================================================================
-    ! Loop through each DIAGNOSTIC COLLECTION in the master list, and
+    ! Loop through each DIAGNOSTIC COLLECTION in the main list, and
     ! then loop through the HISTORY ITEMS belonnging to each COLLECTION.
     !=======================================================================
 
-    ! Point to the first COLLECTION in the master collection list
+    ! Point to the first COLLECTION in the main collection list
     Collection => CollectionList
 
     ! As long as this current COLLECTION is valid ...
@@ -2879,6 +2938,22 @@ CONTAINS
 
        ! Point to the HISTORY CONTAINER object in this COLLECTION
        Container => Collection%Container
+
+       ! Identify the BoundaryConditions and Restart collectiond
+       cName     = To_UpperCase( TRIM( Container%Name ) )
+       isBndCond = ( TRIM( cName ) == 'BOUNDARYCONDITIONS' )
+       isRestart = ( TRIM( cName ) == 'RESTART'            )
+
+       ! Force define write alarm for creating and saving boundary
+       ! conditions to ensure first file of the simulation has the
+       ! correct file name and number of entries.
+       IF ( Container%ElapsedSec < EPS ) THEN
+          IF ( isBndCond ) THEN
+             Container%FileWriteAlarm = 0.0_fp
+          ELSE
+             RETURN
+          ENDIF
+       ENDIF             
 
        !====================================================================
        ! Test if it is time to close/repopen the file or to write data
@@ -2890,6 +2965,33 @@ CONTAINS
        ! Test if the "FileWriteAlarm" is ringing
        DoWrite = ( ( Container%FileWriteAlarm - Container%ElapsedSec ) < EPS )
 
+       ! If it's the first timestep of the simulation, map SpeciesConc
+       ! values to BC diagnostic values to output instantaneous values
+       ! at start of simulation.
+       IF ( Container%ElapsedSec .eq. 0.0 .and. &
+            TRIM(Container%Name) .eq. 'BoundaryConditions' ) THEN
+
+          ! Point to mapping obj specific to species boundary conditions
+          mapData => State_Diag%Map_SpeciesBC
+
+          !$OMP PARALLEL DO       &
+          !$OMP DEFAULT( SHARED ) &
+          !$OMP PRIVATE( N, S   )
+          DO S = 1, mapData%nSlots
+             N = mapData%slot2id(S)
+             State_Diag%SpeciesBC(:,:,:,S) = State_Chm%Species(N)%Conc(:,:,:) &
+                                 * ( AIRMW / State_Chm%SpcData(N)%Info%MW_g )
+          ENDDO
+          !$OMP END PARALLEL DO
+
+          ! Free pointer
+          mapData => NULL()
+
+          ! Update each HISTORY ITEM from its data source
+          CALL History_Update( Input_Opt, State_Diag, RC )
+
+       ENDIF
+          
        !====================================================================
        ! %%% GEOS-Chem "Classic" %%%
        !
@@ -2897,10 +2999,10 @@ CONTAINS
        !====================================================================
        IF ( DoClose ) THEN
 
-          ! Save the units of State_Chm%Species in the container,
+          ! Save the units of State_Chm%Species(:)%Conc in the container,
           ! so that we can redefine the unit string from "TBD".
           ! Copy into a temp variable so that Gfortran won't choke.
-          TmpUnits            = Spc_Units
+          TmpUnits            = State_Chm%Spc_Units
           Container%Spc_Units = TmpUnits
 
           !-----------------------------------------------------------------
@@ -2922,9 +3024,9 @@ CONTAINS
           ! Defines each variable, saves global attributes, and writes
           ! the index variable data to the file.
           !-----------------------------------------------------------------
-          CALL History_Netcdf_Define( Input_Opt = Input_Opt,                &
-                                      Container = Container,                &
-                                      RC        = RC                       )
+          CALL History_Netcdf_Define( Input_Opt  = Input_Opt,                &
+                                      Container  = Container,                &
+                                      RC         = RC                       )
 
           ! Trap error
           IF ( RC /= GC_SUCCESS ) THEN
@@ -2937,7 +3039,7 @@ CONTAINS
           ! Update "FileClose" alarm for next interval
           !-----------------------------------------------------------------
 
-          ! Recompute the file close alarm interval if it 1 month or longer,
+          ! Recompute the file close alarm interval if it is 1 month or longer,
           ! as we will have to take into account leap years, etc.
           IF ( Container%FileCloseYmd >= 000100 ) THEN
              CALL HistContainer_FileCloseIvalSet( Input_Opt, Container, RC )
@@ -2959,9 +3061,10 @@ CONTAINS
           !-----------------------------------------------------------------
           ! Write the HISTORY ITEMS for this collection to the netCDF file.
           !-----------------------------------------------------------------
-          CALL History_Netcdf_Write( Input_Opt = Input_Opt,                  &
-                                     Container = Container,                  &
-                                     RC        = RC                         )
+          CALL History_Netcdf_Write( Input_Opt  = Input_Opt,                 &
+                                     State_Diag = State_Diag,                &
+                                     Container  = Container,                 &
+                                     RC         = RC                         )
 
           ! Trap error
           IF ( RC /= GC_SUCCESS ) THEN
@@ -2974,7 +3077,7 @@ CONTAINS
           ! Update "FileWrite" alarm for next interval
           !-----------------------------------------------------------------
 
-          ! Recompute the file write alarm interval if it 1 month or longer,
+          ! Recompute the file write alarm interval if it's 1 month or longer,
           ! as we will have to take into account leap years, etc.
           IF ( Container%FileWriteYmd >= 000100 ) THEN
              CALL HistContainer_FileWriteIvalSet( Input_Opt, Container, RC )
@@ -2984,6 +3087,22 @@ CONTAINS
           Container%FileWriteAlarm = Container%FileWriteAlarm                &
                                    + Container%FileWriteIvalSec
 
+          !-----------------------------------------------------------------
+          ! SPECIAL HANDLING FOR RESTART COLLECTION
+          ! Make sure to close the restart file after writing, to avoid
+          ! incompletly-flushed files.  Need to implement a more general
+          ! way of doing this for other types of collections later.
+          !  -- Bob Yantosca (17 Nov 2022)
+          !-----------------------------------------------------------------
+          IF ( isRestart ) THEN
+             CALL History_Netcdf_Close( Container = Container,               &
+                                        RC        = RC                      )
+             IF ( RC /= GC_SUCCESS ) THEN
+                ErrMsg = 'Error returned from "History_Netcdf_Close"!'
+                CALL GC_Error( ErrMsg, RC, ThisLoc )
+                RETURN
+             ENDIF
+          ENDIF
        ENDIF
 
        ! Skip to the next collection
@@ -3117,7 +3236,7 @@ CONTAINS
 ! !IROUTINE: History_Close_AllFiles
 !
 ! !DESCRIPTION: Closes the netCDF file described by each HISTORY CONTAINER
-!  object in the master list of diagnostic collections.
+!  object in the main list of diagnostic collections.
 !\\
 !\\
 ! !INTERFACE:
@@ -3379,6 +3498,15 @@ CONTAINS
         DEALLOCATE( CollectionLevelInd, STAT=RC )
         IF ( RC /= GC_SUCCESS ) THEN
            ErrMsg = 'Could not deallocate "CollectionLevelInd"!'
+           CALL GC_Error( ErrMsg, RC, ThisLoc )
+           RETURN
+        ENDIF
+     ENDIF
+
+     IF ( ALLOCATED( CollectionHrRange ) ) THEN
+        DEALLOCATE( CollectionHrRange, STAT=RC )
+        IF ( RC /= GC_SUCCESS ) THEN
+           ErrMsg = 'Could not deallocate "CollectionHrRange"!'
            CALL GC_Error( ErrMsg, RC, ThisLoc )
            RETURN
         ENDIF

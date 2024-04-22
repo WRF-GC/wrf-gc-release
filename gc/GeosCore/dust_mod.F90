@@ -87,12 +87,13 @@ CONTAINS
     USE ErrCode_Mod
     USE ERROR_MOD,          ONLY : DEBUG_MSG
     USE Input_Opt_Mod,      ONLY : OptInput
+    USE Species_Mod,        ONLY : SpcConc
     USE State_Met_Mod,      ONLY : MetState
     USE State_Chm_Mod,      ONLY : ChmState
     USE State_Grid_Mod,     ONLY : GrdState
     USE State_Diag_Mod,     ONLY : DgnState
 #ifdef APM
-    USE HCO_INTERFACE_MOD,  ONLY : HcoState
+    USE HCO_State_GC_Mod,   ONLY : HcoState
     USE HCO_STATE_MOD,      ONLY : HCO_GetHcoID
     USE APM_INIT_MOD,       ONLY : APMIDS
 #endif
@@ -134,9 +135,10 @@ CONTAINS
     CHARACTER(LEN=255) :: ErrMsg
     CHARACTER(LEN=255) :: ThisLoc
 #ifdef APM
-    INTEGER       :: I,J,N,IDDST
-    REAL(fp)      :: A_M2, E_DST, DTSRCE
-    REAL(fp), POINTER :: Spc(:,:,:,:)
+    INTEGER            :: I,J,N, IDDST(HcoState%nDust)
+    REAL(fp)           :: A_M2, E_DST, DTSRCE
+    CHARACTER(LEN=4)   :: S
+    TYPE(SpcConc), POINTER :: Spc(:)
 #endif
 
     !=================================================================
@@ -179,15 +181,18 @@ CONTAINS
     ENDIF
 
 #ifdef APM
-    ! Initialize GEOS-Chem tracer array [kg] from Chemistry State
-    ! object
-    ! (mpayer, 12/6/12)
+
+    ! Set pointer to species vector to access concentrations
     Spc => State_Chm%Species
 
     ! Emission timestep
     DTSRCE = HcoState%TS_EMIS
 
-    IDDST   = HCO_GetHcoID( 'DST1',   HcoState )-1
+    ! Save the HEMCO dust ID's in a vector
+    DO N = 1, HcoState%nDust
+       WRITE( S, '("DST", i1)' ) N
+       IDDST(N) = HCO_GetHcoID( S, HcoState )
+    ENDDO
 
     !$OMP PARALLEL DO       &
     !$OMP DEFAULT( SHARED ) &
@@ -198,40 +203,59 @@ CONTAINS
        ! Grid box surface area [m2]
        A_M2 = HcoState%Grid%AREA_M2%Val( I, J )
 
-       DO N=1,HcoState%nDust
-          ! Get emissions [kg/m2/s] and convert to [kg/box]
-          E_DST = HcoState%Spc(IDDST+N)%Emis%Val(I,J,1) * A_M2 * DTSRCE
+       DO N = 1, HcoState%nDust
 
-          Spc(I,J,1,APMIDS%id_DSTBIN1)    = Spc(I,J,1,APMIDS%id_DSTBIN1)    &
-                                            +E_DST*1.5083735055071434d-006
-          Spc(I,J,1,APMIDS%id_DSTBIN1+1)  = Spc(I,J,1,APMIDS%id_DSTBIN1+1)  &
-                                            +E_DST*4.7465319694587000d-005
-          Spc(I,J,1,APMIDS%id_DSTBIN1+2)  = Spc(I,J,1,APMIDS%id_DSTBIN1+2)  &
-                                            +E_DST*6.5459286253814980d-004
-          Spc(I,J,1,APMIDS%id_DSTBIN1+3)  = Spc(I,J,1,APMIDS%id_DSTBIN1+3)  &
-                                            +E_DST*3.6946414378027244d-003
-          Spc(I,J,1,APMIDS%id_DSTBIN1+4)  = Spc(I,J,1,APMIDS%id_DSTBIN1+4)  &
-                                            +E_DST*8.0323357006383631d-003
-          Spc(I,J,1,APMIDS%id_DSTBIN1+5)  = Spc(I,J,1,APMIDS%id_DSTBIN1+5)  &
-                                            +E_DST*1.5922384531190468d-002
-          Spc(I,J,1,APMIDS%id_DSTBIN1+6)  = Spc(I,J,1,APMIDS%id_DSTBIN1+6)  &
-                                            +E_DST*3.7324808601695736d-002
-          Spc(I,J,1,APMIDS%id_DSTBIN1+7)  = Spc(I,J,1,APMIDS%id_DSTBIN1+7)  &
-                                            +E_DST*0.1144517534356116
-          Spc(I,J,1,APMIDS%id_DSTBIN1+8)  = Spc(I,J,1,APMIDS%id_DSTBIN1+8)  &
-                                            +E_DST*0.1880182758312848
-          Spc(I,J,1,APMIDS%id_DSTBIN1+9)  = Spc(I,J,1,APMIDS%id_DSTBIN1+9)  &
-                                            +E_DST*0.2448371224641443
-          Spc(I,J,1,APMIDS%id_DSTBIN1+10) = Spc(I,J,1,APMIDS%id_DSTBIN1+10) &
-                                            +E_DST*0.1452025570524453
-          Spc(I,J,1,APMIDS%id_DSTBIN1+11) = Spc(I,J,1,APMIDS%id_DSTBIN1+11) &
-                                            +E_DST*0.1954553759504486
-          Spc(I,J,1,APMIDS%id_DSTBIN1+12) = Spc(I,J,1,APMIDS%id_DSTBIN1+12) &
-                                            +E_DST*4.0358202390254526d-002
-          Spc(I,J,1,APMIDS%id_DSTBIN1+13) = Spc(I,J,1,APMIDS%id_DSTBIN1+13) &
-                                            +E_DST*5.2032641469382107d-003
-          Spc(I,J,1,APMIDS%id_DSTBIN1+14) = Spc(I,J,1,APMIDS%id_DSTBIN1+14) &
-                                            +E_DST*7.2351157743278424d-004
+          ! Skip if the array for HEMCO dust species N isn't allocated
+          IF ( .not. HcoState%Spc(IDDST(N))%Emis%Alloc ) CYCLE
+
+          ! Get emissions [kg/m2/s] and convert to [kg/box]
+          E_DST = HcoState%Spc(IDDST(N))%Emis%Val(I,J,1) * A_M2 * DTSRCE
+
+          Spc(APMIDS%id_DSTBIN1)%Conc(I,J,1) =                                &
+                                      Spc(APMIDS%id_DSTBIN1)%Conc(I,J,1)      &
+                                      +E_DST*1.5083735055071434d-006
+          Spc(APMIDS%id_DSTBIN1+1)%Conc(I,J,1)  =                             &
+                                      Spc(APMIDS%id_DSTBIN1+1)%Conc(I,J,1)    &
+                                      +E_DST*4.7465319694587000d-005
+          Spc(APMIDS%id_DSTBIN1+2)%Conc(I,J,1)  =                             &
+                                      Spc(APMIDS%id_DSTBIN1+2)%Conc(I,J,1)    &
+                                      +E_DST*6.5459286253814980d-004
+          Spc(APMIDS%id_DSTBIN1+3)%Conc(I,J,1)  =                             &
+                                      Spc(APMIDS%id_DSTBIN1+3)%Conc(I,J,1)    &
+                                      +E_DST*3.6946414378027244d-003
+          Spc(APMIDS%id_DSTBIN1+4)%Conc(I,J,1)  =                             &
+                                      Spc(APMIDS%id_DSTBIN1+4)%Conc(I,J,1)    &
+                                      +E_DST*8.0323357006383631d-003
+          Spc(APMIDS%id_DSTBIN1+5)%Conc(I,J,1)  =                             &
+                                      Spc(APMIDS%id_DSTBIN1+5)%Conc(I,J,1)    &
+                                      +E_DST*1.5922384531190468d-002
+          Spc(APMIDS%id_DSTBIN1+6)%Conc(I,J,1)  =                             &
+                                      Spc(APMIDS%id_DSTBIN1+6)%Conc(I,J,1)    &
+                                      +E_DST*3.7324808601695736d-002
+          Spc(APMIDS%id_DSTBIN1+7)%Conc(I,J,1)  =                             &
+                                      Spc(APMIDS%id_DSTBIN1+7)%Conc(I,J,1)    &
+                                      +E_DST*0.1144517534356116
+          Spc(APMIDS%id_DSTBIN1+8)%Conc(I,J,1)  =                             &
+                                      Spc(APMIDS%id_DSTBIN1+8)%Conc(I,J,1)    &
+                                      +E_DST*0.1880182758312848
+          Spc(APMIDS%id_DSTBIN1+9)%Conc(I,J,1)  =                              &
+                                      Spc(APMIDS%id_DSTBIN1+9)%Conc(I,J,1)    &
+                                      +E_DST*0.2448371224641443
+          Spc(APMIDS%id_DSTBIN1+10)%Conc(I,J,1) =                             &
+                                      Spc(APMIDS%id_DSTBIN1+10)%Conc(I,J,1)   &
+                                      +E_DST*0.1452025570524453
+          Spc(APMIDS%id_DSTBIN1+11)%Conc(I,J,1) =                             &
+                                      Spc(APMIDS%id_DSTBIN1+11)%Conc(I,J,1)   &
+                                      +E_DST*0.1954553759504486
+          Spc(APMIDS%id_DSTBIN1+12)%Conc(I,J,1) =                             &
+                                      Spc(APMIDS%id_DSTBIN1+12)%Conc(I,J,1)   &
+                                      +E_DST*4.0358202390254526d-002
+          Spc(APMIDS%id_DSTBIN1+13)%Conc(I,J,1) =                             &
+                                      Spc(APMIDS%id_DSTBIN1+13)%Conc(I,J,1)   &
+                                      +E_DST*5.2032641469382107d-003
+          Spc(APMIDS%id_DSTBIN1+14)%Conc(I,J,1) =                             &
+                                      Spc(APMIDS%id_DSTBIN1+14)%Conc(I,J,1)   &
+                                      +E_DST*7.2351157743278424d-004
        ENDDO
 
     ENDDO
@@ -327,7 +351,7 @@ CONTAINS
     USE ERROR_MOD
     USE Input_Opt_Mod,      ONLY : OptInput
     USE PhysConstants,      ONLY : AVO
-    USE Species_Mod,        ONLY : Species
+    USE Species_Mod,        ONLY : Species, SpcConc
     USE State_Chm_Mod,      ONLY : ChmState
     USE State_Diag_Mod,     ONLY : DgnState
     USE State_Grid_Mod,     ONLY : GrdState
@@ -375,7 +399,7 @@ CONTAINS
     CHARACTER(LEN=255)     :: MSG, LOC
 
     ! Pointers
-    REAL(fp),      POINTER :: Spc(:,:,:,:)
+    TYPE(SpcConc), POINTER :: Spc(:)
     TYPE(Species), POINTER :: ThisSpc
 
     !=================================================================
@@ -393,7 +417,7 @@ CONTAINS
     ENDIF
 
     ! Set pointers
-    Spc     => State_Chm%Species  ! [kg], for now
+    Spc     => State_Chm%Species
     ThisSpc => NULL()
 
     !=================================================================
@@ -402,7 +426,7 @@ CONTAINS
 
     ! Dust settling timestep [s]
     DT_SETTL = GET_TS_CHEM()
-    
+
     ! Save initial dust mass
     DO BIN = 1, IBINS
 
@@ -412,7 +436,7 @@ CONTAINS
        DO L   = 1, State_Grid%NZ
        DO J   = 1, State_Grid%NY
        DO I   = 1, State_Grid%NX
-          DU0(I,J,L,BIN) = Spc(I,J,L,N)
+          DU0(I,J,L,BIN) = Spc(N)%Conc(I,J,L)
        ENDDO
        ENDDO
        ENDDO
@@ -446,23 +470,23 @@ CONTAINS
           FLUXN = 0e+0_fp
 
           DO L = 1, State_Grid%NZ
-             DIF = DU0(I,J,L,BIN) - Spc(I,J,L,id_DUST1-1+BIN)
+             DIF = DU0(I,J,L,BIN) - Spc(id_DUST1-1+BIN)%Conc(I,J,L)
 
-             Spc(I,J,L,id_NK1-1+BIN) = Spc(I,J,L,id_NK1-1+BIN) - &
+             Spc(id_NK1-1+BIN)%Conc(I,J,L) = Spc(id_NK1-1+BIN)%Conc(I,J,L) - &
                                        DIF/(SQRT( Xk(BIN)*Xk(BIN+1)))
 
              ! Convert flux from [kg/s] to [molec/cm2/s]
              FLUXD = FLUXD + DIF / DT_SETTL * AVO / &
-                     ( 1.e-3_fp * ThisSpc%emMW_g ) / AREA_CM2
+                     ( 1.e-3_fp * ThisSpc%MW_g ) / AREA_CM2
 
 
              FLUXN = FLUXN + DIF/(SQRT( Xk(BIN)*Xk(BIN+1))) / &
                      DT_SETTL * AVO / &
-                     ( 1.e-3_fp * ThisSpc%emMW_g ) / AREA_CM2
+                     ( 1.e-3_fp * ThisSpc%MW_g ) / AREA_CM2
           ENDDO
 
 #ifdef BPCH_DIAG
-          !=========================================================== 
+          !===========================================================
           !  Dry deposition diagnostic [#/cm2/s] (bpch)
           !===========================================================
           IF ( ND44 > 0 ) THEN
@@ -520,6 +544,7 @@ CONTAINS
     USE ErrCode_Mod
     USE ERROR_MOD,          ONLY : DEBUG_MSG
     USE Input_Opt_Mod,      ONLY : OptInput
+    USE Species_Mod,        ONLY : SpcConc
     USE State_Chm_Mod,      ONLY : ChmState
     USE State_Diag_Mod,     ONLY : DgnState
     USE State_Grid_Mod,     ONLY : GrdState
@@ -558,12 +583,12 @@ CONTAINS
     LOGICAL           :: LDUST
     LOGICAL           :: prtDebug
     LOGICAL           :: LINTERP
-    INTEGER           :: I, J, K
+    INTEGER           :: I, J, K, N
     REAL(fp)          :: MEMIS
     REAL(fp)          :: MINIT(State_Grid%NX,State_Grid%NY,1,IBINS)
 
     ! Pointers
-    REAL(fp), POINTER :: Spc(:,:,:,:)
+    TYPE(SpcConc), POINTER :: Spc(:)
 
     ! Strings
     CHARACTER(LEN=255) :: ErrMsg
@@ -607,7 +632,9 @@ CONTAINS
     !=================================================================
     IF ( id_NK1 > 0 .and. id_DUST1 > 0 ) THEN
 
-       MINIT(:,:,1,1:IBINS) = Spc(:,:,1,id_DUST1:id_DUST1-1+IBINS)
+       DO N = 1, IBINS
+          MINIT(:,:,1,N) = Spc(id_DUST1+N-1)%Conc(:,:,1)
+       ENDDO
 
        IF ( LDEAD ) THEN
           ! still didn't figure out why run would crash w/ this option
@@ -625,11 +652,11 @@ CONTAINS
           DO K = 1, IBINS
           DO J = 1, State_Grid%NY
           DO I = 1, State_Grid%NX
-             MEMIS = Spc(I,J,1,id_DUST1-1+K) - MINIT(I,J,1,K)
+             MEMIS = Spc(id_DUST1-1+K)%Conc(I,J,1) - MINIT(I,J,1,K)
              IF ( MEMIS == 0.e+0_fp ) GOTO 10
 
              AD59_DUST(I,J,1,K) = AD59_DUST(I,J,1,K) + MEMIS ! kg ????
-             Spc(I,J,1,id_NK1-1+K) = Spc(I,J,1,id_NK1-1+K) + &
+             Spc(id_NK1-1+K)%Conc(I,J,1) = Spc(id_NK1-1+K)%Conc(I,J,1) + &
                                      MEMIS / (sqrt(Xk(K)*Xk(K+1)))
 
              AD59_NUMB(I,J,1,K) = AD59_NUMB(I,J,1,K) + &
@@ -674,7 +701,7 @@ CONTAINS
     USE State_Grid_Mod,     ONLY : GrdState
     USE State_Met_Mod,      ONLY : MetState
     USE TIME_MOD,           ONLY : GET_TS_CHEM
-    USE Species_Mod,        ONLY : Species
+    USE Species_Mod,        ONLY : Species, SpcConc
 !
 ! !INPUT PARAMETERS:
 !
@@ -703,7 +730,7 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     INTEGER                :: I,        J,     L
-    INTEGER                :: N,        NA,    ND
+    INTEGER                :: N,        NA,    ND,   S
     REAL(fp)               :: DT_SETTL, DELZ,  DELZ1
     REAL(fp)               :: REFF,     DEN,   CONST
     REAL(fp)               :: NUM,      LAMDA, FLUX
@@ -733,7 +760,7 @@ CONTAINS
 
     ! Pointers
     TYPE(Species), POINTER :: ThisSpc
-    REAL(fp),      POINTER :: TC(:,:,:,:)
+    TYPE(SpcConc), POINTER :: Spc(:)
 
 !
 ! !DEFINED PARAMETERS:
@@ -750,7 +777,7 @@ CONTAINS
     ! Initialize
     RC        =  GC_SUCCESS
     ThisSpc   => NULL()
-    TC        => State_Chm%Species
+    Spc       => State_Chm%Species
 
     ! Dust settling timestep [s]
     DT_SETTL  = GET_TS_CHEM()
@@ -760,13 +787,13 @@ CONTAINS
     !$OMP PRIVATE( I,     J,        L,    N,     DEN,  REFF, DP    ) &
     !$OMP PRIVATE( CONST, AREA_CM2, VTS,  TEMP,  P,    PDP,  SLIP  ) &
     !$OMP PRIVATE( VISC,  TC0,      DELZ, DELZ1, TOT1, TOT2, FLUX  ) &
-    !$OMP PRIVATE( NA,    ThisSpc,  ND                             )
+    !$OMP PRIVATE( NA,    ThisSpc,  ND,   S                        )
 
     ! Loop over only the advected dust species
     DO NA = Ind0, Ind1
 
        ! Look up this species in the species database
-       ! NOTE: The advected species are listed first in the master
+       ! NOTE: The advected species are listed first in the main
        ! species list, so it's OK to use the advected species ID
        ! to query the Species Database (bmy, 3/16/17)
        ThisSpc => State_Chm%SpcData(NA)%Info
@@ -842,22 +869,23 @@ CONTAINS
           ! Method is to solve bidiagonal matrix
           ! which is implicit and first order accurate in Z
           DO L = 1, State_Grid%NZ
-             TC0(L) = TC(I,J,L,NA)
+             TC0(L) = Spc(NA)%Conc(I,J,L)
           ENDDO
 
           ! We know the boundary condition at the model top
           L           = State_Grid%MaxChemLev
           DELZ        = State_Met%BXHEIGHT(I,J,L)
-          TC(I,J,L,NA) = TC(I,J,L,NA) / &
+          Spc(NA)%Conc(I,J,L) =Spc(NA)%Conc(I,J,L) / &
                          ( 1.e+0_fp + DT_SETTL * VTS(L) / DELZ )
 
           DO L = State_Grid%MaxChemLev-1, 1, -1
              DELZ         = State_Met%BXHEIGHT(I,J,L)
              DELZ1        = State_Met%BXHEIGHT(I,J,L+1)
-             TC(I,J,L,NA) = 1.e+0_fp / &
+             Spc(NA)%Conc(I,J,L) = 1.e+0_fp / &
                             ( 1.e+0_fp + DT_SETTL * VTS(L)   / DELZ ) &
-                            * (TC(I,J,L,NA)  + DT_SETTL * VTS(L+1) / DELZ1 &
-                            *  TC(I,J,L+1,NA) )
+                            * ( Spc(NA)%Conc(I,J,L) &
+                            + DT_SETTL * VTS(L+1) / DELZ1 &
+                            * Spc(NA)%Conc(I,J,L+1) )
           ENDDO
 
           !========================================================
@@ -876,19 +904,22 @@ CONTAINS
              TOT1 = 0e+0_fp
              TOT2 = 0e+0_fp
 
-             ! Compute column totals of TCO(:) and TC(I,J,:,N)
+             ! Compute column totals of TCO(:) and Spc(N)%Conc(I,J,:)
              DO L = 1, State_Grid%NZ
                 TOT1 = TOT1 + TC0(L)
-                TOT2 = TOT2 + TC(I,J,L,NA)
+                TOT2 = TOT2 + Spc(NA)%Conc(I,J,L)
              ENDDO
 
              ! Convert dust flux from [kg/s] to [molec/cm2/s]
              FLUX = ( TOT1 - TOT2 ) / DT_SETTL
-             FLUX = FLUX * AVO * ( AIRMW / ThisSpc%emMw_g    ) / &
+             FLUX = FLUX * AVO * ( AIRMW / ThisSpc%Mw_g    ) / &
                     ( AIRMW * 1.e-3_fp ) / AREA_CM2
 
              ! Drydep flux in chemistry only
-             State_Diag%DryDepChm(I,J,ND) = FLUX
+             S = State_Diag%Map_DryDepChm%id2slot(ND)
+             IF ( S > 0 ) THEN
+                State_Diag%DryDepChm(I,J,S) = FLUX
+             ENDIF
           ENDIF
        ENDDO
        ENDDO
@@ -900,7 +931,7 @@ CONTAINS
 
     ! Free pointers
     ThisSpc => NULL()
-    TC      => NULL()
+    Spc     => NULL()
 
   END SUBROUTINE DRY_SETTLING
 #ifdef APM
@@ -924,6 +955,7 @@ CONTAINS
 !
     USE ErrCode_Mod
     USE Input_Opt_Mod,  ONLY : OptInput
+    USE Species_Mod,    ONLY : SpcConc
     USE State_Chm_Mod,  ONLY : ChmState
     USE State_Grid_Mod, ONLY : GrdState
     USE State_Diag_Mod, ONLY : DgnState
@@ -991,8 +1023,8 @@ CONTAINS
     REAL*8                :: MASS(State_Grid%NZ)
     REAL*8                :: OLD(State_Grid%NZ,NCTDST)
 
-    ! Make a pointer to the tracer array
-    REAL*8, POINTER       :: Spc(:,:,:,:)
+    ! Make a pointer to the species vector to access concentrations
+    TYPE(SpcConc), POINTER :: Spc(:)
 
     !=================================================================
     ! DRY_SETTLINGBIN begins here!
@@ -1002,7 +1034,7 @@ CONTAINS
     RC        = GC_SUCCESS
 
     ! Point to Spc
-    Spc => State_Chm%species
+    Spc => State_Chm%Species
 
     ! Aerosol settling timestep [s]
     DT_SETTL = GET_TS_CHEM()
@@ -1019,17 +1051,19 @@ CONTAINS
     DO I = 1, State_Grid%NX
 
        DO L = 1, State_Grid%NZ
-          MASS(L) = SUM(Spc(I,J,L,APMIDS%id_DSTBIN1:IDTEMP))
+          DO N = APMIDS%id_DSTBIN1, IDTEMP
+             MASS(L) = MASS(L) + Spc(N)%Conc(I,J,L)
+          ENDDO
           DO K = 1, NCTDST
-             OLD(L,K) = Spc(I,J,L,(APMIDS%id_CTDST+K-1))
-             Spc(I,J,L,(APMIDS%id_CTDST+K-1)) = 0.D0
+             OLD(L,K) = Spc(APMIDS%id_CTDST+K-1)%Conc(I,J,L)
+             Spc(APMIDS%id_CTDST+K-1)%Conc(I,J,L) = 0.D0
           ENDDO
        ENDDO
 
        ! Loop over aerosol bins
        DO N = 1, NDSTB
           DO L = 1, State_Grid%NZ
-             TC0(L) = Spc(I,J,L,(APMIDS%id_DSTBIN1+N-1))
+             TC0(L) = Spc(APMIDS%id_DSTBIN1+N-1)%Conc(I,J,L)
 
              IF(TC0(L)>1.D-30)THEN
                 ! Initialize
@@ -1063,13 +1097,13 @@ CONTAINS
           IF(MASS(L)>1.D-30)THEN
              DELZ = State_Met%BXHEIGHT(I,J,L)
 
-             Spc(I,J,L,(APMIDS%id_DSTBIN1+N-1)) = &
-                  Spc(I,J,L,(APMIDS%id_DSTBIN1+N-1)) / &
+             Spc(APMIDS%id_DSTBIN1+N-1)%Conc(I,J,L) = &
+                  Spc(APMIDS%id_DSTBIN1+N-1)%Conc(I,J,L) / &
                   ( 1.e+0_fp + DT_SETTL * VTS(L) / DELZ )
 
              DO K = 1, NCTDST
-                Spc(I,J,L,(APMIDS%id_CTDST+K-1)) = &
-                     Spc(I,J,L,(APMIDS%id_CTDST+K-1))+ &
+                Spc(APMIDS%id_CTDST+K-1)%Conc(I,J,L) = &
+                     Spc(APMIDS%id_CTDST+K-1)%Conc(I,J,L)+ &
                      OLD(L,K)*TC0(L)/MASS(L) / &
                      ( 1.e+0_fp + DT_SETTL * VTS(L) / DELZ )
              ENDDO
@@ -1079,14 +1113,14 @@ CONTAINS
              IF((MASS(L)*MASS(L+1))>1.D-30)THEN
                 DELZ  = State_Met%BXHEIGHT(I,J,L)
                 DELZ1 = State_Met%BXHEIGHT(I,J,L+1)
-                Spc(I,J,L,(APMIDS%id_DSTBIN1+N-1)) = 1.e+0_fp / &
+                Spc(APMIDS%id_DSTBIN1+N-1)%Conc(I,J,L) = 1.e+0_fp / &
                      ( 1.e+0_fp + DT_SETTL * VTS(L) / DELZ ) &
-                     * (Spc(I,J,L,(APMIDS%id_DSTBIN1+N-1)) &
+                     * (Spc(APMIDS%id_DSTBIN1+N-1)%Conc(I,J,L) &
                      + DT_SETTL * VTS(L+1) / DELZ1 * TC0(L+1) )
 
                 DO K = 1, NCTDST
-                   Spc(I,J,L,(APMIDS%id_CTDST+K-1)) = &
-                        Spc(I,J,L,(APMIDS%id_CTDST+K-1))+ &
+                   Spc(APMIDS%id_CTDST+K-1)%Conc(I,J,L) = &
+                        Spc(APMIDS%id_CTDST+K-1)%Conc(I,J,L)+ &
                         1.e+0_fp / ( 1.e+0_fp + DT_SETTL * VTS(L) / DELZ ) &
                         * (OLD(L,K)*TC0(L)/MASS(L) &
                         + DT_SETTL * VTS(L+1) / DELZ1 &
@@ -1095,28 +1129,28 @@ CONTAINS
              ELSE IF(MASS(L)>1.D-30)THEN
                 DELZ  = State_Met%BXHEIGHT(I,J,L)
                 DELZ1 = State_Met%BXHEIGHT(I,J,L+1)
-                Spc(I,J,L,(APMIDS%id_DSTBIN1+N-1)) = 1.e+0_fp / &
+                Spc(APMIDS%id_DSTBIN1+N-1)%Conc(I,J,L) = 1.e+0_fp / &
                      ( 1.e+0_fp + DT_SETTL * VTS(L) / DELZ ) &
-                     * (Spc(I,J,L,(APMIDS%id_DSTBIN1+N-1)) &
+                     * (Spc(APMIDS%id_DSTBIN1+N-1)%Conc(I,J,L) &
                      + DT_SETTL * VTS(L+1) / DELZ1 * TC0(L+1) )
 
                 DO K = 1, NCTDST
-                   Spc(I,J,L,(APMIDS%id_CTDST+K-1)) = &
-                        Spc(I,J,L,(APMIDS%id_CTDST+K-1))+ &
+                   Spc(APMIDS%id_CTDST+K-1)%Conc(I,J,L) = &
+                        Spc(APMIDS%id_CTDST+K-1)%Conc(I,J,L)+ &
                         1.e+0_fp / ( 1.e+0_fp + DT_SETTL * VTS(L) / DELZ ) &
                         * OLD(L,K)*TC0(L)/MASS(L)
                 ENDDO
              ELSE IF(MASS(L+1)>1.D-30)THEN
                 DELZ  = State_Met%BXHEIGHT(I,J,L)
                 DELZ1 = State_Met%BXHEIGHT(I,J,L+1)
-                Spc(I,J,L,(APMIDS%id_DSTBIN1+N-1)) = 1.e+0_fp / &
+                Spc(APMIDS%id_DSTBIN1+N-1)%Conc(I,J,L) = 1.e+0_fp / &
                      ( 1.e+0_fp + DT_SETTL * VTS(L) / DELZ ) &
-                     * (Spc(I,J,L,(APMIDS%id_DSTBIN1+N-1)) &
+                     * (Spc(APMIDS%id_DSTBIN1+N-1)%Conc(I,J,L) &
                      + DT_SETTL * VTS(L+1) / DELZ1 * TC0(L+1) )
 
                 DO K = 1, NCTDST
-                   Spc(I,J,L,(APMIDS%id_CTDST+K-1)) = &
-                        Spc(I,J,L,(APMIDS%id_CTDST+K-1))+ &
+                   Spc(APMIDS%id_CTDST+K-1)%Conc(I,J,L) = &
+                        Spc(APMIDS%id_CTDST+K-1)%Conc(I,J,L)+ &
                         1.e+0_fp / ( 1.e+0_fp + DT_SETTL * VTS(L) / DELZ ) &
                         * DT_SETTL * VTS(L+1) / DELZ1 &
                         * OLD(L+1,K)*TC0(L+1)/MASS(L+1)
@@ -1129,8 +1163,8 @@ CONTAINS
 
        DO L = 1, State_Grid%NZ
           DO K = 1, NCTDST
-             Spc(I,J,L,(APMIDS%id_CTDST+K-1)) = &
-                  MAX(1.d-30,Spc(I,J,L,(APMIDS%id_CTDST+K-1)))
+             Spc(APMIDS%id_CTDST+K-1)%Conc(I,J,L) = &
+                  MAX(1.d-30,Spc(APMIDS%id_CTDST+K-1)%Conc(I,J,L))
           ENDDO
        ENDDO
 
@@ -1159,7 +1193,7 @@ CONTAINS
 ! !INTERFACE:
 !
   SUBROUTINE RDUST_ONLINE(  Input_Opt, State_Chm, State_Diag, State_Grid, &
-                            State_Met, DUST,      ODSWITCH,   RC )
+                            State_Met, ODSWITCH,   RC                    )
 !
 ! !USES:
 !
@@ -1176,8 +1210,6 @@ CONTAINS
     TYPE(OptInput), INTENT(IN)  :: Input_Opt     ! Input Options object
     TYPE(GrdState), INTENT(IN)  :: State_Grid    ! Grid State object
     TYPE(MetState), INTENT(IN)  :: State_Met     ! Meteorology State object
-    REAL(fp),       INTENT(IN)  :: DUST(State_Grid%NX,State_Grid%NY, &
-                                        State_Grid%NZ,NDUST) !Dust [kg/m3]
     INTEGER,        INTENT(IN)  :: ODSWITCH
 !
 ! !INPUT/OUTPUT PARAMETERS:
@@ -1198,30 +1230,27 @@ CONTAINS
 !
 ! !LOCAL VARIABLES:
 !
-    LOGICAL            :: LINTERP
-    INTEGER            :: I, J, L, N, NOUT, W
-    INTEGER            :: IWV, IIWV, NWVS, IDST
-    REAL(fp)           :: MSDENS(NDUST), XTAU
+    ! Scalars
+    LOGICAL           :: LINTERP
+    INTEGER           :: I,       J,       L,       N
+    INTEGER           :: NOUT,    S,       W,       IWV
+    INTEGER           :: IIWV,    NWVS,    IDST,    IWV1
+    INTEGER           :: IWV2
+    REAL(fp)          :: XTAU,    XRH,     CRITRH,  ACOEF
+    REAL(fp)          :: BCOEF,   LOGTERM
 
-    ! Added to calculate aqueous dust surface area (WTAREA, WERADIUS)
-    ! (tmf, 3/6/09)
-    REAL(fp)           :: XRH
-    REAL(fp)           :: CRITRH      ! Critical RH [%], above which
-                                      !  heteorogeneous chem takes place
-
-    INTEGER            :: IWV1,  IWV2
-    REAL(fp)           :: ACOEF, BCOEF, LOGTERM
+    ! Arrays
+    LOGICAL           :: LINTERPARR(Input_Opt%NWVSELECT)
+    REAL(fp)          :: MSDENS(NDUST)
+    REAL(fp)          :: tempOD(State_Grid%NX,State_Grid%NY,               &
+                                State_Grid%NZ,NDUST,         3)
 
     ! Pointers
-    REAL(fp), POINTER   :: ERADIUS(:,:,:,:)
-    REAL(fp), POINTER   :: TAREA(:,:,:,:)
-    REAL(fp), POINTER   :: WERADIUS(:,:,:,:)
-    REAL(fp), POINTER   :: WTAREA(:,:,:,:)
-
-    ! For diagnostics
-    REAL(fp)            :: tempOD(State_Grid%NX,State_Grid%NY, &
-                                  State_Grid%NZ,NDUST,3)
-    LOGICAL             :: LINTERPARR(Input_Opt%NWVSELECT)
+    REAL(fp), POINTER :: ERADIUS(:,:,:,:)
+    REAL(fp), POINTER :: TAREA(:,:,:,:)
+    REAL(fp), POINTER :: WERADIUS(:,:,:,:)
+    REAL(fp), POINTER :: WTAREA(:,:,:,:)
+    REAL(fp), POINTER :: DUST(:,:,:,:)
 
     !=================================================================
     ! RDUST_ONLINE begins here!
@@ -1235,24 +1264,19 @@ CONTAINS
     TAREA     => State_Chm%AeroArea     ! Aerosol Area       [cm2/cm3]
     WERADIUS  => State_Chm%WetAeroRadi  ! Wet Aerosol Radius [cm]
     WTAREA    => State_Chm%WetAeroArea  ! Wet Aerosol Area   [cm2/cm3]
+    DUST      => State_Chm%SoilDust     ! Dust aerosol Conc. [kg/m3]
 
     ! Index for dust in ODAER and LUT arrays
-    ! Dust properties are saved to different indices in RD_AOD for
-    ! UCX vs tropchem simulations
-    IF ( Input_Opt%LUCX ) THEN
-       IDST   = 8
-    ELSE
-       IDST   = 6
-    ENDIF
+    IDST      = 8
 
     ! Dust density
-    MSDENS(1) = 2500.0e+0_fp
-    MSDENS(2) = 2500.0e+0_fp
-    MSDENS(3) = 2500.0e+0_fp
-    MSDENS(4) = 2500.0e+0_fp
-    MSDENS(5) = 2650.0e+0_fp
-    MSDENS(6) = 2650.0e+0_fp
-    MSDENS(7) = 2650.0e+0_fp
+    MSDENS(1) = 2500.0_fp
+    MSDENS(2) = 2500.0_fp
+    MSDENS(3) = 2500.0_fp
+    MSDENS(4) = 2500.0_fp
+    MSDENS(5) = 2650.0_fp
+    MSDENS(6) = 2650.0_fp
+    MSDENS(7) = 2650.0_fp
 
     ! Critical RH, above which heteorogeneous chem takes place (tmf, 6/14/07)
     CRITRH = 35.0e+0_fp   ! [%]
@@ -1418,7 +1442,7 @@ CONTAINS
        ! Loop over dust bins, # of wavelengths, and all grid cells
        !$OMP PARALLEL DO       &
        !$OMP DEFAULT( SHARED ) &
-       !$OMP PRIVATE( I, J, L, N, W, NOUT, LINTERP )
+       !$OMP PRIVATE( I, J, L, N, W, NOUT, LINTERP, S )
        DO W = 1, Input_Opt%NWVSELECT
        DO N = 1, NDUST
        DO L = 1, State_Grid%MaxChemLev
@@ -1448,15 +1472,25 @@ CONTAINS
           ! Set size-resolved dust optical depth diagnostic
           !---------------------------------------------------
           IF ( State_Diag%Archive_AODDustWL1 .AND. W == 1 ) THEN
-             State_Diag%AODDustWL1(I,J,L,N) = tempOD(I,J,L,N,1)
-          ENDIF
-          IF ( State_Diag%Archive_AODDustWL2 .AND. W == 2 ) THEN
-             State_Diag%AODDustWL2(I,J,L,N) = tempOD(I,J,L,N,2)
-          ENDIF
-          IF ( State_Diag%Archive_AODDustWL3 .AND. W == 3 ) THEN
-             State_Diag%AODDustWL3(I,J,L,N) = tempOD(I,J,L,N,3)
+             S = State_Diag%Map_AODDustWL1%id2slot(N)
+             IF ( S > 0 ) THEN
+                State_Diag%AODDustWL1(I,J,L,S) = tempOD(I,J,L,N,1)
+             ENDIF
           ENDIF
 
+          IF ( State_Diag%Archive_AODDustWL2 .AND. W == 2 ) THEN
+             S = State_Diag%Map_AODDustWL2%id2slot(N)
+             IF ( S > 0 ) THEN
+                State_Diag%AODDustWL2(I,J,L,S) = tempOD(I,J,L,N,2)
+             ENDIF
+          ENDIF
+
+          IF ( State_Diag%Archive_AODDustWL3 .AND. W == 3 ) THEN
+             S = State_Diag%Map_AODDustWL3%id2slot(N)
+             IF ( S > 0 ) THEN
+                State_Diag%AODDustWL3(I,J,L,S) = tempOD(I,J,L,N,3)
+             ENDIF
+          ENDIF
 
        ENDDO ! longitude
        ENDDO ! latitude
@@ -1504,11 +1538,12 @@ CONTAINS
     TAREA    => NULL()
     WERADIUS => NULL()
     WTAREA   => NULL()
+    DUST     => NULL()
 
   END SUBROUTINE RDUST_ONLINE
 !EOC
 !------------------------------------------------------------------------------
-!          Harvard University Atmospheric Chemistry Modeling Group            !
+!                  GEOS-Chem Global Chemical Transport Model                  !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1533,6 +1568,7 @@ CONTAINS
     USE ERROR_MOD,          ONLY : IT_IS_NAN
     USE Input_Opt_Mod,      ONLY : OptInput
     USE PhysConstants,      ONLY : PI, AIRMW
+    USE Species_Mod,        ONLY : SpcConc
     USE State_Chm_Mod,      ONLY : ChmState
     USE State_Met_Mod,      ONLY : MetState
 !
@@ -1628,24 +1664,24 @@ CONTAINS
     REAL(fp)            :: MW_DST1, MW_DST2, MW_DST3, MW_DST4
 
     ! Pointers
-    REAL(fp), POINTER   :: Spc(:,:,:,:)
-    REAL(fp), POINTER   :: ERADIUS(:,:,:,:)
-    REAL(fp), POINTER   :: TAREA(:,:,:,:)
+    TYPE(SpcConc), POINTER :: Spc(:)
+    REAL(fp), POINTER      :: ERADIUS(:,:,:,:)
+    REAL(fp), POINTER      :: TAREA(:,:,:,:)
 
     !=================================================================
     ! GET_DUST_ALK begins here!
     !=================================================================
 
     ! Initialize pointers
-    Spc      => State_Chm%Species  ! GEOS-Chem species array [v/v dry]
+    Spc      => State_Chm%Species
     ERADIUS  => State_Chm%AeroRadi ! Aerosol Radius [cm]
     TAREA    => State_Chm%AeroArea ! Aerosol Area [cm2/cm3]
 
     ! Get MWs from species database
-    MW_DST1 = State_Chm%SpcData(id_DST1)%Info%emMW_g
-    MW_DST2 = State_Chm%SpcData(id_DST2)%Info%emMW_g
-    MW_DST3 = State_Chm%SpcData(id_DST3)%Info%emMW_g
-    MW_DST4 = State_Chm%SpcData(id_DST4)%Info%emMW_g
+    MW_DST1 = State_Chm%SpcData(id_DST1)%Info%MW_g
+    MW_DST2 = State_Chm%SpcData(id_DST2)%Info%MW_g
+    MW_DST3 = State_Chm%SpcData(id_DST3)%Info%MW_g
+    MW_DST4 = State_Chm%SpcData(id_DST4)%Info%MW_g
 
     ! Zero variables
     DO IBIN = 1, NDSTBIN
@@ -1661,17 +1697,17 @@ CONTAINS
     AIR_DENS = State_Met%AD(I,J,L) / State_Met%AIRVOL(I,J,L)
 
     ! Retrieve Dust Alkalinity [v/v dry from Spc array
-    ALK_d(1) = Spc(I,J,L,id_DAL1)
-    ALK_d(2) = Spc(I,J,L,id_DAL2)
-    ALK_d(3) = Spc(I,J,L,id_DAL3)
-    ALK_d(4) = Spc(I,J,L,id_DAL4)
+    ALK_d(1) = Spc(id_DAL1)%Conc(I,J,L)
+    ALK_d(2) = Spc(id_DAL2)%Conc(I,J,L)
+    ALK_d(3) = Spc(id_DAL3)%Conc(I,J,L)
+    ALK_d(4) = Spc(id_DAL4)%Conc(I,J,L)
 
     ! Dust [kg/m3] from Spc, used to compute dust surface area
     ! Units: (moles/mole).(kg(air)/m3).(kg(dust)/mole)/(kg(air)/mole)
-    DST_d(1) = Spc(I,J,L,id_DST1) * AIR_DENS / ( AIRMW / MW_DST1 )
-    DST_d(2) = Spc(I,J,L,id_DST2) * AIR_DENS / ( AIRMW / MW_DST2 )
-    DST_d(3) = Spc(I,J,L,id_DST3) * AIR_DENS / ( AIRMW / MW_DST3 )
-    DST_d(4) = Spc(I,J,L,id_DST4) * AIR_DENS / ( AIRMW / MW_DST4 )
+    DST_d(1) = Spc(id_DST1)%Conc(I,J,L) * AIR_DENS / ( AIRMW / MW_DST1 )
+    DST_d(2) = Spc(id_DST2)%Conc(I,J,L) * AIR_DENS / ( AIRMW / MW_DST2 )
+    DST_d(3) = Spc(id_DST3)%Conc(I,J,L) * AIR_DENS / ( AIRMW / MW_DST3 )
+    DST_d(4) = Spc(id_DST4)%Conc(I,J,L) * AIR_DENS / ( AIRMW / MW_DST4 )
 
     ! tdf Now get aerosol surface area from TAREA (cm2/cm3)
     SULF_AREA = TAREA(I,J,L,NDUST+1)
@@ -1759,7 +1795,7 @@ CONTAINS
                     DF_AREA_d(1)         + &
                     DF_AREA_d(2)         + &
                     DF_AREA_d(3)         + &
-                    DF_AREA_d(4) 
+                    DF_AREA_d(4)
 
     ! tdf Total Dust Alkalinity
     ALK = ALK_d(1) + ALK_d(2) + ALK_d(3) + ALK_d(4)  ! [v/v]

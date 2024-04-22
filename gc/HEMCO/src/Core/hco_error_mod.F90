@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -53,6 +53,10 @@ MODULE HCO_Error_Mod
 !
 ! !USES:
 !
+#if defined( MAPL_ESMF )
+    USE MAPL_Base, ONLY: MAPL_UNDEF
+#endif
+
   IMPLICIT NONE
   PRIVATE
 !
@@ -73,15 +77,15 @@ MODULE HCO_Error_Mod
 ! !MODULE VARIABLES:
 !
   ! Double and single precision definitions
-  INTEGER, PARAMETER, PUBLIC  :: dp = KIND( REAL( 0.0, 8 ) ) ! Double (r8)
-  INTEGER, PARAMETER, PUBLIC  :: sp = KIND( REAL( 0.0, 4 ) ) ! Single (r4)
-#if defined( USE_REAL8 )
-  INTEGER, PARAMETER, PUBLIC  :: hp = KIND( REAL( 0.0, 8 ) ) ! HEMCO prec r8
+  INTEGER, PARAMETER, PUBLIC  :: dp = KIND( 0.0_8 )  ! Double (r8)
+  INTEGER, PARAMETER, PUBLIC  :: sp = KIND( 0.0_4 )  ! Single (r4)
+#ifdef USE_REAL8
+  INTEGER, PARAMETER, PUBLIC  :: hp = dp             ! HEMCO precision = r8
 #else
-  INTEGER, PARAMETER, PUBLIC  :: hp = KIND( REAL( 0.0, 4 ) ) ! HEMCO prec r4
+  INTEGER, PARAMETER, PUBLIC  :: hp = sp             ! HEMCO precision = r4
 #endif
-  INTEGER, PARAMETER, PUBLIC  :: i4 = 4                      ! FourByteInt
-  INTEGER, PARAMETER, PUBLIC  :: i8 = 8                      ! EightByteInt
+  INTEGER, PARAMETER, PUBLIC  :: i4 = 4              ! FourByteInt
+  INTEGER, PARAMETER, PUBLIC  :: i8 = 8              ! EightByteInt
 
   ! Error success/failure definitions
   INTEGER, PARAMETER, PUBLIC  :: HCO_SUCCESS = 0
@@ -94,10 +98,14 @@ MODULE HCO_Error_Mod
   ! Missing value
   ! Note: define missing value as single precision because all data arrays
   ! are read/stored in single precision.
+#if defined( MAPL_ESMF )
+  REAL(sp), PARAMETER, PUBLIC :: HCO_MISSVAL = MAPL_UNDEF
+#else
   REAL(sp), PARAMETER, PUBLIC :: HCO_MISSVAL = -1.e31_sp
+#endif
 
   ! HEMCO version number.
-  CHARACTER(LEN=12), PARAMETER, PUBLIC :: HCO_VERSION = '2.2.0'
+  CHARACTER(LEN=12), PARAMETER, PUBLIC :: HCO_VERSION = '3.6.2'
 
   INTERFACE HCO_Error
      MODULE PROCEDURE HCO_ErrorNoErr
@@ -116,16 +124,7 @@ MODULE HCO_Error_Mod
 !
 ! !REVISION HISTORY:
 !  23 Sep 2013 - C. Keller   - Initialization
-!  12 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  12 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
-!  03 Mar 2015 - C. Keller   - Added HCO_CFLAG_* and HCO_DCTTYPE_*
-!  15 Feb 2016 - C. Keller   - Update to v2.0: error variables now
-!                              organized in derived type HcoErr.
-!  23 Nov 2016 - R. Yantosca - Now rewrite KIND definitions to prevent 4-byte
-!                              and 8-byte variables from being elevated
-!                              when using -r8 (or equivalent flags)
-!  29 Dec 2017 - C. Keller   - Update to v2.1.004
-!  07 Feb 2019 - C. Keller   - Update to v2.1.011
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -153,7 +152,7 @@ MODULE HCO_Error_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -180,11 +179,12 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  23 Sep 2013 - C. Keller - Initialization
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
     INTEGER :: I, J
-    CHARACTER(LEN=255) :: MSG
+    CHARACTER(LEN=1023) :: MSG
 
     !======================================================================
     ! HCO_ERROR begins here
@@ -217,7 +217,7 @@ CONTAINS
   END SUBROUTINE HCO_ErrorErr
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -232,6 +232,14 @@ CONTAINS
 !
   SUBROUTINE HCO_ErrorNoErr( ErrMsg, RC, THISLOC )
 !
+! !USES:
+!
+#if defined( ESMF_ )
+#include "MAPL_Generic.h"
+    USE ESMF
+    USE MAPLBase_Mod
+#endif
+!
 ! !INPUT PARAMETERS:
 !
     CHARACTER(LEN=*), INTENT(IN   )            :: ErrMsg
@@ -243,25 +251,40 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  23 Sep 2013 - C. Keller - Initialization
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
     INTEGER :: I, J
-    CHARACTER(LEN=255) :: MSG
+    CHARACTER(LEN=1023) :: MSG, MSG1, MSG2
+#if defined( ESMF_)
+    INTEGER             :: localPET, STATUS
+    CHARACTER(4)        :: localPETchar
+    TYPE(ESMF_VM)       :: VM
+#endif
 
     !======================================================================
     ! HCO_ERROR begins here
     !======================================================================
 
-    ! Print error message
-    MSG =  'HEMCO ERROR: ' // TRIM(ErrMsg)
-    WRITE(*,*) TRIM(MSG)
-
-    ! Print error location
+    ! Construct error message
+#if defined( ESMF_ )
+    ! Get current thread number
+    CALL ESMF_VMGetCurrent(VM, RC=STATUS)
+    CALL ESMF_VmGet( VM, localPET=localPET, __RC__ )
+    WRITE(localPETchar,'(I4.4)') localPET
+    MSG1 = 'HEMCO ERROR ['//TRIM(localPETchar)//']: '//TRIM(ErrMsg)
+#else
+    MSG1 = 'HEMCO ERROR: '//TRIM(ErrMsg)
+#endif
+    MSG2 = ''
     IF ( PRESENT(THISLOC) ) THEN
-       MSG = 'ERROR LOCATION: ' // TRIM( THISLOC )
-       WRITE(*,*) TRIM(MSG)
+       MSG2 = NEW_LINE('a') // ' --> LOCATION: ' // TRIM( THISLOC )
     ENDIF
+    MSG = NEW_LINE('a') // TRIM(MSG1) // TRIM(MSG2)
+
+    ! Print error message
+    WRITE(*,*) TRIM(MSG)
 
     ! Return w/ error
     RC = HCO_FAIL
@@ -269,7 +292,7 @@ CONTAINS
   END SUBROUTINE HCO_ErrorNoErr
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -296,7 +319,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  23 Sep 2013 - C. Keller - Initialization
-!  26 Mar 2015 - C. Keller - Added warning levels
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -338,7 +361,7 @@ CONTAINS
   END SUBROUTINE HCO_WarningErr
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -364,7 +387,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  23 Sep 2013 - C. Keller - Initialization
-!  26 Mar 2015 - C. Keller - Added warning levels
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -391,7 +414,7 @@ CONTAINS
   END SUBROUTINE HCO_WarningNoErr
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -420,8 +443,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  23 Sep 2013 - C. Keller   - Initialization
-!  20 May 2015 - R. Yantosca - Minor formatting fix: use '(a)' instead of *
-!                              to avoid line wrapping around at 80 columns.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -484,7 +506,7 @@ CONTAINS
   END SUBROUTINE HCO_MsgErr
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -512,8 +534,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  23 Sep 2013 - C. Keller   - Initialization
-!  20 May 2015 - R. Yantosca - Minor formatting fix: use '(a)' instead of *
-!                              to avoid line wrapping around at 80 columns.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -533,7 +554,7 @@ CONTAINS
   END SUBROUTINE HCO_MsgNoErr
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -563,7 +584,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  23 Sep 2013 - C. Keller - Initialization
-!
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -607,7 +628,7 @@ CONTAINS
   END SUBROUTINE HCO_Enter
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -633,6 +654,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  23 Sep 2013 - C. Keller - Initialization
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -671,7 +693,7 @@ CONTAINS
   END SUBROUTINE HCO_Leave
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -703,7 +725,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  23 Sep 2013 - C. Keller - Initialization
-!
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -757,7 +779,7 @@ CONTAINS
   END SUBROUTINE HCO_ERROR_SET
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -776,7 +798,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  23 Sep 2013 - C. Keller - Initialization
-!
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -799,7 +821,7 @@ CONTAINS
   END SUBROUTINE HCO_Error_Final
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -822,6 +844,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  15 Mar 2015 - C. Keller - Initialization
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -839,7 +862,7 @@ CONTAINS
   END FUNCTION HCO_VERBOSE_INQ
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -864,6 +887,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  15 Mar 2015 - C. Keller - Initialization
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -881,7 +905,7 @@ CONTAINS
   END FUNCTION HCO_IsVerb
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -897,7 +921,7 @@ CONTAINS
 !
 ! !USES:
 !
-    USE inquireMod,   ONLY : findFreeLUN
+    USE HCO_inquireMod,   ONLY : findFreeLUN
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -906,9 +930,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  23 Sep 2013 - C. Keller   - Initialization
-!  14 Aug 2014 - R. Yantosca - Add FORM='FORMATTED' to the OPEN statement
-!                              so that the HEMCO log will be a text file
-!  22 Jan 2016 - R. Yantosca - Line-buffer the HEMCO log file for pgfortran
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1000,15 +1022,23 @@ CONTAINS
     ! Write header on first call
     IF ( Err%FirstOpen ) THEN
        IF ( Err%LUN < 0 ) THEN
-          WRITE(*,'(a)') REPEAT( '-', 79)
-          WRITE(*,'(A12,A12)') 'Using HEMCO ', HCO_VERSION
-          WRITE(*,'(a)') REPEAT( '-', 79)
+          LUN = 6                ! Log gets written to stdout
        ELSE
-          LUN = Err%LUN
-          WRITE(LUN,'(a)') REPEAT( '-', 79)
-          WRITE(LUN,'(A12,A12)') 'Using HEMCO ', HCO_VERSION
-          WRITE(LUN,'(a)') REPEAT( '-', 79)
+          LUN = Err%LUN          ! Log gets written to file
        ENDIF
+
+       ! Write header
+       WRITE( LUN, '(a)'      ) REPEAT( '-', 79)
+       WRITE( LUN, '(a12, a)' ) 'Using HEMCO ', HCO_VERSION
+       WRITE( LUN, '(a)'        )
+#ifdef USE_REAL8
+       WRITE( LUN,  100       )
+ 100   FORMAT('HEMCO precision (hp) is set to is 8-byte real (aka REAL*8)')
+#else
+       WRITE( LUN,  110       )
+ 110   FORMAT('HEMCO precision (hp) is set to is 4-byte real (aka REAL*4)')
+#endif
+       WRITE( LUN, '(a)'      ) REPEAT( '-', 79)
 
        Err%FirstOpen = .FALSE.
     ENDIF
@@ -1019,7 +1049,7 @@ CONTAINS
   END SUBROUTINE HCO_Logfile_Open
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1041,6 +1071,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  23 Sep 2013 - C. Keller - Initialization
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC

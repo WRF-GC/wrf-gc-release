@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -46,6 +46,7 @@ MODULE HCOIO_MESSY_MOD
 !
 ! !REVISION HISTORY:
 !  24 Jun 2014 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -55,7 +56,7 @@ MODULE HCOIO_MESSY_MOD
   CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -120,7 +121,7 @@ MODULE HCOIO_MESSY_MOD
 !
 ! !REVISION HISTORY:
 !  27 Jun 2014 - C. Keller - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -154,9 +155,12 @@ MODULE HCOIO_MESSY_MOD
     !=================================================================
 
     ! For error handling
-    LOC = 'HCO_MESSY_REGRID (HCOI_MESSY_MOD.F90)'
+    LOC = 'HCO_MESSY_REGRID (HCOIO_MESSY_MOD.F90)'
     CALL HCO_ENTER ( HcoState%Config%Err, LOC, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Init
     narr_src => NULL()
@@ -191,7 +195,7 @@ MODULE HCOIO_MESSY_MOD
     IF ( Lct%Dct%Dta%SpaceDim /= 2 .AND. &
          Lct%Dct%Dta%SpaceDim /= 3         ) THEN
        MSG = 'Can only regrid 2D or 3D data: ' // TRIM(Lct%Dct%cName)
-       CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC )
+       CALL HCO_ERROR ( MSG, RC )
        RETURN
     ENDIF
 
@@ -245,7 +249,7 @@ MODULE HCOIO_MESSY_MOD
        IF ( .NOT. ASSOCIATED(LevEdge) .AND. .NOT. IsModelLev ) THEN
           MSG = 'Cannot regrid '//TRIM(Lct%Dct%cName)//'. Either level '//&
                 'edges must be provided or data must be on model levels.'
-          CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC )
+          CALL HCO_ERROR ( MSG, RC )
           RETURN
        ENDIF
     ENDIF
@@ -258,7 +262,7 @@ MODULE HCOIO_MESSY_MOD
        ! pressure @ i,j: sigma(i,j,l) = p(i,j,l) / ps(i,j)
        ALLOCATE(sigout(HcoState%NX,HcoState%NY,HcoState%NZ+1),STAT=AS)
        IF ( AS/= 0 ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'Cannot allocate sigout', RC )
+          CALL HCO_ERROR( 'Cannot allocate sigout', RC )
           RETURN
        ENDIF
        DO l = 1, HcoState%NZ+1
@@ -302,12 +306,18 @@ MODULE HCOIO_MESSY_MOD
        CALL FileData_ArrCheck( HcoState%Config, &
                                Lct%Dct%Dta, HcoState%NX, HcoState%NY, &
                                NTIME,       RC                         )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
     ELSEIF ( Lct%Dct%Dta%SpaceDim == 3 ) THEN
        CALL FileData_ArrCheck( HcoState%Config, &
                                Lct%Dct%Dta, HcoState%NX, HcoState%NY, &
                                NZOUT,       NTIME,       RC            )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
     ENDIF
 
     !-----------------------------------------------------------------
@@ -351,7 +361,10 @@ MODULE HCOIO_MESSY_MOD
     sigma => LevEdge
 
     CALL AXIS_CREATE( HcoState, lon, lat, sigma, axis_src, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Free pointer
     lon   => NULL()
@@ -369,7 +382,10 @@ MODULE HCOIO_MESSY_MOD
     IF( ASSOCIATED(LevEdge) ) sigma => sigout(:,:,1:NZOUT+1)
 
     CALL AXIS_CREATE( HcoState, lon, lat, sigma, axis_dst, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 4', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Free pointer
     lon   => NULL()
@@ -414,7 +430,7 @@ MODULE HCOIO_MESSY_MOD
        NCALLS = NZIN
        ALLOCATE(ArrOut(HcoState%NX,HcoState%NY,NZIN,NTIME),STAT=AS)
        IF ( AS /= 0 ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'Cannot allocate ArrOut', RC )
+          CALL HCO_ERROR( 'Cannot allocate ArrOut', RC )
           RETURN
        ENDIF
        ArrOut = 0.0_sp
@@ -435,7 +451,10 @@ MODULE HCOIO_MESSY_MOD
        ! stored as individual vector elements of narr_src.
        !-----------------------------------------------------------------
        CALL HCO2MESSY( HcoState, ArrIn, narr_src, axis_src, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 5', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        !-----------------------------------------------------------------
        ! Do the regridding
@@ -448,7 +467,10 @@ MODULE HCOIO_MESSY_MOD
        ! HEMCO list container or onto the temporary array ArrOut.
        !-----------------------------------------------------------------
        CALL MESSY2HCO( HcoState, narr_dst, Lct, I, ArrOut, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 6', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        ! Cleanup
        ArrIn => NULL()
@@ -460,7 +482,10 @@ MODULE HCOIO_MESSY_MOD
     !-----------------------------------------------------------------
     IF ( ASSOCIATED(ArrOut) ) THEN
        CALL ModelLev_Interpolate( HcoState, ArrOut, Lct, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 7', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
        DEALLOCATE(ArrOut)
     ENDIF
 
@@ -469,7 +494,7 @@ MODULE HCOIO_MESSY_MOD
     !-----------------------------------------------------------------
     DEALLOCATE( sovl, dovl, rcnt, STAT=AS)
     IF(AS/=0) THEN
-       CALL HCO_ERROR(HcoState%Config%Err,'DEALLOCATION ERROR 1', RC )
+       CALL HCO_ERROR('DEALLOCATION ERROR 1', RC )
        RETURN
     ENDIF
     NULLIFY(sovl, dovl, rcnt)
@@ -479,7 +504,7 @@ MODULE HCOIO_MESSY_MOD
     ENDDO
     DEALLOCATE(narr_dst, STAT=AS)
     IF(AS/=0) THEN
-       CALL HCO_ERROR(HcoState%Config%Err,'DEALLOCATION ERROR 3', RC )
+       CALL HCO_ERROR('DEALLOCATION ERROR 3', RC )
        RETURN
     ENDIF
     NULLIFY(narr_dst)
@@ -489,7 +514,7 @@ MODULE HCOIO_MESSY_MOD
     ENDDO
     DEALLOCATE(narr_src, STAT=AS)
     IF(AS/=0) THEN
-       CALL HCO_ERROR(HcoState%Config%Err,'DEALLOCATION ERROR 2', RC )
+       CALL HCO_ERROR('DEALLOCATION ERROR 2', RC )
        RETURN
     ENDIF
     NULLIFY(narr_src)
@@ -498,7 +523,10 @@ MODULE HCOIO_MESSY_MOD
     rg_type => NULL()
 
     CALL AXIS_DELETE( axis_src, axis_dst, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 8', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Return w/ success
     CALL HCO_LEAVE ( HcoState%Config%Err, RC )
@@ -506,7 +534,7 @@ MODULE HCOIO_MESSY_MOD
   END SUBROUTINE HCO_MESSY_REGRID
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -540,6 +568,7 @@ MODULE HCOIO_MESSY_MOD
 !
 ! !REVISION HISTORY:
 !  22 Jun 2014 - C. Keller - Initial version (from messy_ncregrid_geohyb.f90)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -559,9 +588,12 @@ MODULE HCOIO_MESSY_MOD
     !=================================================================
 
     ! For error handling
-    LOC = 'AXIS_CREATE (HCOI_MESSY_MOD.F90)'
+    LOC = 'AXIS_CREATE (HCOIO_MESSY_MOD.F90)'
     CALL HCO_ENTER ( HcoState%Config%Err, LOC, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 9', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! ----------------------------------------------------------------
     ! Pass horizontal grid dimensions to local variables. For now,
@@ -585,7 +617,7 @@ MODULE HCOIO_MESSY_MOD
     ! ALLOCATE AXIS
     ALLOCATE(ax(N), STAT=status)
     IF ( status /= 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate axis', RC )
+       CALL HCO_ERROR ( 'Cannot allocate axis', RC )
        RETURN
     ENDIF
     DO I=1, N
@@ -610,7 +642,7 @@ MODULE HCOIO_MESSY_MOD
        ax(N)%ndp    = 1          ! LONGITUDE IS ...
        ALLOCATE(ax(N)%dep(1), STAT=status)
        IF ( status/= 0 ) THEN
-          CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot allocate lon dependencies', RC )
+          CALL HCO_ERROR ( 'Cannot allocate lon dependencies', RC )
           RETURN
        ENDIF
        ax(N)%dep(1) = N          ! ... INDEPENDENT
@@ -619,14 +651,14 @@ MODULE HCOIO_MESSY_MOD
        ax(N)%dat%n = 1          ! 1 dimension
        ALLOCATE(ax(N)%dat%dim(ax(N)%dat%n), STAT=status)
        IF ( status/= 0 ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'Cannot allocate lon dimensions', RC )
+          CALL HCO_ERROR( 'Cannot allocate lon dimensions', RC )
           RETURN
        ENDIF
        ax(N)%dat%dim(:) = XLON
 
        ALLOCATE(ax(N)%dat%vd(XLON),STAT=status)
        IF ( status/= 0 ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'Cannot allocate lon axis', RC )
+          CALL HCO_ERROR( 'Cannot allocate lon axis', RC )
           RETURN
        ENDIF
        ax(N)%dat%vd(:) = lon
@@ -648,7 +680,7 @@ MODULE HCOIO_MESSY_MOD
        ax(N)%ndp    = 1          ! LATITUDE IS ...
        ALLOCATE(ax(N)%dep(1), STAT=status)
        IF ( status/= 0 ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'Cannot allocate lat dependencies', RC )
+          CALL HCO_ERROR( 'Cannot allocate lat dependencies', RC )
           RETURN
        ENDIF
        ax(N)%dep(1) = N          ! ... INDEPENDENT
@@ -657,14 +689,14 @@ MODULE HCOIO_MESSY_MOD
        ax(N)%dat%n = 1          ! 1 dimension
        ALLOCATE(ax(N)%dat%dim(ax(N)%dat%n), STAT=status)
        IF ( status/= 0 ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'Cannot allocate lat dimensions', RC )
+          CALL HCO_ERROR( 'Cannot allocate lat dimensions', RC )
           RETURN
        ENDIF
        ax(N)%dat%dim(:) = YLAT
 
        ALLOCATE(ax(N)%dat%vd(YLAT),STAT=status)
        IF ( status/= 0 ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'Cannot allocate lat axis', RC )
+          CALL HCO_ERROR( 'Cannot allocate lat axis', RC )
           RETURN
        ENDIF
        ax(N)%dat%vd(:) = lat
@@ -713,7 +745,7 @@ MODULE HCOIO_MESSY_MOD
        ax(N)%ndp = ndp
        ALLOCATE(ax(N)%dep(ax(N)%ndp), STAT=status)
        IF ( status /= 0 ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'Cannot allocate lev dependencies', RC )
+          CALL HCO_ERROR( 'Cannot allocate lev dependencies', RC )
           RETURN
        ENDIF
 
@@ -722,7 +754,7 @@ MODULE HCOIO_MESSY_MOD
        ax(N)%dat%n = ndp
        ALLOCATE(ax(N)%dat%dim(ax(N)%dat%n), STAT=status)
        IF ( status/= 0 ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'Cannot allocate lat dimensions', RC )
+          CALL HCO_ERROR( 'Cannot allocate lat dimensions', RC )
           RETURN
        ENDIF
 
@@ -749,7 +781,7 @@ MODULE HCOIO_MESSY_MOD
 
        ALLOCATE(ax(N)%dat%vd(nlev),STAT=status)
        IF ( status/= 0 ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'Cannot allocate lat axis', RC )
+          CALL HCO_ERROR( 'Cannot allocate lat axis', RC )
           RETURN
        ENDIF
 
@@ -773,7 +805,7 @@ MODULE HCOIO_MESSY_MOD
   END SUBROUTINE AXIS_CREATE
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -799,6 +831,7 @@ MODULE HCOIO_MESSY_MOD
 !
 ! !REVISION HISTORY:
 !  28 Aug 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -826,7 +859,7 @@ MODULE HCOIO_MESSY_MOD
   END SUBROUTINE AXIS_DELETE
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -853,6 +886,7 @@ MODULE HCOIO_MESSY_MOD
 !
 ! !REVISION HISTORY:
 !  27 Jun 2014 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -870,7 +904,7 @@ MODULE HCOIO_MESSY_MOD
     !=================================================================
 
     ! For error handling
-    LOC = 'HCO2MESSY (HCOI_MESSY_MOD.F90)'
+    LOC = 'HCO2MESSY (HCOIO_MESSY_MOD.F90)'
 
     ! ----------------------------------------------------------------
     ! Number of grid cells
@@ -884,7 +918,7 @@ MODULE HCOIO_MESSY_MOD
     ! create
     ALLOCATE(narr(NT),STAT=status)
     IF(status/=0) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'narr allocation error', RC, THISLOC=LOC )
+       CALL HCO_ERROR( 'narr allocation error', RC, THISLOC=LOC )
        RETURN
     ENDIF
 
@@ -895,7 +929,7 @@ MODULE HCOIO_MESSY_MOD
        narr(T)%n = size(ax)
        ALLOCATE(narr(T)%dim(narr(T)%n),STAT=status)
        IF(status/=0) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'Cannot allocate array dims', RC, THISLOC=LOC )
+          CALL HCO_ERROR( 'Cannot allocate array dims', RC, THISLOC=LOC )
           RETURN
        ENDIF
 
@@ -910,7 +944,7 @@ MODULE HCOIO_MESSY_MOD
 
        ALLOCATE(narr(T)%vd(NCELLS),STAT=status)
        IF(status/=0) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'Cannot allocate array', RC, THISLOC=LOC )
+          CALL HCO_ERROR( 'Cannot allocate array', RC, THISLOC=LOC )
           RETURN
        ENDIF
     ENDDO !T
@@ -949,7 +983,7 @@ MODULE HCOIO_MESSY_MOD
   END SUBROUTINE HCO2MESSY
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -978,6 +1012,7 @@ MODULE HCOIO_MESSY_MOD
 !
 ! !REVISION HISTORY:
 !  27 Jun 2014 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1026,8 +1061,8 @@ MODULE HCOIO_MESSY_MOD
             ( SIZE(Ptr4D,3) /= NZ ) .OR. &
             ( SIZE(Ptr4D,4) /= NT )       ) THEN
           WRITE(MSG,*) 'Temporary pointer has wrong dimensions: ', &
-                       TRIM(Lct%Dct%cName)
-          CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC, &
+                       TRIM(Lct%Dct%cName), NX, NY, NZ, NT, SIZE(Ptr4D,1), SIZE(Ptr4D,2), SIZE(Ptr4D,3), SIZE(Ptr4D,4)
+          CALL HCO_ERROR ( MSG, RC, &
                            THISLOC='MESSY2HCO (hcoio_messy_mod.F90)' )
           RETURN
        ENDIF

@@ -94,7 +94,7 @@ include $(ROOT)/Makefile_header.mk
 # Make the standard benchmark simulation if CHEM is not passed
 # NOTE: In v10-01+, CHEM should always be passed from Makefile_header.mk!
 ifndef KPP_CHEM
- KPP_CHEM :=Standard
+ KPP_CHEM :=fullchem
 endif
 
 # Make rosenbrock the default solver
@@ -137,16 +137,10 @@ slowclean:
 	@$(MAKE) -C $(KPP_CHEM) slowclean
 
 realclean:
-	@$(MAKE) -C Standard      clean
-	@$(MAKE) -C SOA_SVPOA     clean
-	@$(MAKE) -C Tropchem      clean
-	@$(MAKE) -C Custom        clean
+	@$(MAKE) -C fullchem      clean
 
 slowrealclean:
-	@$(MAKE) -C Standard      slowclean
-	@$(MAKE) -C SOA_SVPOA     slowclean
-	@$(MAKE) -C Tropchem      slowclean
-	@$(MAKE) -C Custom        slowclean
+	@$(MAKE) -C fullchem      slowclean
 
 help:
 	@$(MAKE) -C $(HELP)

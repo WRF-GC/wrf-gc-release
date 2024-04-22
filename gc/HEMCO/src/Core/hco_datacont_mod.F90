@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -102,8 +102,7 @@ MODULE HCO_DataCont_Mod
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller: Initialization
-!  01 Jul 2014 - R. Yantosca - Now use F90 free-format indentation
-!  01 Jul 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -143,7 +142,7 @@ MODULE HCO_DataCont_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -157,6 +156,10 @@ CONTAINS
 !
   SUBROUTINE DataCont_Init( Dct, cID )
 !
+! !USES:
+!
+    USE HCO_FileData_Mod, ONLY : FileData_Init
+!
 ! !INPUT PARAMETERS:
 !
     TYPE(DataCont),  POINTER       :: Dct
@@ -164,7 +167,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller: Initialization
-!
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -177,8 +180,8 @@ CONTAINS
     IF ( .NOT. ASSOCIATED( Dct) ) ALLOCATE( Dct )
 
     ! Nullify pointers
-    Dct%Dta         => NULL()
     Dct%Scal_cID    => NULL()
+    Dct%Dta         => NULL()
 
     ! Set default values
     Dct%DtaHome      = -999
@@ -204,7 +207,7 @@ CONTAINS
   END SUBROUTINE DataCont_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -230,6 +233,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller: Initialization
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -242,30 +246,28 @@ CONTAINS
     !======================================================================
     ! DataCont_Cleanup begins here!
     !======================================================================
-
-    IF ( PRESENT(ArrOnly) ) THEN
-       DeepClean = .NOT. ArrOnly
-    ELSE
-       DeepClean = .TRUE.
-    ENDIF
-
-    ! Only if associated...
     IF ( ASSOCIATED( Dct ) ) THEN
 
+       ! Optional argument handling
+       DeepClean = .TRUE.
+       IF ( PRESENT( ArrOnly ) ) DeepClean = ( .not. ArrOnly )
+
        ! Clean up FileData object. If DeepClean is true, this
-       ! will entirely erase the file data object. Otherwise, only the
-       ! data arrays will be removed.
-       ! Note: do only if this is the home container of the file data
-       ! object.
+       ! will entirely erase the file data object. Otherwise,
+       ! only the data arrays will be removed.
+       !
+       ! Note: do only if this is the home container of 
+       ! the file data object.
        IF ( Dct%DtaHome == 1 ) THEN
           CALL FileData_Cleanup( Dct%Dta, DeepClean )
        ENDIF
 
        ! Clean up data container if DeepClean option is enabled.
        IF ( DeepClean ) THEN
-          Dct%Dta => NULL()
-          IF(ASSOCIATED(Dct%Scal_cID)) DEALLOCATE(Dct%Scal_cID)
-          DEALLOCATE ( Dct )
+          IF( ASSOCIATED( Dct%Scal_cID ) ) DEALLOCATE( Dct%Scal_cID )
+          Dct%Scal_cID => NULL()
+          DEALLOCATE( Dct )
+          Dct => NULL()
        ENDIF
 
     ENDIF
@@ -273,7 +275,7 @@ CONTAINS
   END SUBROUTINE DataCont_Cleanup
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -294,7 +296,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller: Initialization
-!  25 Oct 2016 - R. Yantosca - Do not nullify pointers in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -343,7 +345,7 @@ CONTAINS
   END SUBROUTINE ListCont_Cleanup
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -371,7 +373,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  24 Aug 2012 - C. Keller - Initial Version
-!  25 Oct 2016 - R. Yantosca - Do not nullify pointers in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -381,18 +383,22 @@ CONTAINS
     INTEGER                   :: II
     TYPE(ListCont), POINTER   :: TmpLct
     LOGICAL                   :: verbose
-    CHARACTER(LEN=255)        :: MSG
+    CHARACTER(LEN=255)        :: MSG, LOC
 
     !======================================================================
     ! cIDList_Create begins here
     !======================================================================
+    LOC = 'cIDList_Create (HCO_DATACONT_MOD.F90)'
 
     ! Initialize
     TmpLct => NULL()
 
     ! Enter
-    CALL HCO_ENTER( HcoState%Config%Err, 'cIDList_Create (hco_datacont_mod.F)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Set verbose flag
     verbose = HCO_IsVerb ( HcoState%Config%Err, 3 )
@@ -467,7 +473,7 @@ CONTAINS
   END SUBROUTINE cIDList_Create
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -490,6 +496,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  24 Aug 2012 - C. Keller - Initial Version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -515,7 +522,7 @@ CONTAINS
   END SUBROUTINE cIDList_Cleanup
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -545,6 +552,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2012 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -563,7 +571,7 @@ CONTAINS
     ! Check input
     IF ( cID > HcoState%nnDataCont ) THEN
        MSG = 'cID higher than number of containers'
-       CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC, THISLOC=LOC)
+       CALL HCO_ERROR ( MSG, RC, THISLOC=LOC)
        RETURN
     ENDIF
 
@@ -573,7 +581,7 @@ CONTAINS
     ! Check if data container allocated
     IF ( .NOT. ASSOCIATED( Dct ) ) THEN
        MSG = 'Data container is not associated!'
-       CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC, THISLOC=LOC)
+       CALL HCO_ERROR ( MSG, RC, THISLOC=LOC)
        RETURN
     ENDIF
 
@@ -583,7 +591,7 @@ CONTAINS
   END SUBROUTINE Pnt2DataCont
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -616,6 +624,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Apr 2012 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -643,7 +652,7 @@ CONTAINS
   END SUBROUTINE ListCont_NextCont
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -667,7 +676,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  04 Dec 2012 - C. Keller: Initialization
-!  25 Oct 2016 - R. Yantosca - Do not nullify pointers in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -717,7 +726,7 @@ CONTAINS
   END SUBROUTINE ListCont_Find_Name
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -746,7 +755,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  04 Dec 2012 - C. Keller: Initialization
-!  25 Oct 2016 - R. Yantosca - Do not nullify pointers in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -803,7 +812,7 @@ CONTAINS
   END SUBROUTINE ListCont_Find_ID
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -824,7 +833,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  15 Feb 2016 - C. Keller: Initial version
-!
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC

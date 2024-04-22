@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -116,11 +116,7 @@ MODULE HCO_FileData_Mod
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller   - Initialization
-!  01 Jul 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  01 Jul 2014 - R. Yantosca - Now use F90 free-format indentation
-!  21 Aug 2014 - C. Keller   - Added concentration
-!  23 Dec 2014 - C. Keller   - Added argument IsInList
-!  06 Oct 2015 - C. Keller   - Added argument MustFind
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -143,7 +139,7 @@ MODULE HCO_FileData_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -163,63 +159,57 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller   - Initialization
-!  21 Aug 2014 - C. Keller   - Added concentration
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
 ! !LOCAL VARIABLES:
 !
-    TYPE(FileData), POINTER  :: NewFDta
-
     !======================================================================
     ! FileData_Init begins here!
     !======================================================================
 
-    ! Allocate the new file data object
-    ALLOCATE( NewFDta )
+    ! Allocate memory to the FileData object
+    ALLOCATE( FileDta )
 
     ! Nullify all pointers and initialize variables
-    NewFDta%V3          => NULL()
-    NewFDta%V2          => NULL()
-    NewFDta%tIDx        => NULL()
-    NewFDta%ncFile       = ''
-    NewFDta%ncPara       = ''
-    NewFDta%ncYrs(:)     = -999
-    NewFDta%ncMts(:)     = -999
-    NewFDta%ncDys(:)     = -999
-    NewFDta%ncHrs(:)     = -999
-    NewFDta%tShift(:)    = 0
-    NewFDta%CycleFlag    = HCO_CFLAG_CYCLE
-    NewFDta%UpdtFlag     = HCO_UFLAG_FROMFILE
-    NewFDta%MustFind     = .FALSE.
-    NewFDta%ncRead       = .TRUE.
-    NewFDta%Cover        = -999
-    NewFDta%DeltaT       = 0
-    NewFDta%nt           = 0
-    NewFDta%SpaceDim     = -1
-    NewFDta%Levels       = 0
-    NewFDta%EmisL1       = 1.0_hp
-    NewFDta%EmisL2       = 1.0_hp
-    NewFDta%EmisL1Unit   = HCO_EMISL_LEV
-    NewFDta%EmisL2Unit   = HCO_EMISL_LEV
-    NewFDta%OrigUnit     = ''
-    NewFDta%ArbDimName   = 'none'
-    NewFDta%ArbDimVal    = ''
-    NewFDta%IsLocTime    = .FALSE.
-    NewFDta%IsConc       = .FALSE.
-    NewFDta%DoShare      = .FALSE.
-    NewFDta%IsInList     = .FALSE.
-    NewFDta%IsTouched    = .FALSE.
-
-    ! Return
-    FileDta => NewFDta
+    FileDta%V3          => NULL()
+    FileDta%V2          => NULL()
+    FileDta%tIDx        => NULL()
+    FileDta%ncFile       = ''
+    FileDta%ncPara       = ''
+    FileDta%ncYrs(:)     = -999
+    FileDta%ncMts(:)     = -999
+    FileDta%ncDys(:)     = -999
+    FileDta%ncHrs(:)     = -999
+    FileDta%tShift(:)    = 0
+    FileDta%CycleFlag    = HCO_CFLAG_CYCLE
+    FileDta%UpdtFlag     = HCO_UFLAG_FROMFILE
+    FileDta%MustFind     = .FALSE.
+    FileDta%ncRead       = .TRUE.
+    FileDta%Cover        = -999
+    FileDta%DeltaT       = 0
+    FileDta%nt           = 0
+    FileDta%SpaceDim     = -1
+    FileDta%Levels       = 0
+    FileDta%EmisL1       = 1.0_hp
+    FileDta%EmisL2       = 1.0_hp
+    FileDta%EmisL1Unit   = HCO_EMISL_LEV
+    FileDta%EmisL2Unit   = HCO_EMISL_LEV
+    FileDta%OrigUnit     = ''
+    FileDta%ArbDimName   = 'none'
+    FileDta%ArbDimVal    = ''
+    FileDta%IsLocTime    = .FALSE.
+    FileDta%IsConc       = .FALSE.
+    FileDta%DoShare      = .FALSE.
+    FileDta%IsInList     = .FALSE.
+    FileDta%IsTouched    = .FALSE.
 
   END SUBROUTINE FileData_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -240,7 +230,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller: Initialization
-!
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -252,25 +242,24 @@ CONTAINS
     !======================================================================
     ! FileData_Cleanup begins here!
     !======================================================================
-
-    ! Only if associated
     IF ( ASSOCIATED( FileDta ) ) THEN
 
        ! Deallocate data arrays
        CALL HCO_ArrCleanup( FileDta%V3, DeepClean )
        CALL HCO_ArrCleanup( FileDta%V2, DeepClean )
        FileDta%nt = 0
-
+       
        IF ( DeepClean ) THEN
           FileDta%tIDx => NULL()
           DEALLOCATE ( FileDta )
+          FileDta => NULL()
        ENDIF
     ENDIF
 
   END SUBROUTINE FileData_Cleanup
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -299,6 +288,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Apr 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -306,11 +296,12 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     INTEGER            :: I, AS
-    CHARACTER(LEN=255) :: MSG
+    CHARACTER(LEN=255) :: MSG, LOC
 
     ! ================================================================
     ! FileData_ArrCheck2D begins here
     ! ================================================================
+    LOC = 'FileData_ArrCheck2D (HCO_FILEDATA_MOD.F90)'
 
     ! Assume success until otherwise
     RC = HCO_SUCCESS
@@ -321,7 +312,7 @@ CONTAINS
             ( SIZE(FileDta%V2(1)%Val,1) /= nx ) .OR. &
             ( SIZE(FileDta%V2(1)%Val,2) /= ny )       ) THEN
           MSG = 'Wrong dimensions: ' // TRIM(FileDta%ncFile)
-          CALL HCO_ERROR ( HcoConfig%Err, MSG, RC )
+          CALL HCO_ERROR ( MSG, RC )
        ENDIF
        RETURN
     ENDIF
@@ -329,12 +320,15 @@ CONTAINS
     ! If not associated yet:
     ! Initialize vector and corresponding arrays.
     CALL FileData_ArrInit ( FileDta, nt, nx, ny, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
   END SUBROUTINE FileData_ArrCheck2D
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -367,6 +361,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Apr 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -374,11 +369,12 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     INTEGER            :: I, AS
-    CHARACTER(LEN=255) :: MSG
+    CHARACTER(LEN=255) :: MSG, LOC
 
     ! ================================================================
     ! FileData_ArrCheck3D begins here
     ! ================================================================
+    LOC = 'FileData_ArrCheck3D (HCO_FILEDATA_MOD.F90)'
 
     ! Assume success until otherwise
     RC = HCO_SUCCESS
@@ -390,7 +386,7 @@ CONTAINS
             ( SIZE(FileDta%V3(1)%Val,2) /= ny ) .OR. &
             ( SIZE(FileDta%V3(1)%Val,3) /= nz )       ) THEN
           MSG = 'Wrong dimensions: ' // TRIM(FileDta%ncFile)
-          CALL HCO_ERROR ( HcoConfig%Err, MSG, RC )
+          CALL HCO_ERROR ( MSG, RC )
        ENDIF
        RETURN
     ENDIF
@@ -398,12 +394,15 @@ CONTAINS
     ! If not associated yet:
     ! Initialize vector and corresponding arrays.
     CALL FileData_ArrInit( FileDta, nt, nx, ny, nz, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
   END SUBROUTINE FileData_ArrCheck3D
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -427,6 +426,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Apr 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -457,7 +457,7 @@ CONTAINS
   END FUNCTION FileData_ArrIsDefined
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -485,6 +485,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  17 Mar 2015 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -505,7 +506,7 @@ CONTAINS
   END FUNCTION FileData_ArrIsTouched
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -538,22 +539,28 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 Oct 2014 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
 ! !LOCAL VARIABLES:
 !
+    CHARACTER(LEN=255)  :: LOC
     ! ================================================================
     ! FileData_ArrInit2D begins here
     ! ================================================================
+    LOC = 'FileData_ArrInit2D (HCO_FILEDATA_MOD.F90)'
 
     ! Assume success until otherwise
     RC = HCO_SUCCESS
 
     ! Initialize vector and corresponding arrays.
     CALL HCO_ArrInit( FileDta%V2, nt, nx, ny, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Update nt
     FileDta%nt = nt
@@ -564,7 +571,7 @@ CONTAINS
   END SUBROUTINE FileData_ArrInit2D
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -598,22 +605,28 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Apr 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
 ! !LOCAL VARIABLES:
 !
+    CHARACTER(LEN=255)  :: LOC
     ! ================================================================
     ! FileData_ArrInit3D begins here
     ! ================================================================
+    LOC = 'FileData_ArrInit3D (HCO_FILEDATA_MOD.F90)'
 
     ! Assume success until otherwise
     RC = HCO_SUCCESS
 
     ! Initialize vector and corresponding arrays.
     CALL HCO_ArrInit( FileDta%V3, nt, nx, ny, nz, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Update nt
     FileDta%nt = nt

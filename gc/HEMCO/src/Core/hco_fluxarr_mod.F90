@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -38,7 +38,7 @@ MODULE HCO_FluxArr_Mod
 !
 ! !REVISION HISTORY:
 !  05 Jan 2014 - C. Keller - Initial version, adapted from hco_state_mod.F90
-!  21 Oct 2014 - C. Keller - Added error check for negative values to HCO_EmisAdd
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -64,7 +64,7 @@ MODULE HCO_FluxArr_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -93,7 +93,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 May 2013 - C. Keller - Initial version
-!  21 Aug 2014 - C. Keller - Added concentration
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -148,7 +148,7 @@ CONTAINS
   END SUBROUTINE HCO_FluxarrReset
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -185,15 +185,19 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 May 2013 - C. Keller - Initial version
-!  20 Apr 2015 - C. Keller - Added DiagnCheck
-!  12 May 2017 - C. Keller - Added option to use uniform scale factor
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
+!
+! !LOCAL VARIABLES:
+!
+    CHARACTER(LEN=255)  :: LOC
 
     !=====================================================================
     ! HCO_EmisAdd_3D_Dp begins here!
     !=====================================================================
+    LOC = 'HCO_EmisAdd_3D_Dp (HCO_FLUXARR_MOD.F90)'
 
     ! Make sure target flux array in HcoState is allocated
     CALL HCO_ArrAssert ( HcoState%Spc(HcoID)%Emis, &
@@ -214,7 +218,7 @@ CONTAINS
 
           ! Negative flag is 0: return w/ error
           ELSE
-             CALL HCO_ERROR ( HcoState%Config%Err, &
+             CALL HCO_ERROR ( &
                 'Negative values found!', &
                 RC, THISLOC = 'HCO_EmisAdd (HCO_FLUXARR_MOD.F90)' )
              RETURN
@@ -224,7 +228,10 @@ CONTAINS
 
     ! Eventually add universal scale factor
     CALL HCO_ScaleArr( HcoState, HcoID, Arr3D, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Add array
     HcoState%Spc(HcoID)%Emis%Val(:,:,:) = &
@@ -234,7 +241,10 @@ CONTAINS
     CALL DiagnCheck( HcoState,   ExtNr=ExtNr, Cat=Cat, &
                      Hier=Hier,  HcoID=HcoID, Arr3D=Arr3D, &
                      MinDiagnLev=MinDiagnLev, RC=RC     )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Return w/ success
     RC = HCO_SUCCESS
@@ -242,7 +252,7 @@ CONTAINS
   END SUBROUTINE HCO_EmisAdd_3D_Dp
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -279,15 +289,19 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 May 2013 - C. Keller - Initial version
-!  20 Apr 2015 - C. Keller - Added DiagnCheck
-!  12 May 2017 - C. Keller - Added option to use uniform scale factor
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
+!
+! !LOCAL VARIABLES:
+!
+    CHARACTER(LEN=255)  :: LOC
 
     !=====================================================================
     ! HCO_EmisAdd_3D_Sp begins here!
     !=====================================================================
+    LOC = 'HCO_EmisAdd_3D_Sp (HCO_FLUXARR_MOD.F90)'
 
     ! Make sure target flux array in HcoState is allocated
     CALL HCO_ArrAssert ( HcoState%Spc(HcoID)%Emis, &
@@ -308,7 +322,7 @@ CONTAINS
 
           ! Negative flag is 0: return w/ error
           ELSE
-             CALL HCO_ERROR ( HcoState%Config%Err, &
+             CALL HCO_ERROR ( &
                'Negative values found!', &
                 RC, THISLOC = 'HCO_EmisAdd (HCO_FLUXARR_MOD.F90)' )
              RETURN
@@ -318,7 +332,10 @@ CONTAINS
 
     ! Eventually add universal scale factor
     CALL HCO_ScaleArr( HcoState, HcoID, Arr3D, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Add array
     HcoState%Spc(HcoID)%Emis%Val(:,:,:) = &
@@ -328,7 +345,10 @@ CONTAINS
     CALL DiagnCheck( HcoState,   ExtNr=ExtNr, Cat=Cat, &
                      Hier=Hier,  HcoID=HcoID, Arr3Dsp=Arr3D, &
                      MinDiagnLev=MinDiagnLev, RC=RC     )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Return w/ success
     RC = HCO_SUCCESS
@@ -336,7 +356,7 @@ CONTAINS
   END SUBROUTINE HCO_EmisAdd_3D_Sp
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -371,15 +391,19 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 May 2013 - C. Keller - Initial version
-!  20 Apr 2015 - C. Keller - Added DiagnCheck
-!  12 May 2017 - C. Keller - Added option to use uniform scale factor
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
+!
+! !LOCAL VARIABLES:
+!
+    CHARACTER(LEN=255)  :: LOC
 
     !=====================================================================
     ! HCO_EmisAdd_2D_Dp begins here!
     !=====================================================================
+    LOC = 'HCO_EmisAdd_2D_Dp (HCO_FLUXARR_MOD)'
 
     ! Make sure target flux array in HcoState is allocated
     CALL HCO_ArrAssert ( HcoState%Spc(HcoID)%Emis, &
@@ -400,7 +424,7 @@ CONTAINS
 
           ! Negative flag is 0: return w/ error
           ELSE
-             CALL HCO_ERROR ( HcoState%Config%Err, &
+             CALL HCO_ERROR ( &
                'Negative values found!', &
                 RC, THISLOC = 'HCO_EmisAdd (HCO_FLUXARR_MOD.F90)' )
              RETURN
@@ -410,7 +434,10 @@ CONTAINS
 
     ! Eventually add universal scale factor
     CALL HCO_ScaleArr( HcoState, HcoID, Arr2D, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 4', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Add array
     HcoState%Spc(HcoID)%Emis%Val(:,:,1) = &
@@ -420,7 +447,10 @@ CONTAINS
     CALL DiagnCheck( HcoState,   ExtNr=ExtNr, Cat=Cat, &
                      Hier=Hier,  HcoID=HcoID, Arr2D=Arr2D, &
                      MinDiagnLev=MinDiagnLev, RC=RC     )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 5', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Return w/ success
     RC = HCO_SUCCESS
@@ -428,7 +458,7 @@ CONTAINS
   END SUBROUTINE HCO_EmisAdd_2D_Dp
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -464,15 +494,19 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 May 2013 - C. Keller - Initial version
-!  20 Apr 2015 - C. Keller - Added DiagnCheck
-!  12 May 2017 - C. Keller - Added option to use uniform scale factor
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
+!
+! !LOCAL VARIABLES:
+!
+    CHARACTER(LEN=255)  :: LOC
 
     !=====================================================================
     ! HCO_EmisAdd_2D_Sp begins here!
     !=====================================================================
+    LOC = 'HCO_EmisAdd_2D_Sp (HCO_FLUXARR_MOD.F90)'
 
     ! Make sure target flux array in HcoState is allocated
     CALL HCO_ArrAssert ( HcoState%Spc(HcoID)%Emis, &
@@ -493,7 +527,7 @@ CONTAINS
 
           ! Negative flag is 0: return w/ error
           ELSE
-             CALL HCO_ERROR ( HcoState%Config%Err, &
+             CALL HCO_ERROR ( &
                'Negative values found!', &
                 RC, THISLOC = 'HCO_EmisAdd (HCO_FLUXARR_MOD.F90)' )
              RETURN
@@ -503,7 +537,10 @@ CONTAINS
 
     ! Eventually add universal scale factor
     CALL HCO_ScaleArr( HcoState, HcoID, Arr2D, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 6', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Add array
     HcoState%Spc(HcoID)%Emis%Val(:,:,1) = &
@@ -513,7 +550,10 @@ CONTAINS
     CALL DiagnCheck( HcoState,   ExtNr=ExtNr, Cat=Cat, &
                      Hier=Hier,  HcoID=HcoID, Arr2Dsp=Arr2D, &
                      MinDiagnLev=MinDiagnLev, RC=RC     )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 7', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Return w/ success
     RC = HCO_SUCCESS
@@ -521,7 +561,7 @@ CONTAINS
   END SUBROUTINE HCO_EmisAdd_2D_Sp
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -551,15 +591,16 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 May 2013 - C. Keller - Initial version
-!  12 May 2017 - C. Keller - Added option to use uniform scale factor
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
-    CHARACTER(LEN=255) :: MSG
+    CHARACTER(LEN=255) :: MSG, LOC
 
     !=====================================================================
     ! HCO_EmisAdd_Dp begins here!
     !=====================================================================
+    LOC = 'HCO_EmisAdd_Dp (HCO_FLUXARR_MOD.F90)'
 
     ! Check size dimensions
     IF ( I > HcoState%NX ) THEN
@@ -597,7 +638,7 @@ CONTAINS
 
           ! Negative flag is 0: return w/ error
           ELSE
-             CALL HCO_ERROR ( HcoState%Config%Err, &
+             CALL HCO_ERROR ( &
                'Negative values found!', &
                 RC, THISLOC = 'HCO_EmisAdd (HCO_FLUXARR_MOD.F90)' )
              RETURN
@@ -607,7 +648,10 @@ CONTAINS
 
     ! Eventually add universal scale factor
     CALL HCO_ScaleArr( HcoState, HcoID, iVal, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 8', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Add array
     HcoState%Spc(HcoID)%Emis%Val(I,J,L) = &
@@ -619,7 +663,7 @@ CONTAINS
   END SUBROUTINE HCO_EmisAdd_Dp
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -649,15 +693,16 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 May 2013 - C. Keller - Initial version
-!  12 May 2017 - C. Keller - Added option to use uniform scale factor
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
-    CHARACTER(LEN=255) :: MSG
+    CHARACTER(LEN=255) :: MSG, LOC
 
     !=====================================================================
     ! HCO_EmisAdd_Sp begins here!
     !=====================================================================
+    LOC = 'HCO_EmisAdd_Sp (HCO_FLUXARR_MOD.F90)'
 
     ! Check size dimensions
     IF ( I > HcoState%NX ) THEN
@@ -695,7 +740,7 @@ CONTAINS
 
           ! Negative flag is 0: return w/ error
           ELSE
-             CALL HCO_ERROR ( HcoState%Config%Err, &
+             CALL HCO_ERROR ( &
                'Negative values found!', &
                 RC, THISLOC = 'HCO_EmisAdd (HCO_FLUXARR_MOD.F90)' )
              RETURN
@@ -705,7 +750,10 @@ CONTAINS
 
     ! Eventually add universal scale factor
     CALL HCO_ScaleArr( HcoState, HcoID, iVal, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 9', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Add array
     HcoState%Spc(HcoID)%Emis%Val(I,J,L) = &
@@ -717,7 +765,7 @@ CONTAINS
   END SUBROUTINE HCO_EmisAdd_Sp
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -743,6 +791,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 May 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -767,7 +816,7 @@ CONTAINS
   END SUBROUTINE HCO_DepvAdd_2D_Dp
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -793,6 +842,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 May 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -816,7 +866,7 @@ CONTAINS
   END SUBROUTINE HCO_DepvAdd_2D_Sp
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -845,6 +895,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 May 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -857,12 +908,12 @@ CONTAINS
     ! Check size dimensions
     IF ( I > HcoState%NX ) THEN
        MSG = 'Cannot add DP - i too high!'
-       CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC )
+       CALL HCO_ERROR ( MSG, RC )
        RETURN
     ENDIF
     IF ( J > HcoState%NY ) THEN
        MSG = 'Cannot add DP - j too high!'
-       CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC )
+       CALL HCO_ERROR ( MSG, RC )
        RETURN
     ENDIF
 
@@ -881,7 +932,7 @@ CONTAINS
   END SUBROUTINE HCO_DepvAdd_Dp
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -910,6 +961,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 May 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -922,12 +974,12 @@ CONTAINS
     ! Check size dimensions
     IF ( I > HcoState%NX ) THEN
        MSG = 'Cannot add iVal - i too high!'
-       CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC )
+       CALL HCO_ERROR ( MSG, RC )
        RETURN
     ENDIF
     IF ( J > HcoState%NY ) THEN
        MSG = 'Cannot add iVal - j too high!'
-       CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC )
+       CALL HCO_ERROR ( MSG, RC )
        RETURN
     ENDIF
 
@@ -946,7 +998,7 @@ CONTAINS
   END SUBROUTINE HCO_DepvAdd_Sp
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -993,19 +1045,22 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Apr 2015 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
 ! !LOCAL VARIABLES:
 !
-    INTEGER :: AFL, XT, CT, HR
+    INTEGER             :: AFL, XT, CT, HR
+    CHARACTER(LEN=255)  :: LOC
 
     !=====================================================================
     ! DiagnCheck begins here!
     !=====================================================================
 
     ! Initialize values
+    LOC = 'DiagnCheck (HCO_FLUXARR_MOD.F90)'
 
     ! Autofill level:
     ! 1=species level, 2=ExtNr level, 3=Cat level, 4=Hier level
@@ -1050,7 +1105,10 @@ CONTAINS
           CALL Diagn_Update( HcoState, ExtNr=XT,    Cat=CT,     &
                              Hier=HR,  HcoID=HcoID, AutoFill=1, &
                              Array3D=Arr3D, MinDiagnLev=MinDiagnLev, RC=RC )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+          IF ( RC /= HCO_SUCCESS ) THEN
+              CALL HCO_ERROR( 'ERROR 10', RC, THISLOC=LOC )
+              RETURN
+          ENDIF
        ENDIF
 
        ! 3D SP array
@@ -1058,7 +1116,10 @@ CONTAINS
           CALL Diagn_Update( HcoState, ExtNr=XT,    Cat=CT,     &
                              Hier=HR,  HcoID=HcoID, AutoFill=1, &
                              Array3D=Arr3Dsp, MinDiagnLev=MinDiagnLev, RC=RC )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+          IF ( RC /= HCO_SUCCESS ) THEN
+              CALL HCO_ERROR( 'ERROR 11', RC, THISLOC=LOC )
+              RETURN
+          ENDIF
        ENDIF
 
        ! 2D HP array
@@ -1066,7 +1127,10 @@ CONTAINS
           CALL Diagn_Update( HcoState, ExtNr=XT,    Cat=CT,     &
                              Hier=HR,  HcoID=HcoID, AutoFill=1, &
                              Array2D=Arr2D, MinDiagnLev=MinDiagnLev, RC=RC )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+          IF ( RC /= HCO_SUCCESS ) THEN
+              CALL HCO_ERROR( 'ERROR 12', RC, THISLOC=LOC )
+              RETURN
+          ENDIF
        ENDIF
 
        ! 2D SP array
@@ -1074,7 +1138,10 @@ CONTAINS
           CALL Diagn_Update( HcoState, ExtNr=XT,    Cat=CT,     &
                              Hier=HR,  HcoID=HcoID, AutoFill=1, &
                              Array2D=Arr2Dsp, MinDiagnLev=MinDiagnLev, RC=RC )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+          IF ( RC /= HCO_SUCCESS ) THEN
+              CALL HCO_ERROR( 'ERROR 13', RC, THISLOC=LOC )
+              RETURN
+          ENDIF
        ENDIF
 
     ENDIF

@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -36,15 +36,14 @@ MODULE HCO_Driver_Mod
 !
 ! !REVISION HISTORY:
 !  27 May 2012 - C. Keller   - Initialization
-!  11 Jun 2014 - R. Yantosca - Now indended with F90 free-format
-!  11 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -86,14 +85,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  27 May 2012 - C. Keller   - Initialization
-!  16 Jul 2014 - R. Yantosca - Cosmetic changes
-!  23 Dec 2014 - C. Keller   - ReadList_to_EmisList is now obsolete.
-!                              Containers are added to EmisList within
-!                              routine ReadList_Read.
-!  23 Feb 2015 - R. Yantosca - Now call HcoClock_InitTzPtr on the first
-!                              emissions timestep to initialize the pointer
-!                              to the timezones data (i.e. hours from UTC)
-!  01 Apr 2015 - C. Keller   - Added run phases
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -106,15 +98,19 @@ CONTAINS
     LOGICAL            :: ItIsEndStep
 
     ! Strings
-    CHARACTER(LEN=255) :: MSG
+    CHARACTER(LEN=255) :: MSG, LOC
 
     !=================================================================
     ! HCO_RUN begins here!
     !=================================================================
+    LOC = 'HCO_RUN (HCO_DRIVER_MOD.F90)'
 
     ! Enter
-    CALL HCO_ENTER( HcoState%Config%Err, 'HCO_RUN (hco_driver_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Define a local convenience variable to negate HcoState%Options%isDryRun
     notDryRun = ( .not. HcoState%Options%isDryRun )
@@ -130,7 +126,10 @@ CONTAINS
     ! 1. Check if it's time for emissions
     !--------------------------------------------------------------
     CALL HcoClock_Get ( HcoState%Clock, IsEmisTime=IsEmisTime, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     !--------------------------------------------------------------
     ! 2. Write HEMCO diagnostics. Do this only if the corresponding
@@ -139,7 +138,10 @@ CONTAINS
     !--------------------------------------------------------------
     IF ( HcoState%Options%HcoWritesDiagn .and. notDryRun ) THEN
        CALL HcoDiagn_Write( HcoState, .FALSE., RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
     ENDIF
 
     ! Check if this is the last timestep of simulation. If so, return
@@ -186,11 +188,14 @@ CONTAINS
     ! content of EmisList. Emissions become written into HcoState.
     ! Do this only if it's time for emissions and NOT a dry-run.
     !-----------------------------------------------------------------
-    IF ( IsEmisTime .AND. Phase == 2 .and. notDryRun ) THEN
+    IF ( IsEmisTime .AND. Phase > 1 .and. notDryRun ) THEN
 
        ! Use emission data only
        CALL HCO_CalcEmis( HcoState, .FALSE., RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        ! Use concentration data only
        ! This is currently not being used. Concentrations can be read
@@ -205,7 +210,7 @@ CONTAINS
   END SUBROUTINE HCO_Run
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -237,9 +242,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  27 May 2012 - C. Keller   - Initialization
-!  11 Jun 2014 - R. Yantosca - Now indended with F90 free-format
-!  11 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  16 Jul 2014 - R. Yantosca - Remove reference to gigc_errcode_mdo.F90
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -247,14 +250,16 @@ CONTAINS
 !
 ! !LOCAL VARIABLES:
 !
+    CHARACTER(LEN=255)  :: LOC
     !=================================================================
     ! HCO_INIT begins here!
     !=================================================================
+    LOC = 'HCO_INIT (HCO_DRIVER_MOD.F90)'
 
     ! Enter
-    CALL HCO_Enter( HcoState%Config%Err, 'HCO_INIT (hco_driver_mod.F90)', RC )
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
-       PRINT *, "Error in HCO_Enter called from HCO_Init"
+       PRINT *, "Error in HCO_ENTER called from HCO_Init"
        RETURN
     ENDIF
 
@@ -300,7 +305,7 @@ CONTAINS
   END SUBROUTINE HCO_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -341,9 +346,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  27 May 2012 - C. Keller   - Initialization
-!  11 Jun 2014 - R. Yantosca - Now indended with F90 free-format
-!  11 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  16 Jul 2014 - R. Yantosca - Cosmetic changes
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC

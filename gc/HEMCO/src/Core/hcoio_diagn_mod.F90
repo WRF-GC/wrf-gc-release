@@ -1,6 +1,6 @@
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -38,12 +38,7 @@ MODULE HCOIO_DIAGN_MOD
 !
 ! !REVISION HISTORY:
 !  04 May 2014 - C. Keller   - Initial version.
-!  11 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  11 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
-!  28 Jul 2014 - C. Keller   - Removed GC specific initialization calls and
-!                              moved to HEMCO core.
-!  05 Aug 2014 - C. Keller   - Added dummy interface for ESMF.
-!  03 Apr 2015 - C. Keller   - Added HcoDiagn_Write
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -57,7 +52,7 @@ MODULE HCOIO_DIAGN_MOD
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -89,11 +84,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  03 Apr 2015 - C. Keller   - Initial version
-!  01 Nov 2016 - C. Keller   - Also write out default diagnostics collection if
-!                              RESTART=.TRUE.
-!  17 Oct 2017 - C. Keller   - Don't pass restart diagnostics to EXPORT state in
-!                              ESMF mode. They are already in the internal
-!                              state!
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -102,13 +93,16 @@ CONTAINS
 !
     INTEGER            :: I, COL
     CHARACTER(LEN=255) :: MSG, LOC
+#ifdef ADJOINT
+    INTEGER            :: MaxIdx
+#endif
 
     !=================================================================
     ! HcoDiagn_Write begins here!
     !=================================================================
 
     ! Init
-    LOC = 'HcoDiagn_Write (hcoi_diagn_mod.F90)'
+    LOC = 'HcoDiagn_Write (hcoio_diagn_mod.F90)'
 
     ! To write restart (enforced)
     IF ( RESTART ) THEN
@@ -130,6 +124,17 @@ CONTAINS
                                    RC          = RC                         )
        IF( RC /= HCO_SUCCESS) RETURN
 
+#ifdef ADJOINT
+       IF (HcoState%isAdjoint) THEN
+       CALL HCOIO_DIAGN_WRITEOUT ( HcoState,                               &
+                                   ForceWrite  = .FALSE.,                  &
+                                   UsePrevTime = .FALSE.,                  &
+                                   COL = HcoState%Diagn%HcoDiagnIDAdjoint, &
+                                   RC          = RC                         )
+       IF( RC /= HCO_SUCCESS) RETURN 
+       ENDIF
+#endif
+
        ! Reset IsLast flag. This is to ensure that the last flag is not
        ! carried over (ckeller, 11/1/16).
        CALL HcoClock_SetLast ( HcoState%Clock, .FALSE., RC )
@@ -140,7 +145,13 @@ CONTAINS
        ! Loop over all collections that shall be written out.
        ! HCOIO_DIAGN_WRITEOUT will determine whether it is time to
        ! write a collection or not.
+#ifndef ADJOINT
        DO I = 1, 3
+#else
+       MaxIdx = 3
+       IF (HcoState%isAdjoint) MaxIdx = 4
+       DO I = 1, MaxIdx
+#endif
 
           ! Define collection ID
           SELECT CASE ( I )
@@ -150,6 +161,10 @@ CONTAINS
                 COL = HcoState%Diagn%HcoDiagnIDRestart
              CASE ( 3 )
                 COL = HcoState%Diagn%HcoDiagnIDManual
+#ifdef ADJOINT
+             CASE ( 4 )
+                COL = HcoState%Diagn%HcoDiagnIDAdjoint
+#endif
           END SELECT
 
 #if       !defined ( ESMF_ )
@@ -177,7 +192,7 @@ CONTAINS
   END SUBROUTINE HcoDiagn_Write
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -197,11 +212,7 @@ CONTAINS
 ! !USES:
 !
     USE HCO_State_Mod,        ONLY : HCO_State
-#if defined(ESMF_)
-    USE HCOIO_WRITE_ESMF_MOD, ONLY : HCOIO_WRITE_ESMF
-#else
-    USE HCOIO_WRITE_STD_MOD,  ONLY : HCOIO_WRITE_STD
-#endif
+    USE HCOIO_Write_Mod,      ONLY : HCOIO_Write
 !
 ! !INPUT PARAMETERS:
 !
@@ -214,18 +225,11 @@ CONTAINS
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
-
     INTEGER,          INTENT(INOUT) :: RC          ! Failure or success
 !
 ! !REVISION HISTORY:
 !  12 Sep 2013 - C. Keller   - Initial version
-!  11 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  11 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
-!  19 Feb 2015 - C. Keller   - Added optional argument OnlyIfFirst
-!  23 Feb 2015 - R. Yantosca - Now make Arr1D REAL(sp) so that we can write
-!                              out lon & lat as float instead of double
-!  06 Nov 2015 - C. Keller   - Output time stamp is now determined from
-!                              variable OutTimeStamp.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -238,28 +242,34 @@ CONTAINS
     ! HCOIO_DIAGN_WRITEOUT begins here!
     !=================================================================
 
+#if defined(ESMF_)
     !-----------------------------------------------------------------
     ! ESMF environment: call ESMF output routines
     !-----------------------------------------------------------------
-#if defined(ESMF_)
-    CALL HCOIO_WRITE_ESMF ( HcoState,                &
-                            RC,                      &
-                            OnlyIfFirst=OnlyIfFirst, &
-                            COL=COL                   )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCOIO_Write     ( HcoState,                &
+                           RC,                      &
+                           OnlyIfFirst=OnlyIfFirst, &
+                           COL=COL                   )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
+#else
     !-----------------------------------------------------------------
     ! Standard environment: call default output routines
     !-----------------------------------------------------------------
-#else
-    CALL HCOIO_WRITE_STD( HcoState,                 &
+    CALL HCOIO_Write    ( HcoState,                 &
                           ForceWrite,               &
                           RC,                       &
                           PREFIX      =PREFIX,      &
                           UsePrevTime =UsePrevTime, &
                           OnlyIfFirst =OnlyIfFirst, &
                           COL         = COL          )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
 #endif
 

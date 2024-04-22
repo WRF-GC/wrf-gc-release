@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #------------------------------------------------------------------------------
-#                  GEOS-Chem Global Chemical Transport Model                  !
+#                   Harmonized Emissions Component (HEMCO)                    !
 #------------------------------------------------------------------------------
 #BOP
 #
@@ -37,7 +37,7 @@ use strict;         # IMPLICIT NONE syntax
 #  27 Jun 2014 - R. Yantosca - Initial version
 #EOC
 #------------------------------------------------------------------------------
-#                  GEOS-Chem Global Chemical Transport Model                  !
+#                   Harmonized Emissions Component (HEMCO)                    !
 #------------------------------------------------------------------------------
 #BOP
 #
@@ -79,7 +79,7 @@ sub baseName($) {
 }
 #EOP
 #------------------------------------------------------------------------------
-#                  GEOS-Chem Global Chemical Transport Model                  !
+#                   Harmonized Emissions Component (HEMCO)                    !
 #------------------------------------------------------------------------------
 #BOP
 #
@@ -115,7 +115,7 @@ sub num2str($) {
   return( $str );
 }
 #------------------------------------------------------------------------------
-#                  GEOS-Chem Global Chemical Transport Model                  !
+#                   Harmonized Emissions Component (HEMCO)                    !
 #------------------------------------------------------------------------------
 #BOP
 #
@@ -180,7 +180,7 @@ EOF
 }
 #EOP
 #------------------------------------------------------------------------------
-#                  GEOS-Chem Global Chemical Transport Model                  !
+#                   Harmonized Emissions Component (HEMCO)                    !
 #------------------------------------------------------------------------------
 #BOP
 #
@@ -443,7 +443,7 @@ sub makeFinnInclude($$$) {
 }
 #EOP
 #------------------------------------------------------------------------------
-#                  GEOS-Chem Global Chemical Transport Model                  !
+#                   Harmonized Emissions Component (HEMCO)                    !
 #------------------------------------------------------------------------------
 #BOP
 #

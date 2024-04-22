@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -120,27 +120,21 @@ MODULE HCO_State_Mod
      TYPE(ESMF_State),    POINTER :: IMPORT
      TYPE(ESMF_State),    POINTER :: EXPORT
 #endif
+#ifdef ADJOINT
+     LOGICAL                      :: isAdjoint
+#endif
   END TYPE HCO_State
 !
 ! !REVISION HISTORY:
-!  20 Aug 2013 - C. Keller   - Initial version, adapted from
-!                              gigc_state_chm_mod.F90
-!  07 Jul 2014 - R. Yantosca - Cosmetic changes
-!  30 Sep 2014 - R. Yantosca - Add HcoMicroPhys derived type to HcoState
-!  08 Apr 2015 - C. Keller   - Added MaskFractions to HcoState options.
-!  13 Jul 2015 - C. Keller   - Added option 'Field2Diagn'.
-!  15 Feb 2016 - C. Keller   - Update to v2.0
-!  02 Nov 2019 - H.P. Lin    - Add a HEMCO isDryRun option which is intended to flag
-!                              that all "meaningful" IO is skipped and files should
-!                              only be checked. If file does not exist DO NOT STOP
-!                              THE RUN. (This is for GC Classic for now)
+!  20 Aug 2013 - C. Keller   - Initial version, adapted from state_chm_mod.F90
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -178,11 +172,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Aug 2013 - C. Keller - Adapted from gigc_state_chm_mod.F90
-!  07 Jan 2016 - E. Lundgren - Add physical constant RSTARG and updated
-!                              Avgdr and g0 to NIST 2014 values
-!  15 Feb 2016 - C. Keller - Now pass HcoConfig object
-!  01 Nov 2016 - C. Keller - Now nullify all pointers
-!  12 May 2017 - C. Keller - Added option ScaleEmis
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -192,15 +182,19 @@ CONTAINS
     INTEGER            :: I, AS
     INTEGER            :: UnitTolerance
     LOGICAL            :: FOUND
-    CHARACTER(LEN=255) :: MSG
+    CHARACTER(LEN=255) :: MSG, LOC
 
     !=====================================================================
     ! HcoState_Init begins here!
     !=====================================================================
+    LOC = 'HcoState_Init (HCO_STATE_MOD.F90)'
 
     ! For error handling
-    CALL HCO_ENTER (HcoConfig%Err,'Init_HCO_State (hco_state_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER (HcoConfig%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     !=====================================================================
     ! Allocate emission field vectors
@@ -221,7 +215,7 @@ CONTAINS
     IF ( nSpecies > 0 ) THEN
        ALLOCATE ( HcoState%Spc (nSpecies ), STAT=AS )
        IF ( AS /= 0 ) THEN
-          CALL HCO_ERROR( HcoConfig%Err, 'Species', RC )
+          CALL HCO_ERROR( 'Species', RC )
           RETURN
        ENDIF
     ENDIF
@@ -234,8 +228,6 @@ CONTAINS
        HcoState%Spc(I)%ModID      = -1
        HcoState%Spc(I)%SpcName    = ''
        HcoState%Spc(I)%MW_g       = 0.0_dp
-       HcoState%Spc(I)%EmMW_g     = 0.0_dp
-       HcoState%Spc(I)%MolecRatio = 1.0_dp
        HcoState%Spc(I)%HenryK0    = 0.0_dp
        HcoState%Spc(I)%HenryCR    = 0.0_dp
        HcoState%Spc(I)%HenryPKA   = 0.0_dp
@@ -245,13 +237,22 @@ CONTAINS
        ! Will specify the arrays in HEMCO-model interface routine
        ! or when writing to them for the first time.
        CALL Hco_ArrInit( HcoState%Spc(I)%Emis, 0, 0, 0, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        CALL Hco_ArrInit( HcoState%Spc(I)%Conc, 0, 0, 0, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        CALL Hco_ArrInit( HcoState%Spc(I)%Depv, 0, 0, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
     ENDDO !I
 
     !=====================================================================
@@ -264,63 +265,103 @@ CONTAINS
     HcoState%NZ   = 0
     ALLOCATE ( HcoState%Grid, STAT = AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoConfig%Err, 'HEMCO grid', RC )
+       CALL HCO_ERROR( 'HEMCO grid', RC )
        RETURN
     ENDIF
 
     ! Initialize grid arrays.
     CALL HCO_ArrInit ( HcoState%Grid%XMID,       0, 0,    RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 4', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     CALL HCO_ArrInit ( HcoState%Grid%YMID,       0, 0,    RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 5', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     CALL HCO_ArrInit ( HcoState%Grid%XEDGE,      0, 0,    RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 6', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     CALL HCO_ArrInit ( HcoState%Grid%YEDGE,      0, 0,    RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 7', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     CALL HCO_ArrInit ( HcoState%Grid%PEDGE,      0, 0, 0, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 8', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     CALL HCO_ArrInit ( HcoState%Grid%YSIN,       0, 0,    RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 9', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     CALL HCO_ArrInit ( HcoState%Grid%AREA_M2,    0, 0,    RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 10', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     CALL HCO_ArrInit ( HcoState%Grid%PBLHEIGHT,  0, 0,    RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 11', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     CALL HCO_ArrInit ( HcoState%Grid%BXHEIGHT_M, 0, 0, 0, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 12', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     CALL HCO_ArrInit ( HcoState%Grid%ZSFC,       0, 0,    RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 13', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     CALL HCO_ArrInit ( HcoState%Grid%PSFC,       0, 0,    RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 14', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Initialize vertical grid
     HcoState%Grid%ZGRID => NULL()
     CALL HCO_VertGrid_Init( HcoState%Grid%ZGRID, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 15', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     !=====================================================================
     ! Set misc. parameter
     !=====================================================================
 
-    ! Physical constants
+    ! Physical constants (Source: NIST, 2014)
     ALLOCATE ( HcoState%Phys, STAT = AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoConfig%Err, 'HEMCO physical constants', RC )
+       CALL HCO_ERROR( 'HEMCO physical constants', RC )
        RETURN
     ENDIF
     HcoState%Phys%Avgdr  = 6.022140857e23_dp
     HcoState%Phys%PI     = 3.14159265358979323_dp
     HcoState%Phys%PI_180 = HcoState%Phys%PI / 180.0_dp
-    HcoState%Phys%Re     = 6.375e6_dp
-    HcoState%Phys%AIRMW  = 28.97_dp
+    HcoState%Phys%Re     = 6.3710072e+6_dp                ! Was 6.375e6_dp
+    HcoState%Phys%AIRMW  = 28.9644_dp                     ! Was 28.97_dp
     HcoState%Phys%g0     = 9.80665_dp
     HcoState%Phys%Rd     = 287.0_dp
     HcoState%Phys%Rdg0   = HcoState%Phys%Rd / HcoState%Phys%g0
-    HcoState%Phys%RSTARG = 8.31450_dp
+    HcoState%Phys%RSTARG = 8.3144598_dp                   ! Was 8.31450_dp
 
     ! Timesteps
     HcoState%TS_EMIS = 0.0_sp
     HcoState%TS_CHEM = 0.0_sp
     HcoState%TS_DYN  = 0.0_sp
+
+#ifdef ADJOINT
+    HcoState%isAdjoint = .false.
+#endif
 
     ! Nullify temporary array. This array may be used as temporary
     ! place to write emissions into.
@@ -337,7 +378,7 @@ CONTAINS
     ! Aerosol options
     ALLOCATE ( HcoState%MicroPhys, STAT = AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoConfig%Err, 'HEMCO aerosol microphysics options', RC )
+       CALL HCO_ERROR( 'HEMCO aerosol microphysics options', RC )
        RETURN
     ENDIF
     HcoState%MicroPhys%nBins           = 0
@@ -364,51 +405,75 @@ CONTAINS
     ! Get negative flag value from configuration file. If not found, set to 0.
     CALL GetExtOpt ( HcoConfig, CoreNr, 'Negative values', &
                      OptValInt=HcoState%Options%NegFlag, Found=Found, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 16', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. Found ) HcoState%Options%NegFlag = 0
 
     ! Get PBL_DRYDEP flag from configuration file. If not found, set to default
     ! value of false.
     CALL GetExtOpt ( HcoConfig, CoreNr, 'PBL dry deposition', &
                      OptValBool=HcoState%Options%PBL_DRYDEP, Found=Found, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 17', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. Found ) HcoState%Options%PBL_DRYDEP = .FALSE.
 
     ! Apply uniform scale factors specified in HEMCO_Config.rc?
     CALL GetExtOpt ( HcoConfig, CoreNr, 'Scale emissions', &
                      OptValBool=HcoState%Options%ScaleEmis, Found=Found, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 18', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. Found ) HcoState%Options%ScaleEmis = .TRUE.
 
     ! Only shift hh/mm when applying time shift?
     CALL GetExtOpt ( HcoConfig, CoreNr, 'Cap time shift', &
                      OptValBool=HcoState%Options%TimeShiftCap, &
                      Found=Found, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 19', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. Found ) HcoState%Options%TimeShiftCap = .FALSE.
 
     ! Get MaxDepExp from configuration file. If not found, set to default
     ! value of 20.
     CALL GetExtOpt ( HcoConfig, CoreNr, 'Maximum dep x ts', &
                      OptValHp=HcoState%Options%MaxDepExp, Found=Found, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 20', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. Found ) HcoState%Options%MaxDepExp = 20.0_hp
 
     ! Get binary mask flag from configuration file. If not found, set to default
     ! value of TRUE.
     CALL GetExtOpt ( HcoConfig, CoreNr, 'Mask fractions', &
                      OptValBool=HcoState%Options%MaskFractions, Found=Found, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 21', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. Found ) HcoState%Options%MaskFractions = .FALSE.
 
     CALL GetExtOpt ( HcoConfig, CoreNr, 'ConfigField to diagnostics', &
                      OptValBool=HcoState%Options%Field2Diagn, Found=Found, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 22', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. Found ) HcoState%Options%Field2Diagn = .FALSE.
 
     CALL GetExtOpt ( HcoConfig, CoreNr, 'Vertical weights', &
                      OptValBool=HcoState%Options%VertWeight, Found=Found, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 23', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. Found ) HcoState%Options%VertWeight = .TRUE.
 
     ! Make sure ESMF pointers are not dangling
@@ -458,7 +523,7 @@ CONTAINS
   END SUBROUTINE HcoState_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -477,8 +542,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Aug 2013 - C. Keller   - Adapted from gigc_state_chm_mod.F90
-!  24 Sep 2014 - R. Yantosca - Add an extra safety check when deallocating
-!                              the pointer field HcoState%Spc
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -544,7 +608,7 @@ CONTAINS
   END SUBROUTINE HcoState_Final
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -577,6 +641,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Aug 2013 - C. Keller - Adapted from gigc_state_chm_mod.F90
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -608,7 +673,7 @@ CONTAINS
   END FUNCTION HCO_GetModSpcID
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -638,6 +703,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Aug 2013 - C. Keller - Adapted from gigc_state_chm_mod.F90
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -668,7 +734,7 @@ CONTAINS
   END FUNCTION HCO_GetHcoID
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -686,7 +752,7 @@ CONTAINS
 !
 ! !USES:
 !
-    USE CHARPAK_MOD,         ONLY : STRSPLIT
+    USE HCO_CHARPAK_MOD,     ONLY : STRSPLIT
     USE HCO_EXTLIST_MOD,     ONLY : GetExtSpcStr
     USE HCO_EXTLIST_MOD,     ONLY : HCO_GetOpt
 !
@@ -707,8 +773,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Jan 2014 - C. Keller: Initialization (update)
-!  29 Sep 2014 - C. Keller: Now allows species lists up to 2047 instead of 255
-!                           characters.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -729,7 +794,10 @@ CONTAINS
 
     ! Get all species names belonging to extension Nr. ExtNr
     CALL GetExtSpcStr( HcoState%Config, ExtNr, SpcStr, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 24', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Split character into species string.
     CALL STRSPLIT( SpcStr, HCO_GetOpt(HcoState%Config%ExtList,'Separator'), SUBSTR, nSpc )
@@ -746,7 +814,7 @@ CONTAINS
     HcoIDs(:)   = -1
 #endif
     IF ( AS/=0 ) THEN
-       CALL HCO_ERROR(HcoState%Config%Err,'HcoIDs allocation error', RC, THISLOC=LOC)
+       CALL HCO_ERROR('HcoIDs allocation error', RC, THISLOC=LOC)
        RETURN
     ENDIF
 

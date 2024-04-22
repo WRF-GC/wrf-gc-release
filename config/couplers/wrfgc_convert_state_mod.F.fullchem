@@ -1,0 +1,2759 @@
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!               __          _______  ______       _____  _____                 !
+!               \ \        / /  __ \|  ____|     / ____|/ ____|                !
+!                \ \  /\  / /| |__) | |__ ______| |  __| |                     !
+!                 \ \/  \/ / |  _  /|  __|______| | |_ | |                     !
+!                  \  /\  /  | | \ \| |         | |__| | |____                 !
+!                   \/  \/   |_|  \_\_|          \_____|\_____|                !
+!                                                                              !
+!------------------------------------------------------------------------------!
+!         WRF-GC - two-way, nested coupled meteorology-chemistry model         !
+!                         2022 Technology Preview R1                           !
+!------------------------------------------------------------------------------!
+!  Formerly known as WRF-GCHP, WRF-GIGC. GCHP-powered chemistry add-on for WRF !
+!  WRF & GCHP are (c) their original authors.                                  !
+!  WRF-GC coupling layer (c) Haipeng Lin, Xu Feng, Tzung-May Fu                !
+!  Developed at Atmospheric Chemistry and Climate Group, Peking U./SUSTech     !
+!    by Haipeng Lin <hplin@seas.harvard.edu>, Xu Feng <fengx7@pku.edu.cn>      !
+!    April 2018                                                                !
+!------------------------------------------------------------------------------!
+!  Refer to the chem_driver.F chemistry driver for release history             !
+!------------------------------------------------------------------------------!
+
+!------------------------------------------------------------------------------
+!                              The WRF-GC Project                             !
+!------------------------------------------------------------------------------
+!BOP
+!
+! !MODULE: wrfgc_convert_state_mod.F
+!
+! !DESCRIPTION: Module WRFGC\_Convert\_State\_Mod performs conversion of WRF
+!  data structures to/from Grid-Independent GEOS-Chem (GIGC) State structures.
+!  (hplin, 4/3/18)
+!\\
+!\\
+! !INTERFACE:
+module WRFGC_Convert_State_Mod
+
+!
+! !USES:
+!
+    ! WRF
+    use module_domain
+    use module_dm
+    use module_model_constants
+    use module_state_description
+    use module_chem_utilities, only: calc_zenithb, getpar, get_cloud_optical_depth, calc_slp
+    use module_convection_prep
+
+    ! GEOS-Chem
+    use GIGC_Chunk_Mod
+    use PRECISION_MOD
+    use Species_Mod,    only: MISSING_INT
+    use ERROR_MOD,      only: IT_IS_NAN
+    use Input_Opt_Mod,  only: OptInput
+    use State_Chm_Mod,  only: ChmState, Ind_
+    use State_Met_Mod,  only: MetState
+    use State_Diag_Mod, only: DgnState
+    use State_Grid_Mod, only: GrdState
+#ifdef use_wrfgc_history_output
+    ! WRF-GC
+    use wrfgc_io_pnetcdf,only: writeDiag
+#endif
+    implicit none
+    private
+
+!
+! !PUBLIC MEMBER FUNCTIONS:
+!
+    public :: WRFGC_IdxSetup
+    public :: WRFGC_Get_WRF
+    public :: WRFGC_Set_WRF
+!
+! !PRIVATE VARIABLES:
+!
+    integer :: gi_a3o2,gi_acet,gi_acta,gi_aeri,gi_ald2,gi_alk4,gi_aonita,gi_aromp4,gi_aromp5,gi_aromro2,gi_asoa1,gi_asoa2,gi_asoa3,gi_asoan,gi_asog1,gi_asog2,gi_asog3,gi_ato2,gi_atooh,gi_b3o2,gi_bald,gi_bcpi,gi_bcpo,gi_benz,gi_benzo,gi_benzo2,gi_benzp,gi_bro2,gi_bzco3,gi_bzco3h,gi_bzpan,gi_br,gi_br2,gi_brcl,gi_brno2,gi_brno3,gi_bro,gi_brsala,gi_brsalc,gi_c2h2,gi_c2h4,gi_c2h6,gi_c3h8,gi_c4hvp1,gi_c4hvp2,gi_ccl4,gi_cfc11,gi_cfc113,gi_cfc114,gi_cfc115,gi_cfc12,gi_ch2br2,gi_ch2cl2,gi_ch2i2,gi_ch2ibr,gi_ch2icl,gi_ch2o,gi_ch2oo,gi_ch3br,gi_ch3ccl3,gi_ch3choo,gi_ch3cl,gi_ch3i,gi_ch4,gi_chbr3,gi_chcl3,gi_clock,gi_co,gi_co2,gi_csl,gi_cl,gi_cl2,gi_cl2o2,gi_clno2,gi_clno3,gi_clo,gi_cloo,gi_dms,gi_dst1,gi_dst2,gi_dst3,gi_dst4,gi_eoh,gi_ethln,gi_ethn,gi_ethp,gi_etno3,gi_eto,gi_eto2,gi_etoo,gi_etp,gi_glyc,gi_glyx,gi_h,gi_h1211,gi_h1301,gi_h2,gi_h2402,gi_h2o,gi_h2o2,gi_hac,gi_hbr,gi_hc5a,gi_hcfc123,gi_hcfc141b,gi_hcfc142b,gi_hcfc22,gi_hcooh,gi_hcl,gi_hi,gi_hmhp,gi_hmml,gi_hms,gi_hno2,gi_hno3,gi_hno4,gi_ho2,gi_hobr,gi_hocl,gi_hoi,gi_honit,gi_hpald1,gi_hpald1oo,gi_hpald2,gi_hpald2oo,gi_hpald3,gi_hpald4,gi_hpethnl,gi_i,gi_i2,gi_i2o2,gi_i2o3,gi_i2o4,gi_ibr,gi_iche,gi_ichoo,gi_icn,gi_icnoo,gi_icpdh,gi_icl,gi_idc,gi_idchp,gi_idhdp,gi_idhnboo,gi_idhndoo1,gi_idhndoo2,gi_idhpe,gi_idn,gi_idnoo,gi_iepoxa,gi_iepoxaoo,gi_iepoxb,gi_iepoxboo,gi_iepoxd,gi_ihn1,gi_ihn2,gi_ihn3,gi_ihn4,gi_ihoo1,gi_ihoo4,gi_ihpnboo,gi_ihpndoo,gi_ihpoo1,gi_ihpoo2,gi_ihpoo3,gi_ina,gi_indiol,gi_ino,gi_ino2b,gi_ino2d,gi_inpb,gi_inpd,gi_io,gi_ionita,gi_iono,gi_iono2,gi_iprno3,gi_isala,gi_isalc,gi_isop,gi_isopnoo1,gi_isopnoo2,gi_itcn,gi_ithn,gi_ko2,gi_lbro2h,gi_lbro2n,gi_lch4,gi_lco,gi_limo,gi_limo2,gi_lisopno3,gi_lisopoh,gi_lnro2h,gi_lnro2n,gi_lox,gi_ltro2h,gi_ltro2n,gi_lvoc,gi_lvocoa,gi_lxro2h,gi_lxro2n,gi_macr,gi_macr1oo,gi_macr1ooh,gi_macrno2,gi_map,gi_mco3,gi_mcrdh,gi_mcrenol,gi_mcrhn,gi_mcrhnb,gi_mcrhp,gi_mcrohoo,gi_mct,gi_mek,gi_meno3,gi_mgly,gi_mo2,gi_moh,gi_monita,gi_monits,gi_monitu,gi_mp,gi_mpan,gi_mpn,gi_msa,gi_mtpa,gi_mtpo,gi_mvk,gi_mvkdh,gi_mvkhc,gi_mvkhcb,gi_mvkhp,gi_mvkn,gi_mvkohoo,gi_mvkpc,gi_n,gi_n2,gi_n2o,gi_n2o5,gi_nap,gi_nh3,gi_nh4,gi_nit,gi_nits,gi_no,gi_no2,gi_no3,gi_nphen,gi_nprno3,gi_nro2,gi_o,gi_o1d,gi_o2,gi_o3,gi_ocpi,gi_ocpo,gi_ocs,gi_oclo,gi_oh,gi_oio,gi_olnd,gi_olnn,gi_othro2,gi_pan,gi_pco,gi_ph2o2,gi_phen,gi_pio2,gi_pip,gi_po2,gi_pox,gi_pp,gi_ppn,gi_prn1,gi_propnn,gi_prpe,gi_prpn,gi_pso4,gi_pyac,gi_r4n1,gi_r4n2,gi_r4o2,gi_r4p,gi_ra3p,gi_rb3p,gi_rcho,gi_rco3,gi_rcooh,gi_ripa,gi_ripb,gi_ripc,gi_ripd,gi_roh,gi_rp,gi_sala,gi_salaal,gi_salacl,gi_salc,gi_salcal,gi_salccl,gi_so2,gi_so4,gi_so4s,gi_soagx,gi_soaie,gi_soap,gi_soas,gi_tolu,gi_tro2,gi_tsoa0,gi_tsoa1,gi_tsoa2,gi_tsoa3,gi_tsog0,gi_tsog1,gi_tsog2,gi_tsog3,gi_xro2,gi_xyle,gi_pfe
+
+!
+! !REMARKS:
+!  This module provides Get\_WRF and Set\_WRF routines that will "Get" and "Set"
+!  variables from/to WRF, respectively, to/from the State_Met, State_Chm vars.
+!
+! !REVISION HISTORY:
+!  24 Apr 2018 - H.P. Lin  - First crack.
+!  25 Apr 2018 - H.P. Lin  - Refactored to support WRF (i,j) bounds, dbg options,
+!                            and WRF scalar, chem, moist arrays from _new_args.inc
+!  07 May 2018 - H.P. Lin  - Allocate arrays when necessary only & support tiling instead of 1x1 col
+!  17 May 2018 - H.P. Lin  - Added ProTeX headers and some variables from xfeng, 5/18.
+!  12 Oct 2018 - H.P. Lin  - Add State_Diag for GEOS-Chem NetCDF Diagnostics
+!  14 Nov 2018 - X. Feng   - Add Cumulus parameterization for ntiedtke
+!  21 Nov 2018 - H.P. Lin  - Massive performance optimizations
+!  12 Nov 2019 - H.P. Lin  - Now WRFGC\_Convert\_State\_Mod
+!  18 Mar 2020 - H.P. Lin  - Update to GEOS-Chem 12.7.3
+!  24 May 2020 - H.P. Lin  - Update to GEOS-Chem 12.8.1; fix met (xfeng); nested cpling.
+!  12 Oct 2021 - H.P. Lin  - Fix WRFv4, update wetscav_frcing for RAINPROD, EVAPPROD
+!  20 Apr 2022 - H.P. Lin  - Update to GEOS-Chem 13.4.0.alpha.28; add PM10 diagnostic
+!  15 Jun 2022 - H.P. Lin  - Add diagikj8,9; gckpperror; support up to GEOS-Chem 14.0.0(rc)
+!  11 Aug 2022 - H.P. Lin  - Use autogenerated code with new tools; support 14.0.0-rc.1
+!------------------------------------------------------------------------------
+!BOC
+contains
+!EOC
+!------------------------------------------------------------------------------
+!                              The WRF-GC Project                             !
+!------------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: WRFGC_IdxSetup
+!
+! !DESCRIPTION: Subroutine WRFGC\_IdxSetup saves the State_Chm IND_ results into
+!  a local scalar variable set so that we do not check the map every time from G-C,
+!  when converting between internal states. (hplin, 11/21/18)
+!\\
+!\\
+! !INTERFACE:
+!
+    subroutine WRFGC_IdxSetup(am_I_Root)
+!
+! !INPUT PARAMETERS:
+!
+        logical, intent(in) :: am_I_Root
+
+        ! Code begins here!
+        gi_a3o2 = IND_('A3O2')
+        gi_acet = IND_('ACET')
+        gi_acta = IND_('ACTA')
+        gi_aeri = IND_('AERI')
+        gi_ald2 = IND_('ALD2')
+        gi_alk4 = IND_('ALK4')
+        gi_aonita = IND_('AONITA')
+        gi_aromp4 = IND_('AROMP4')
+        gi_aromp5 = IND_('AROMP5')
+        gi_aromro2 = IND_('AROMRO2')
+        gi_asoa1 = IND_('ASOA1')
+        gi_asoa2 = IND_('ASOA2')
+        gi_asoa3 = IND_('ASOA3')
+        gi_asoan = IND_('ASOAN')
+        gi_asog1 = IND_('ASOG1')
+        gi_asog2 = IND_('ASOG2')
+        gi_asog3 = IND_('ASOG3')
+        gi_ato2 = IND_('ATO2')
+        gi_atooh = IND_('ATOOH')
+        gi_b3o2 = IND_('B3O2')
+        gi_bald = IND_('BALD')
+        gi_bcpi = IND_('BCPI')
+        gi_bcpo = IND_('BCPO')
+        gi_benz = IND_('BENZ')
+        gi_benzo = IND_('BENZO')
+        gi_benzo2 = IND_('BENZO2')
+        gi_benzp = IND_('BENZP')
+        gi_bro2 = IND_('BRO2')
+        gi_bzco3 = IND_('BZCO3')
+        gi_bzco3h = IND_('BZCO3H')
+        gi_bzpan = IND_('BZPAN')
+        gi_br = IND_('Br')
+        gi_br2 = IND_('Br2')
+        gi_brcl = IND_('BrCl')
+        gi_brno2 = IND_('BrNO2')
+        gi_brno3 = IND_('BrNO3')
+        gi_bro = IND_('BrO')
+        gi_brsala = IND_('BrSALA')
+        gi_brsalc = IND_('BrSALC')
+        gi_c2h2 = IND_('C2H2')
+        gi_c2h4 = IND_('C2H4')
+        gi_c2h6 = IND_('C2H6')
+        gi_c3h8 = IND_('C3H8')
+        gi_c4hvp1 = IND_('C4HVP1')
+        gi_c4hvp2 = IND_('C4HVP2')
+        gi_ccl4 = IND_('CCl4')
+        gi_cfc11 = IND_('CFC11')
+        gi_cfc113 = IND_('CFC113')
+        gi_cfc114 = IND_('CFC114')
+        gi_cfc115 = IND_('CFC115')
+        gi_cfc12 = IND_('CFC12')
+        gi_ch2br2 = IND_('CH2Br2')
+        gi_ch2cl2 = IND_('CH2Cl2')
+        gi_ch2i2 = IND_('CH2I2')
+        gi_ch2ibr = IND_('CH2IBr')
+        gi_ch2icl = IND_('CH2ICl')
+        gi_ch2o = IND_('CH2O')
+        gi_ch2oo = IND_('CH2OO')
+        gi_ch3br = IND_('CH3Br')
+        gi_ch3ccl3 = IND_('CH3CCl3')
+        gi_ch3choo = IND_('CH3CHOO')
+        gi_ch3cl = IND_('CH3Cl')
+        gi_ch3i = IND_('CH3I')
+        gi_ch4 = IND_('CH4')
+        gi_chbr3 = IND_('CHBr3')
+        gi_chcl3 = IND_('CHCl3')
+        gi_clock = IND_('CLOCK')
+        gi_co = IND_('CO')
+        gi_co2 = IND_('CO2')
+        gi_csl = IND_('CSL')
+        gi_cl = IND_('Cl')
+        gi_cl2 = IND_('Cl2')
+        gi_cl2o2 = IND_('Cl2O2')
+        gi_clno2 = IND_('ClNO2')
+        gi_clno3 = IND_('ClNO3')
+        gi_clo = IND_('ClO')
+        gi_cloo = IND_('ClOO')
+        gi_dms = IND_('DMS')
+        gi_dst1 = IND_('DST1')
+        gi_dst2 = IND_('DST2')
+        gi_dst3 = IND_('DST3')
+        gi_dst4 = IND_('DST4')
+        gi_eoh = IND_('EOH')
+        gi_ethln = IND_('ETHLN')
+        gi_ethn = IND_('ETHN')
+        gi_ethp = IND_('ETHP')
+        gi_etno3 = IND_('ETNO3')
+        gi_eto = IND_('ETO')
+        gi_eto2 = IND_('ETO2')
+        gi_etoo = IND_('ETOO')
+        gi_etp = IND_('ETP')
+        gi_glyc = IND_('GLYC')
+        gi_glyx = IND_('GLYX')
+        gi_h = IND_('H')
+        gi_h1211 = IND_('H1211')
+        gi_h1301 = IND_('H1301')
+        gi_h2 = IND_('H2')
+        gi_h2402 = IND_('H2402')
+        gi_h2o = IND_('H2O')
+        gi_h2o2 = IND_('H2O2')
+        gi_hac = IND_('HAC')
+        gi_hbr = IND_('HBr')
+        gi_hc5a = IND_('HC5A')
+        gi_hcfc123 = IND_('HCFC123')
+        gi_hcfc141b = IND_('HCFC141b')
+        gi_hcfc142b = IND_('HCFC142b')
+        gi_hcfc22 = IND_('HCFC22')
+        gi_hcooh = IND_('HCOOH')
+        gi_hcl = IND_('HCl')
+        gi_hi = IND_('HI')
+        gi_hmhp = IND_('HMHP')
+        gi_hmml = IND_('HMML')
+        gi_hms = IND_('HMS')
+        gi_hno2 = IND_('HNO2')
+        gi_hno3 = IND_('HNO3')
+        gi_hno4 = IND_('HNO4')
+        gi_ho2 = IND_('HO2')
+        gi_hobr = IND_('HOBr')
+        gi_hocl = IND_('HOCl')
+        gi_hoi = IND_('HOI')
+        gi_honit = IND_('HONIT')
+        gi_hpald1 = IND_('HPALD1')
+        gi_hpald1oo = IND_('HPALD1OO')
+        gi_hpald2 = IND_('HPALD2')
+        gi_hpald2oo = IND_('HPALD2OO')
+        gi_hpald3 = IND_('HPALD3')
+        gi_hpald4 = IND_('HPALD4')
+        gi_hpethnl = IND_('HPETHNL')
+        gi_i = IND_('I')
+        gi_i2 = IND_('I2')
+        gi_i2o2 = IND_('I2O2')
+        gi_i2o3 = IND_('I2O3')
+        gi_i2o4 = IND_('I2O4')
+        gi_ibr = IND_('IBr')
+        gi_iche = IND_('ICHE')
+        gi_ichoo = IND_('ICHOO')
+        gi_icn = IND_('ICN')
+        gi_icnoo = IND_('ICNOO')
+        gi_icpdh = IND_('ICPDH')
+        gi_icl = IND_('ICl')
+        gi_idc = IND_('IDC')
+        gi_idchp = IND_('IDCHP')
+        gi_idhdp = IND_('IDHDP')
+        gi_idhnboo = IND_('IDHNBOO')
+        gi_idhndoo1 = IND_('IDHNDOO1')
+        gi_idhndoo2 = IND_('IDHNDOO2')
+        gi_idhpe = IND_('IDHPE')
+        gi_idn = IND_('IDN')
+        gi_idnoo = IND_('IDNOO')
+        gi_iepoxa = IND_('IEPOXA')
+        gi_iepoxaoo = IND_('IEPOXAOO')
+        gi_iepoxb = IND_('IEPOXB')
+        gi_iepoxboo = IND_('IEPOXBOO')
+        gi_iepoxd = IND_('IEPOXD')
+        gi_ihn1 = IND_('IHN1')
+        gi_ihn2 = IND_('IHN2')
+        gi_ihn3 = IND_('IHN3')
+        gi_ihn4 = IND_('IHN4')
+        gi_ihoo1 = IND_('IHOO1')
+        gi_ihoo4 = IND_('IHOO4')
+        gi_ihpnboo = IND_('IHPNBOO')
+        gi_ihpndoo = IND_('IHPNDOO')
+        gi_ihpoo1 = IND_('IHPOO1')
+        gi_ihpoo2 = IND_('IHPOO2')
+        gi_ihpoo3 = IND_('IHPOO3')
+        gi_ina = IND_('INA')
+        gi_indiol = IND_('INDIOL')
+        gi_ino = IND_('INO')
+        gi_ino2b = IND_('INO2B')
+        gi_ino2d = IND_('INO2D')
+        gi_inpb = IND_('INPB')
+        gi_inpd = IND_('INPD')
+        gi_io = IND_('IO')
+        gi_ionita = IND_('IONITA')
+        gi_iono = IND_('IONO')
+        gi_iono2 = IND_('IONO2')
+        gi_iprno3 = IND_('IPRNO3')
+        gi_isala = IND_('ISALA')
+        gi_isalc = IND_('ISALC')
+        gi_isop = IND_('ISOP')
+        gi_isopnoo1 = IND_('ISOPNOO1')
+        gi_isopnoo2 = IND_('ISOPNOO2')
+        gi_itcn = IND_('ITCN')
+        gi_ithn = IND_('ITHN')
+        gi_ko2 = IND_('KO2')
+        gi_lbro2h = IND_('LBRO2H')
+        gi_lbro2n = IND_('LBRO2N')
+        gi_lch4 = IND_('LCH4')
+        gi_lco = IND_('LCO')
+        gi_limo = IND_('LIMO')
+        gi_limo2 = IND_('LIMO2')
+        gi_lisopno3 = IND_('LISOPNO3')
+        gi_lisopoh = IND_('LISOPOH')
+        gi_lnro2h = IND_('LNRO2H')
+        gi_lnro2n = IND_('LNRO2N')
+        gi_lox = IND_('LOx')
+        gi_ltro2h = IND_('LTRO2H')
+        gi_ltro2n = IND_('LTRO2N')
+        gi_lvoc = IND_('LVOC')
+        gi_lvocoa = IND_('LVOCOA')
+        gi_lxro2h = IND_('LXRO2H')
+        gi_lxro2n = IND_('LXRO2N')
+        gi_macr = IND_('MACR')
+        gi_macr1oo = IND_('MACR1OO')
+        gi_macr1ooh = IND_('MACR1OOH')
+        gi_macrno2 = IND_('MACRNO2')
+        gi_map = IND_('MAP')
+        gi_mco3 = IND_('MCO3')
+        gi_mcrdh = IND_('MCRDH')
+        gi_mcrenol = IND_('MCRENOL')
+        gi_mcrhn = IND_('MCRHN')
+        gi_mcrhnb = IND_('MCRHNB')
+        gi_mcrhp = IND_('MCRHP')
+        gi_mcrohoo = IND_('MCROHOO')
+        gi_mct = IND_('MCT')
+        gi_mek = IND_('MEK')
+        gi_meno3 = IND_('MENO3')
+        gi_mgly = IND_('MGLY')
+        gi_mo2 = IND_('MO2')
+        gi_moh = IND_('MOH')
+        gi_monita = IND_('MONITA')
+        gi_monits = IND_('MONITS')
+        gi_monitu = IND_('MONITU')
+        gi_mp = IND_('MP')
+        gi_mpan = IND_('MPAN')
+        gi_mpn = IND_('MPN')
+        gi_msa = IND_('MSA')
+        gi_mtpa = IND_('MTPA')
+        gi_mtpo = IND_('MTPO')
+        gi_mvk = IND_('MVK')
+        gi_mvkdh = IND_('MVKDH')
+        gi_mvkhc = IND_('MVKHC')
+        gi_mvkhcb = IND_('MVKHCB')
+        gi_mvkhp = IND_('MVKHP')
+        gi_mvkn = IND_('MVKN')
+        gi_mvkohoo = IND_('MVKOHOO')
+        gi_mvkpc = IND_('MVKPC')
+        gi_n = IND_('N')
+        gi_n2 = IND_('N2')
+        gi_n2o = IND_('N2O')
+        gi_n2o5 = IND_('N2O5')
+        gi_nap = IND_('NAP')
+        gi_nh3 = IND_('NH3')
+        gi_nh4 = IND_('NH4')
+        gi_nit = IND_('NIT')
+        gi_nits = IND_('NITs')
+        gi_no = IND_('NO')
+        gi_no2 = IND_('NO2')
+        gi_no3 = IND_('NO3')
+        gi_nphen = IND_('NPHEN')
+        gi_nprno3 = IND_('NPRNO3')
+        gi_nro2 = IND_('NRO2')
+        gi_o = IND_('O')
+        gi_o1d = IND_('O1D')
+        gi_o2 = IND_('O2')
+        gi_o3 = IND_('O3')
+        gi_ocpi = IND_('OCPI')
+        gi_ocpo = IND_('OCPO')
+        gi_ocs = IND_('OCS')
+        gi_oclo = IND_('OClO')
+        gi_oh = IND_('OH')
+        gi_oio = IND_('OIO')
+        gi_olnd = IND_('OLND')
+        gi_olnn = IND_('OLNN')
+        gi_othro2 = IND_('OTHRO2')
+        gi_pan = IND_('PAN')
+        gi_pco = IND_('PCO')
+        gi_ph2o2 = IND_('PH2O2')
+        gi_phen = IND_('PHEN')
+        gi_pio2 = IND_('PIO2')
+        gi_pip = IND_('PIP')
+        gi_po2 = IND_('PO2')
+        gi_pox = IND_('POx')
+        gi_pp = IND_('PP')
+        gi_ppn = IND_('PPN')
+        gi_prn1 = IND_('PRN1')
+        gi_propnn = IND_('PROPNN')
+        gi_prpe = IND_('PRPE')
+        gi_prpn = IND_('PRPN')
+        gi_pso4 = IND_('PSO4')
+        gi_pyac = IND_('PYAC')
+        gi_r4n1 = IND_('R4N1')
+        gi_r4n2 = IND_('R4N2')
+        gi_r4o2 = IND_('R4O2')
+        gi_r4p = IND_('R4P')
+        gi_ra3p = IND_('RA3P')
+        gi_rb3p = IND_('RB3P')
+        gi_rcho = IND_('RCHO')
+        gi_rco3 = IND_('RCO3')
+        gi_rcooh = IND_('RCOOH')
+        gi_ripa = IND_('RIPA')
+        gi_ripb = IND_('RIPB')
+        gi_ripc = IND_('RIPC')
+        gi_ripd = IND_('RIPD')
+        gi_roh = IND_('ROH')
+        gi_rp = IND_('RP')
+        gi_sala = IND_('SALA')
+        gi_salaal = IND_('SALAAL')
+        gi_salacl = IND_('SALACL')
+        gi_salc = IND_('SALC')
+        gi_salcal = IND_('SALCAL')
+        gi_salccl = IND_('SALCCL')
+        gi_so2 = IND_('SO2')
+        gi_so4 = IND_('SO4')
+        gi_so4s = IND_('SO4s')
+        gi_soagx = IND_('SOAGX')
+        gi_soaie = IND_('SOAIE')
+        gi_soap = IND_('SOAP')
+        gi_soas = IND_('SOAS')
+        gi_tolu = IND_('TOLU')
+        gi_tro2 = IND_('TRO2')
+        gi_tsoa0 = IND_('TSOA0')
+        gi_tsoa1 = IND_('TSOA1')
+        gi_tsoa2 = IND_('TSOA2')
+        gi_tsoa3 = IND_('TSOA3')
+        gi_tsog0 = IND_('TSOG0')
+        gi_tsog1 = IND_('TSOG1')
+        gi_tsog2 = IND_('TSOG2')
+        gi_tsog3 = IND_('TSOG3')
+        gi_xro2 = IND_('XRO2')
+        gi_xyle = IND_('XYLE')
+        gi_pfe = IND_('pFe')
+
+
+        write(6,*) p_a3o2, "a3o2 = A3O2", gi_a3o2
+        write(6,*) p_acet, "acet = ACET", gi_acet
+        write(6,*) p_acta, "acta = ACTA", gi_acta
+        write(6,*) p_aeri, "aeri = AERI", gi_aeri
+        write(6,*) p_ald2, "ald2 = ALD2", gi_ald2
+        write(6,*) p_alk4, "alk4 = ALK4", gi_alk4
+        write(6,*) p_aonita, "aonita = AONITA", gi_aonita
+        write(6,*) p_aromp4, "aromp4 = AROMP4", gi_aromp4
+        write(6,*) p_aromp5, "aromp5 = AROMP5", gi_aromp5
+        write(6,*) p_aromro2, "aromro2 = AROMRO2", gi_aromro2
+        write(6,*) p_asoa1, "asoa1 = ASOA1", gi_asoa1
+        write(6,*) p_asoa2, "asoa2 = ASOA2", gi_asoa2
+        write(6,*) p_asoa3, "asoa3 = ASOA3", gi_asoa3
+        write(6,*) p_asoan, "asoan = ASOAN", gi_asoan
+        write(6,*) p_asog1, "asog1 = ASOG1", gi_asog1
+        write(6,*) p_asog2, "asog2 = ASOG2", gi_asog2
+        write(6,*) p_asog3, "asog3 = ASOG3", gi_asog3
+        write(6,*) p_ato2, "ato2 = ATO2", gi_ato2
+        write(6,*) p_atooh, "atooh = ATOOH", gi_atooh
+        write(6,*) p_b3o2, "b3o2 = B3O2", gi_b3o2
+        write(6,*) p_bald, "bald = BALD", gi_bald
+        write(6,*) p_bcpi, "bcpi = BCPI", gi_bcpi
+        write(6,*) p_bcpo, "bcpo = BCPO", gi_bcpo
+        write(6,*) p_benz, "benz = BENZ", gi_benz
+        write(6,*) p_benzo, "benzo = BENZO", gi_benzo
+        write(6,*) p_benzo2, "benzo2 = BENZO2", gi_benzo2
+        write(6,*) p_benzp, "benzp = BENZP", gi_benzp
+        write(6,*) p_bro2, "bro2 = BRO2", gi_bro2
+        write(6,*) p_bzco3, "bzco3 = BZCO3", gi_bzco3
+        write(6,*) p_bzco3h, "bzco3h = BZCO3H", gi_bzco3h
+        write(6,*) p_bzpan, "bzpan = BZPAN", gi_bzpan
+        write(6,*) p_br, "br = Br", gi_br
+        write(6,*) p_br2, "br2 = Br2", gi_br2
+        write(6,*) p_brcl, "brcl = BrCl", gi_brcl
+        write(6,*) p_brno2, "brno2 = BrNO2", gi_brno2
+        write(6,*) p_brno3, "brno3 = BrNO3", gi_brno3
+        write(6,*) p_bro, "bro = BrO", gi_bro
+        write(6,*) p_brsala, "brsala = BrSALA", gi_brsala
+        write(6,*) p_brsalc, "brsalc = BrSALC", gi_brsalc
+        write(6,*) p_c2h2, "c2h2 = C2H2", gi_c2h2
+        write(6,*) p_c2h4, "c2h4 = C2H4", gi_c2h4
+        write(6,*) p_c2h6, "c2h6 = C2H6", gi_c2h6
+        write(6,*) p_c3h8, "c3h8 = C3H8", gi_c3h8
+        write(6,*) p_c4hvp1, "c4hvp1 = C4HVP1", gi_c4hvp1
+        write(6,*) p_c4hvp2, "c4hvp2 = C4HVP2", gi_c4hvp2
+        write(6,*) p_ccl4, "ccl4 = CCl4", gi_ccl4
+        write(6,*) p_cfc11, "cfc11 = CFC11", gi_cfc11
+        write(6,*) p_cfc113, "cfc113 = CFC113", gi_cfc113
+        write(6,*) p_cfc114, "cfc114 = CFC114", gi_cfc114
+        write(6,*) p_cfc115, "cfc115 = CFC115", gi_cfc115
+        write(6,*) p_cfc12, "cfc12 = CFC12", gi_cfc12
+        write(6,*) p_ch2br2, "ch2br2 = CH2Br2", gi_ch2br2
+        write(6,*) p_ch2cl2, "ch2cl2 = CH2Cl2", gi_ch2cl2
+        write(6,*) p_ch2i2, "ch2i2 = CH2I2", gi_ch2i2
+        write(6,*) p_ch2ibr, "ch2ibr = CH2IBr", gi_ch2ibr
+        write(6,*) p_ch2icl, "ch2icl = CH2ICl", gi_ch2icl
+        write(6,*) p_ch2o, "ch2o = CH2O", gi_ch2o
+        write(6,*) p_ch2oo, "ch2oo = CH2OO", gi_ch2oo
+        write(6,*) p_ch3br, "ch3br = CH3Br", gi_ch3br
+        write(6,*) p_ch3ccl3, "ch3ccl3 = CH3CCl3", gi_ch3ccl3
+        write(6,*) p_ch3choo, "ch3choo = CH3CHOO", gi_ch3choo
+        write(6,*) p_ch3cl, "ch3cl = CH3Cl", gi_ch3cl
+        write(6,*) p_ch3i, "ch3i = CH3I", gi_ch3i
+        write(6,*) p_ch4, "ch4 = CH4", gi_ch4
+        write(6,*) p_chbr3, "chbr3 = CHBr3", gi_chbr3
+        write(6,*) p_chcl3, "chcl3 = CHCl3", gi_chcl3
+        write(6,*) p_clock, "clock = CLOCK", gi_clock
+        write(6,*) p_co, "co = CO", gi_co
+        write(6,*) p_co2, "co2 = CO2", gi_co2
+        write(6,*) p_csl, "csl = CSL", gi_csl
+        write(6,*) p_cl, "cl = Cl", gi_cl
+        write(6,*) p_cl2, "cl2 = Cl2", gi_cl2
+        write(6,*) p_cl2o2, "cl2o2 = Cl2O2", gi_cl2o2
+        write(6,*) p_clno2, "clno2 = ClNO2", gi_clno2
+        write(6,*) p_clno3, "clno3 = ClNO3", gi_clno3
+        write(6,*) p_clo, "clo = ClO", gi_clo
+        write(6,*) p_cloo, "cloo = ClOO", gi_cloo
+        write(6,*) p_dms, "dms = DMS", gi_dms
+        write(6,*) p_dst1, "dst1 = DST1", gi_dst1
+        write(6,*) p_dst2, "dst2 = DST2", gi_dst2
+        write(6,*) p_dst3, "dst3 = DST3", gi_dst3
+        write(6,*) p_dst4, "dst4 = DST4", gi_dst4
+        write(6,*) p_eoh, "eoh = EOH", gi_eoh
+        write(6,*) p_ethln, "ethln = ETHLN", gi_ethln
+        write(6,*) p_ethn, "ethn = ETHN", gi_ethn
+        write(6,*) p_ethp, "ethp = ETHP", gi_ethp
+        write(6,*) p_etno3, "etno3 = ETNO3", gi_etno3
+        write(6,*) p_eto, "eto = ETO", gi_eto
+        write(6,*) p_eto2, "eto2 = ETO2", gi_eto2
+        write(6,*) p_etoo, "etoo = ETOO", gi_etoo
+        write(6,*) p_etp, "etp = ETP", gi_etp
+        write(6,*) p_glyc, "glyc = GLYC", gi_glyc
+        write(6,*) p_glyx, "glyx = GLYX", gi_glyx
+        write(6,*) p_h, "h = H", gi_h
+        write(6,*) p_h1211, "h1211 = H1211", gi_h1211
+        write(6,*) p_h1301, "h1301 = H1301", gi_h1301
+        write(6,*) p_h2, "h2 = H2", gi_h2
+        write(6,*) p_h2402, "h2402 = H2402", gi_h2402
+        write(6,*) p_h2o, "h2o = H2O", gi_h2o
+        write(6,*) p_h2o2, "h2o2 = H2O2", gi_h2o2
+        write(6,*) p_hac, "hac = HAC", gi_hac
+        write(6,*) p_hbr, "hbr = HBr", gi_hbr
+        write(6,*) p_hc5a, "hc5a = HC5A", gi_hc5a
+        write(6,*) p_hcfc123, "hcfc123 = HCFC123", gi_hcfc123
+        write(6,*) p_hcfc141b, "hcfc141b = HCFC141b", gi_hcfc141b
+        write(6,*) p_hcfc142b, "hcfc142b = HCFC142b", gi_hcfc142b
+        write(6,*) p_hcfc22, "hcfc22 = HCFC22", gi_hcfc22
+        write(6,*) p_hcooh, "hcooh = HCOOH", gi_hcooh
+        write(6,*) p_hcl, "hcl = HCl", gi_hcl
+        write(6,*) p_hi, "hi = HI", gi_hi
+        write(6,*) p_hmhp, "hmhp = HMHP", gi_hmhp
+        write(6,*) p_hmml, "hmml = HMML", gi_hmml
+        write(6,*) p_hms, "hms = HMS", gi_hms
+        write(6,*) p_hno2, "hno2 = HNO2", gi_hno2
+        write(6,*) p_hno3, "hno3 = HNO3", gi_hno3
+        write(6,*) p_hno4, "hno4 = HNO4", gi_hno4
+        write(6,*) p_ho2, "ho2 = HO2", gi_ho2
+        write(6,*) p_hobr, "hobr = HOBr", gi_hobr
+        write(6,*) p_hocl, "hocl = HOCl", gi_hocl
+        write(6,*) p_hoi, "hoi = HOI", gi_hoi
+        write(6,*) p_honit, "honit = HONIT", gi_honit
+        write(6,*) p_hpald1, "hpald1 = HPALD1", gi_hpald1
+        write(6,*) p_hpald1oo, "hpald1oo = HPALD1OO", gi_hpald1oo
+        write(6,*) p_hpald2, "hpald2 = HPALD2", gi_hpald2
+        write(6,*) p_hpald2oo, "hpald2oo = HPALD2OO", gi_hpald2oo
+        write(6,*) p_hpald3, "hpald3 = HPALD3", gi_hpald3
+        write(6,*) p_hpald4, "hpald4 = HPALD4", gi_hpald4
+        write(6,*) p_hpethnl, "hpethnl = HPETHNL", gi_hpethnl
+        write(6,*) p_i, "i = I", gi_i
+        write(6,*) p_i2, "i2 = I2", gi_i2
+        write(6,*) p_i2o2, "i2o2 = I2O2", gi_i2o2
+        write(6,*) p_i2o3, "i2o3 = I2O3", gi_i2o3
+        write(6,*) p_i2o4, "i2o4 = I2O4", gi_i2o4
+        write(6,*) p_ibr, "ibr = IBr", gi_ibr
+        write(6,*) p_iche, "iche = ICHE", gi_iche
+        write(6,*) p_ichoo, "ichoo = ICHOO", gi_ichoo
+        write(6,*) p_icn, "icn = ICN", gi_icn
+        write(6,*) p_icnoo, "icnoo = ICNOO", gi_icnoo
+        write(6,*) p_icpdh, "icpdh = ICPDH", gi_icpdh
+        write(6,*) p_icl, "icl = ICl", gi_icl
+        write(6,*) p_idc, "idc = IDC", gi_idc
+        write(6,*) p_idchp, "idchp = IDCHP", gi_idchp
+        write(6,*) p_idhdp, "idhdp = IDHDP", gi_idhdp
+        write(6,*) p_idhnboo, "idhnboo = IDHNBOO", gi_idhnboo
+        write(6,*) p_idhndoo1, "idhndoo1 = IDHNDOO1", gi_idhndoo1
+        write(6,*) p_idhndoo2, "idhndoo2 = IDHNDOO2", gi_idhndoo2
+        write(6,*) p_idhpe, "idhpe = IDHPE", gi_idhpe
+        write(6,*) p_idn, "idn = IDN", gi_idn
+        write(6,*) p_idnoo, "idnoo = IDNOO", gi_idnoo
+        write(6,*) p_iepoxa, "iepoxa = IEPOXA", gi_iepoxa
+        write(6,*) p_iepoxaoo, "iepoxaoo = IEPOXAOO", gi_iepoxaoo
+        write(6,*) p_iepoxb, "iepoxb = IEPOXB", gi_iepoxb
+        write(6,*) p_iepoxboo, "iepoxboo = IEPOXBOO", gi_iepoxboo
+        write(6,*) p_iepoxd, "iepoxd = IEPOXD", gi_iepoxd
+        write(6,*) p_ihn1, "ihn1 = IHN1", gi_ihn1
+        write(6,*) p_ihn2, "ihn2 = IHN2", gi_ihn2
+        write(6,*) p_ihn3, "ihn3 = IHN3", gi_ihn3
+        write(6,*) p_ihn4, "ihn4 = IHN4", gi_ihn4
+        write(6,*) p_ihoo1, "ihoo1 = IHOO1", gi_ihoo1
+        write(6,*) p_ihoo4, "ihoo4 = IHOO4", gi_ihoo4
+        write(6,*) p_ihpnboo, "ihpnboo = IHPNBOO", gi_ihpnboo
+        write(6,*) p_ihpndoo, "ihpndoo = IHPNDOO", gi_ihpndoo
+        write(6,*) p_ihpoo1, "ihpoo1 = IHPOO1", gi_ihpoo1
+        write(6,*) p_ihpoo2, "ihpoo2 = IHPOO2", gi_ihpoo2
+        write(6,*) p_ihpoo3, "ihpoo3 = IHPOO3", gi_ihpoo3
+        write(6,*) p_ina, "ina = INA", gi_ina
+        write(6,*) p_indiol, "indiol = INDIOL", gi_indiol
+        write(6,*) p_ino, "ino = INO", gi_ino
+        write(6,*) p_ino2b, "ino2b = INO2B", gi_ino2b
+        write(6,*) p_ino2d, "ino2d = INO2D", gi_ino2d
+        write(6,*) p_inpb, "inpb = INPB", gi_inpb
+        write(6,*) p_inpd, "inpd = INPD", gi_inpd
+        write(6,*) p_io, "io = IO", gi_io
+        write(6,*) p_ionita, "ionita = IONITA", gi_ionita
+        write(6,*) p_iono, "iono = IONO", gi_iono
+        write(6,*) p_iono2, "iono2 = IONO2", gi_iono2
+        write(6,*) p_iprno3, "iprno3 = IPRNO3", gi_iprno3
+        write(6,*) p_isala, "isala = ISALA", gi_isala
+        write(6,*) p_isalc, "isalc = ISALC", gi_isalc
+        write(6,*) p_isop, "isop = ISOP", gi_isop
+        write(6,*) p_isopnoo1, "isopnoo1 = ISOPNOO1", gi_isopnoo1
+        write(6,*) p_isopnoo2, "isopnoo2 = ISOPNOO2", gi_isopnoo2
+        write(6,*) p_itcn, "itcn = ITCN", gi_itcn
+        write(6,*) p_ithn, "ithn = ITHN", gi_ithn
+        write(6,*) p_ko2, "ko2 = KO2", gi_ko2
+        write(6,*) p_lbro2h, "lbro2h = LBRO2H", gi_lbro2h
+        write(6,*) p_lbro2n, "lbro2n = LBRO2N", gi_lbro2n
+        write(6,*) p_lch4, "lch4 = LCH4", gi_lch4
+        write(6,*) p_lco, "lco = LCO", gi_lco
+        write(6,*) p_limo, "limo = LIMO", gi_limo
+        write(6,*) p_limo2, "limo2 = LIMO2", gi_limo2
+        write(6,*) p_lisopno3, "lisopno3 = LISOPNO3", gi_lisopno3
+        write(6,*) p_lisopoh, "lisopoh = LISOPOH", gi_lisopoh
+        write(6,*) p_lnro2h, "lnro2h = LNRO2H", gi_lnro2h
+        write(6,*) p_lnro2n, "lnro2n = LNRO2N", gi_lnro2n
+        write(6,*) p_lox, "lox = LOx", gi_lox
+        write(6,*) p_ltro2h, "ltro2h = LTRO2H", gi_ltro2h
+        write(6,*) p_ltro2n, "ltro2n = LTRO2N", gi_ltro2n
+        write(6,*) p_lvoc, "lvoc = LVOC", gi_lvoc
+        write(6,*) p_lvocoa, "lvocoa = LVOCOA", gi_lvocoa
+        write(6,*) p_lxro2h, "lxro2h = LXRO2H", gi_lxro2h
+        write(6,*) p_lxro2n, "lxro2n = LXRO2N", gi_lxro2n
+        write(6,*) p_macr, "macr = MACR", gi_macr
+        write(6,*) p_macr1oo, "macr1oo = MACR1OO", gi_macr1oo
+        write(6,*) p_macr1ooh, "macr1ooh = MACR1OOH", gi_macr1ooh
+        write(6,*) p_macrno2, "macrno2 = MACRNO2", gi_macrno2
+        write(6,*) p_map, "map = MAP", gi_map
+        write(6,*) p_mco3, "mco3 = MCO3", gi_mco3
+        write(6,*) p_mcrdh, "mcrdh = MCRDH", gi_mcrdh
+        write(6,*) p_mcrenol, "mcrenol = MCRENOL", gi_mcrenol
+        write(6,*) p_mcrhn, "mcrhn = MCRHN", gi_mcrhn
+        write(6,*) p_mcrhnb, "mcrhnb = MCRHNB", gi_mcrhnb
+        write(6,*) p_mcrhp, "mcrhp = MCRHP", gi_mcrhp
+        write(6,*) p_mcrohoo, "mcrohoo = MCROHOO", gi_mcrohoo
+        write(6,*) p_mct, "mct = MCT", gi_mct
+        write(6,*) p_mek, "mek = MEK", gi_mek
+        write(6,*) p_meno3, "meno3 = MENO3", gi_meno3
+        write(6,*) p_mgly, "mgly = MGLY", gi_mgly
+        write(6,*) p_mo2, "mo2 = MO2", gi_mo2
+        write(6,*) p_moh, "moh = MOH", gi_moh
+        write(6,*) p_monita, "monita = MONITA", gi_monita
+        write(6,*) p_monits, "monits = MONITS", gi_monits
+        write(6,*) p_monitu, "monitu = MONITU", gi_monitu
+        write(6,*) p_mp, "mp = MP", gi_mp
+        write(6,*) p_mpan, "mpan = MPAN", gi_mpan
+        write(6,*) p_mpn, "mpn = MPN", gi_mpn
+        write(6,*) p_msa, "msa = MSA", gi_msa
+        write(6,*) p_mtpa, "mtpa = MTPA", gi_mtpa
+        write(6,*) p_mtpo, "mtpo = MTPO", gi_mtpo
+        write(6,*) p_mvk, "mvk = MVK", gi_mvk
+        write(6,*) p_mvkdh, "mvkdh = MVKDH", gi_mvkdh
+        write(6,*) p_mvkhc, "mvkhc = MVKHC", gi_mvkhc
+        write(6,*) p_mvkhcb, "mvkhcb = MVKHCB", gi_mvkhcb
+        write(6,*) p_mvkhp, "mvkhp = MVKHP", gi_mvkhp
+        write(6,*) p_mvkn, "mvkn = MVKN", gi_mvkn
+        write(6,*) p_mvkohoo, "mvkohoo = MVKOHOO", gi_mvkohoo
+        write(6,*) p_mvkpc, "mvkpc = MVKPC", gi_mvkpc
+        write(6,*) p_n, "n = N", gi_n
+        write(6,*) p_n2, "n2 = N2", gi_n2
+        write(6,*) p_n2o, "n2o = N2O", gi_n2o
+        write(6,*) p_n2o5, "n2o5 = N2O5", gi_n2o5
+        write(6,*) p_nap, "nap = NAP", gi_nap
+        write(6,*) p_nh3, "nh3 = NH3", gi_nh3
+        write(6,*) p_nh4, "nh4 = NH4", gi_nh4
+        write(6,*) p_nit, "nit = NIT", gi_nit
+        write(6,*) p_nits, "nits = NITs", gi_nits
+        write(6,*) p_no, "no = NO", gi_no
+        write(6,*) p_no2, "no2 = NO2", gi_no2
+        write(6,*) p_no3, "no3 = NO3", gi_no3
+        write(6,*) p_nphen, "nphen = NPHEN", gi_nphen
+        write(6,*) p_nprno3, "nprno3 = NPRNO3", gi_nprno3
+        write(6,*) p_nro2, "nro2 = NRO2", gi_nro2
+        write(6,*) p_o, "o = O", gi_o
+        write(6,*) p_o1d, "o1d = O1D", gi_o1d
+        write(6,*) p_o2, "o2 = O2", gi_o2
+        write(6,*) p_o3, "o3 = O3", gi_o3
+        write(6,*) p_ocpi, "ocpi = OCPI", gi_ocpi
+        write(6,*) p_ocpo, "ocpo = OCPO", gi_ocpo
+        write(6,*) p_ocs, "ocs = OCS", gi_ocs
+        write(6,*) p_oclo, "oclo = OClO", gi_oclo
+        write(6,*) p_oh, "oh = OH", gi_oh
+        write(6,*) p_oio, "oio = OIO", gi_oio
+        write(6,*) p_olnd, "olnd = OLND", gi_olnd
+        write(6,*) p_olnn, "olnn = OLNN", gi_olnn
+        write(6,*) p_othro2, "othro2 = OTHRO2", gi_othro2
+        write(6,*) p_pan, "pan = PAN", gi_pan
+        write(6,*) p_pco, "pco = PCO", gi_pco
+        write(6,*) p_ph2o2, "ph2o2 = PH2O2", gi_ph2o2
+        write(6,*) p_phen, "phen = PHEN", gi_phen
+        write(6,*) p_pio2, "pio2 = PIO2", gi_pio2
+        write(6,*) p_pip, "pip = PIP", gi_pip
+        write(6,*) p_po2, "po2 = PO2", gi_po2
+        write(6,*) p_pox, "pox = POx", gi_pox
+        write(6,*) p_pp, "pp = PP", gi_pp
+        write(6,*) p_ppn, "ppn = PPN", gi_ppn
+        write(6,*) p_prn1, "prn1 = PRN1", gi_prn1
+        write(6,*) p_propnn, "propnn = PROPNN", gi_propnn
+        write(6,*) p_prpe, "prpe = PRPE", gi_prpe
+        write(6,*) p_prpn, "prpn = PRPN", gi_prpn
+        write(6,*) p_pso4, "pso4 = PSO4", gi_pso4
+        write(6,*) p_pyac, "pyac = PYAC", gi_pyac
+        write(6,*) p_r4n1, "r4n1 = R4N1", gi_r4n1
+        write(6,*) p_r4n2, "r4n2 = R4N2", gi_r4n2
+        write(6,*) p_r4o2, "r4o2 = R4O2", gi_r4o2
+        write(6,*) p_r4p, "r4p = R4P", gi_r4p
+        write(6,*) p_ra3p, "ra3p = RA3P", gi_ra3p
+        write(6,*) p_rb3p, "rb3p = RB3P", gi_rb3p
+        write(6,*) p_rcho, "rcho = RCHO", gi_rcho
+        write(6,*) p_rco3, "rco3 = RCO3", gi_rco3
+        write(6,*) p_rcooh, "rcooh = RCOOH", gi_rcooh
+        write(6,*) p_ripa, "ripa = RIPA", gi_ripa
+        write(6,*) p_ripb, "ripb = RIPB", gi_ripb
+        write(6,*) p_ripc, "ripc = RIPC", gi_ripc
+        write(6,*) p_ripd, "ripd = RIPD", gi_ripd
+        write(6,*) p_roh, "roh = ROH", gi_roh
+        write(6,*) p_rp, "rp = RP", gi_rp
+        write(6,*) p_sala, "sala = SALA", gi_sala
+        write(6,*) p_salaal, "salaal = SALAAL", gi_salaal
+        write(6,*) p_salacl, "salacl = SALACL", gi_salacl
+        write(6,*) p_salc, "salc = SALC", gi_salc
+        write(6,*) p_salcal, "salcal = SALCAL", gi_salcal
+        write(6,*) p_salccl, "salccl = SALCCL", gi_salccl
+        write(6,*) p_so2, "so2 = SO2", gi_so2
+        write(6,*) p_so4, "so4 = SO4", gi_so4
+        write(6,*) p_so4s, "so4s = SO4s", gi_so4s
+        write(6,*) p_soagx, "soagx = SOAGX", gi_soagx
+        write(6,*) p_soaie, "soaie = SOAIE", gi_soaie
+        write(6,*) p_soap, "soap = SOAP", gi_soap
+        write(6,*) p_soas, "soas = SOAS", gi_soas
+        write(6,*) p_tolu, "tolu = TOLU", gi_tolu
+        write(6,*) p_tro2, "tro2 = TRO2", gi_tro2
+        write(6,*) p_tsoa0, "tsoa0 = TSOA0", gi_tsoa0
+        write(6,*) p_tsoa1, "tsoa1 = TSOA1", gi_tsoa1
+        write(6,*) p_tsoa2, "tsoa2 = TSOA2", gi_tsoa2
+        write(6,*) p_tsoa3, "tsoa3 = TSOA3", gi_tsoa3
+        write(6,*) p_tsog0, "tsog0 = TSOG0", gi_tsog0
+        write(6,*) p_tsog1, "tsog1 = TSOG1", gi_tsog1
+        write(6,*) p_tsog2, "tsog2 = TSOG2", gi_tsog2
+        write(6,*) p_tsog3, "tsog3 = TSOG3", gi_tsog3
+        write(6,*) p_xro2, "xro2 = XRO2", gi_xro2
+        write(6,*) p_xyle, "xyle = XYLE", gi_xyle
+        write(6,*) p_pfe, "pfe = pFe", gi_pfe
+
+
+
+    end subroutine WRFGC_IdxSetup
+!EOC
+!------------------------------------------------------------------------------
+!                              The WRF-GC Project                             !
+!------------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: WRFGC_Get_WRF
+!
+! !DESCRIPTION: Subroutine WRFGC\_Get\_WRF converts WRF data structures (grid, chem,
+!  moist, scalar) according to WRF configuration (config_flags) to GIGC data structures
+!  to call the GIGC_Chunk_Mod routines (State_Met, State_Chm). (hplin, 4/24/18)
+!\\
+!\\
+! !INTERFACE:
+!
+    subroutine WRFGC_Get_WRF(am_I_Root, &
+        config_flags, grid, &
+        num_chem, chem, num_scalar, scalar, num_moist, moist, &
+        dz8w, p8w, pi_phy, &
+        f_qc, f_qi, f_qndrop, warm_rain, &
+        its, ite, jts, jte, &
+        ide, jde, &
+        kts, kte, &
+        ids, jds, kds, &
+        curr_secs, &
+        Input_Opt, State_Met, State_Chm, State_Grid, &
+        WRFGC_Phys_Time)
+        use PRESSURE_MOD,  only: ACCEPT_EXTERNAL_APBP
+
+        implicit none
+
+!
+! !INPUT PARAMETERS:
+!
+        logical, intent(in) :: am_I_Root
+        type(grid_config_rec_type), intent(in) :: config_flags
+
+        type(domain), target :: grid
+        integer, intent(in)  :: num_chem, num_scalar, num_moist ! # of WRF chem, moist variables. Check "dummy_new_args.inc" & "actual_new_args.inc" in WRF compile.
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33, num_chem), intent(in)   :: chem
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33, num_scalar), intent(in) :: scalar
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33, num_moist), intent(in)  :: moist
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33), intent(in)  :: dz8w, p8w, pi_phy
+        integer, intent(in) :: its, ite, jts, jte, ide, jde, kts, kte, ids, jds, kds
+
+        real(KIND=8) :: curr_secs
+!
+! !INPUT/OUTPUT PARAMETERS:
+!
+        type(OptInput), intent(inout) :: Input_Opt
+        type(MetState), intent(inout) :: State_Met
+        type(ChmState), intent(inout) :: State_Chm
+        type(GrdState), intent(inout) :: State_Grid
+
+        real(KIND=8), intent(inout)   :: WRFGC_Phys_Time  ! Cumulative time spent in physics/parameterization calculation time
+
+!
+! !REMARKS:
+!  This code was originally created for a 1x1 (truly 1-D) column conversion, but later
+!  changed to perform computation on the WRF parallelization tile (i,j,kts~e). These
+!  are mapped to the GIGC_Chunk arrays II, JJ, k, dimension IM, JM, LM.
+!
+!  Please do take note that in WRF, memorder is XZY so arrays are (i, k, j), whereas in
+!  GEOS-Chem the memorder is XYZ.
+!
+!  Also, the State_Chm conversion routines are auto-generated. Please use
+!  https://github.com/jimmielin/wrf-gchp-dev-tools to generate them.
+!  (hplin, 5/17/18)
+!
+! !REVISION HISTORY:
+!  17 May 2018 - H.P. Lin   - Added ProTeX headers
+!  29 May 2018 - X. Feng    - Fixed original extrapolated dummy %PEDGE
+!  17 Aug 2018 - H.P. Lin   - Diagnose ApBp from WRF hybrid_grid and use those if available
+!  14 Nov 2018 - X. Feng    - Add ntiedtke cumulus parameterization
+!  14 Nov 2018 - H.P. Lin   - Add timers for physics parameterization & diagnostic output
+!  01 Dec 2018 - H.P. Lin   - Add land type use code
+!  12 Nov 2019 - H.P. Lin   - Now WRFGC\_Get\_WRF
+!EOP
+!------------------------------------------------------------------------------
+!BOC
+!
+! !LOCAL VARIABLES:
+!
+        integer :: debug_level      ! WRF Debug Level
+        integer :: GEOS_CHEM_RC     ! GEOS-Chem Return Code (0 = Success)
+
+        integer :: IM, II           ! # of lons on this PET, calcd loop var
+        integer :: JM, JJ           ! # of lats on this PET, calcd loop var
+        integer :: LM               ! # of levs on this PET (no calcd because vertical always match)
+        integer :: i, j, k          ! Loop variable over xts, xte (x = i, j, k)
+        integer :: kk               ! Extra loop variable
+        integer :: N
+        integer :: ltop             ! Convective cloud top level
+
+        real :: zen, pardb, pardif  ! For computing %SUNCOSmid, %PARDB, %PARDF
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33) :: cmfmc, pmflxrain, pmflxsnow    ! For computing %CMFMC, %PFLCU, %PFICU
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33) :: dqrcu  ! For computing %DQRCU
+        integer, dimension(grid%sm31:grid%em31, grid%sm33:grid%em33) :: cloud_bot, cloud_top  ! For computing %DQRCU and %CONV_DEPTH
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33) :: dtrainu, dtraind, dtrain ! For computing %DTRAIN
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33) :: reevapcn ! For computing %REEVAPCN
+        logical, dimension(grid%sm31:grid%em31, grid%sm33:grid%em33) :: cu_act_flag ! For cu_ntiedtke
+        real, dimension(grid%sm31:grid%em31, grid%sm33:grid%em33) :: raincv_diag, pratec_diag ! For cu_ntiedtke
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33) :: rqccuten_diag, rqicuten_diag, rqvcuten_diag, rthcuten_diag, rucuten_diag, rvcuten_diag
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33) :: taucldc, taucldi, optd !For computing %TAUCLW, %TAUCLI, %OPTD
+        real, dimension(grid%sm31:grid%em31, grid%sm33:grid%em33)                      :: slp                    !For computing %SLP
+        logical, optional, intent(in) :: f_qc, f_qi, f_qndrop, warm_rain
+
+        ! For hybrid-grid in WRF
+        real(fp), allocatable :: Ap(:)
+        real(fp), allocatable :: Bp(:)
+
+        ! For land use type in WRF
+        character*256 :: mminlu_loc
+
+        ! For temporary timers...
+        real(KIND=8)          :: WRFGC_Time_Temp_Start, WRFGC_Time_Temp_End
+
+        logical, save, dimension(1:8) :: FIRST = .true.      ! Is first run?
+
+        ! Code begins below...
+        call nl_get_debug_level(1, debug_level)
+        call set_wrf_debug_level(debug_level)
+
+        ! Get land use map type
+        ! USGS or MODIFIED_IGBP_MODIS_NOAH, as validated by chemics_init.F
+        call nl_get_mminlu(1, mminlu_loc)
+
+        IM = ite - its + 1
+        JM = jte - jts + 1
+        LM = kte - kts + 1
+
+        ! write(6, *) "WRFGC_Convert_State_Mod ide =", ide, "jde =", jde
+        ! write(6, *) "WRFGC_Convert_State_Mod its =", its, "ite =", ite, " IM =", IM
+        ! write(6, *) "WRFGC_Convert_State_Mod jts =", jts, "jte =", jte, " JM =", JM
+        ! write(6, *) "WRFGC_Convert_State_Mod kts =", kts, "kte =", kte, " LM =", LM
+
+        ! Start WRF-GC Coupling Physics Timing (Timer-ID: gigc_get_0)
+        ! Timer: WRFGC_Phys_Time
+        WRFGC_Time_Temp_Start = MPI_Wtime()
+
+        ! Save grid information
+        State_Grid%ID          = grid%id       ! # of the WRF domain
+
+        ! Compute grid sizes
+        State_Grid%NX          = IM            ! # lons   on this PET
+        State_Grid%NY          = JM            ! # lats   on this PET
+        State_Grid%NZ          = LM            ! # levels on this PET
+
+        ! GC does not need to know about this.
+        State_Grid%GlobalNX    = IM            ! # lons   in global grid
+        State_Grid%GlobalNY    = JM            ! # lats   in global grid
+        State_Grid%NativeNZ    = LM            ! # levels in global grid
+        State_Grid%XMinOffset  = 1             ! X offset from global grid
+        State_Grid%XMaxOffset  = State_Grid%NX ! X offset from global grid
+        State_Grid%YMinOffset  = 1             ! Y offset from global grid
+        State_Grid%YMaxOffset  = State_Grid%NY ! Y offset from global grid
+
+        ! Grid area must be passed in addition to State_Met!!!
+        ! This is done in the loop below.
+
+        ! Important debugging code for species list information
+        if(debug_level .ge. 5 .and. FIRST(grid%id)) then
+            ! Debug State_Chm
+            write(6, *) "%%%%%% WRFGC_Convert_State_Mod Chemistry State Export %%%%%%"
+            write(6, *) "Units: ", State_Chm%Spc_Units
+            do N = 1, State_Chm%nSpecies
+                WRITE(6, *) "N:", N, State_Chm%SpcData(N)%Info%Name, &
+                            "Is_Adv:", State_Chm%SpcData(N)%Info%Is_Advected
+            enddo
+        endif
+
+        ! Compute required variables from WRF cumulus parameterization
+        ! Preventing rewriting the values of the output from physical cumulus
+        ! parameterization
+        raincv_diag   = grid%raincv
+        pratec_diag   = grid%pratec
+        rqccuten_diag = grid%rqccuten
+        rqicuten_diag = grid%rqicuten
+        rqvcuten_diag = grid%rqvcuten
+        rthcuten_diag = grid%rthcuten
+        rucuten_diag  = grid%rucuten
+        rvcuten_diag  = grid%rvcuten
+
+        if(config_flags%cu_physics .eq. 16) then
+            call cu_ntiedtke(                                         &
+                 grid%dt, grid%itimestep, grid%stepcu                 &
+                ,raincv_diag, pratec_diag, grid%qfx, grid%hfx         &
+                ,grid%u_phy, grid%v_phy, grid%w_2, grid%t_phy         &
+                ,moist(grid%sm31,grid%sm32,grid%sm33,p_qv)            &
+                ,moist(grid%sm31,grid%sm32,grid%sm33,p_qc)            &
+                ,moist(grid%sm31,grid%sm32,grid%sm33,p_qi)            &
+                ,pi_phy, grid%rho                                     &
+                ,grid%rqvften, grid%rthften                           &
+                ,dz8w, grid%p_hyd, grid%p_hyd_w, grid%xland           &
+                ,cu_act_flag, grid%dx                                 &
+                ,ids, ide, jds, jde, kds, kte+1                       &
+                ,grid%sm31, grid%em31, grid%sm33, grid%em33           &
+                ,grid%sm32, grid%em32                                 &
+                ,its, ite, jts, jte, kts, kte                         &
+                ,rthcuten_diag, rqvcuten_diag, rqccuten_diag          &
+                ,rqicuten_diag, rucuten_diag, rvcuten_diag            &
+                ,pmflxrain, pmflxsnow, cmfmc, dqrcu, cloud_bot        &
+                ,cloud_top, dtrainu, dtraind, dtrain, reevapcn        )
+        endif
+
+        if(config_flags%ra_lw_physics .eq. 4) then
+           call get_cloud_optical_depth(grid%t_phy, grid%p_hyd_w         &
+               ,moist(grid%sm31,grid%sm32,grid%sm33,p_qc)                &
+               ,moist(grid%sm31,grid%sm32,grid%sm33,p_qi)                &
+               ,scalar(grid%sm31,grid%sm32,grid%sm33,p_qndrop)           &
+               ,taucldc, taucldi, optd                                   &
+               ,f_qc, f_qi, f_qndrop, warm_rain                          &
+               ,grid%sm31, grid%em31, grid%sm33, grid%em33               &
+               ,grid%sm32, grid%em32                                     &
+               ,its, ite, jts, jte, kts, kte                             )
+        write(6,*) "max optd", maxval(optd)
+        write(6,*) "max taucldi", maxval(taucldi)
+        write(6,*) "max taucldw", maxval(taucldc)
+        endif
+
+        call calc_slp(grid%t_2, grid%p, grid%pb,                        &
+                      moist(grid%sm31,grid%sm32,grid%sm33,p_qv),        &
+                      grid%ph_2, grid%phb, slp,                         &
+                      ids, ide, jds, jde, kds, kte+1,                   &
+                      grid%sm31, grid%em31, grid%sm33, grid%em33,       &
+                      grid%sm32, grid%em32,                             &
+                      its, ite, jts, jte, kts, kte)
+
+
+        ! See if are using WRF hybrid-grid and diagnose Ap, Bp (hplin, 8/17/18)
+        ! FIXME: This calls a lower-level G-C function available in -DMODEL_WRF
+        ! Note that Ap is in [hPa]s and you should see a reasonable set of values in pressure_mod
+        if(config_flags%hybrid_opt .eq. 2) then
+            allocate(Ap(LM+1))
+            allocate(Bp(LM+1))
+
+            do k = kts, kte
+                Ap(k) = (grid%c4f(k) + (1 - grid%c3f(k)) * grid%p_top) * .01_fp
+                Bp(k) = grid%c3f(k)
+            enddo
+
+            Ap(LM+1) = grid%p_top / p1000mb * .01_fp
+            Bp(LM+1) = 0
+
+            ! Debug the vertical grid (copied from pressure_mod.F, G-C)
+            ! WRITE( 6, '(a)'   ) REPEAT( '=', 79 )
+            ! WRITE( 6, '(a,/)' ) 'V E R T I C A L   G R I D   S E T U P'
+            ! WRITE( 6, '(a,/)' ) 'D I A G N O S E D   F R O M   W R F   M O D E L'
+            ! WRITE( 6, '( ''Ap '', /, 6(f11.6,1x) )' ) Ap(:)
+            ! WRITE( 6, '(a)'   )
+            ! WRITE( 6, '( ''Bp '', /, 6(f11.6,1x) )' ) Bp(:)
+            ! WRITE( 6, '(a)'   ) REPEAT( '=', 79 )
+
+            call ACCEPT_EXTERNAL_APBP(State_Grid, Ap, Bp, GEOS_CHEM_RC)
+
+            deallocate(Ap)
+            deallocate(Bp)
+        else
+            write(6, *) "====================================================="
+            write(6, *) "|               W A R N I N G (WRF-GC)              |"
+            write(6, *) "====================================================="
+            write(6, *) "  GEOS-CHEM USES A VERTICAL HYBRID-SIGMA GRID.       "
+            write(6, *) "  WRF MUST BE CONFIGURED TO USE THIS GRID using the  "
+            write(6, *) "  namelist option &dynamics: hybrid_opt = 2, and     "
+            write(6, *) "  RECOMPILING with ./configure -hyb.                 "
+            write(6, *) "                                                     "
+            write(6, *) "  WE WERE *NOT* ABLE TO DETECT THIS IN YOUR WRF-GC   "
+            write(6, *) "  CONFIGURATION, WHICH MEANS THE VERTICAL LEVELS MAY "
+            write(6, *) "  BE INACCURATE AND OUTRIGHT WRONG. PLEASE CHECK.    "
+            write(6, *) "====================================================="
+        endif
+
+        ! End WRF-GC Coupling Physics Timing (Timer-ID: gigc_get_0)
+        ! Timer: WRFGC_Phys_Time
+        WRFGC_Time_Temp_End = MPI_Wtime()
+        WRFGC_Phys_Time = WRFGC_Phys_Time + (WRFGC_Time_Temp_End - WRFGC_Time_Temp_Start)
+        ! End Timer gigc_get_0
+
+        call wrf_debug(1, "WRFGC_Convert_State_Mod before State_Met% Conversion")
+
+        !--------------------------------------------------------------
+        ! Debugging
+        !--------------------------------------------------------------
+        ! write(6,*) "** begin debug **"
+        ! write(6,*) "WRFGC_Convert_State_Mod, hplin debug grid%sm100200", size(grid%sm100200, 1), size(grid%sm100200, 2)
+        ! write(6,*) grid%sm100200
+        ! write(6,*) "WRFGC_Convert_State_Mod, hplin debug grid%sm000010", size(grid%sm000010, 1), size(grid%sm000010, 2)
+        ! write(6,*) grid%sm000010
+        ! write(6,*) "WRFGC_Convert_State_Mod, hplin debug grid%pslv_gc", size(grid%pslv_gc, 1), size(grid%pslv_gc, 2)
+        ! write(6,*) grid%pslv_gc
+        ! write(6,*) "WRFGC_Convert_State_Mod, hplin debug grid%p00"
+        ! write(6,*) grid%p00
+        ! write(6,*) "** end debug **"
+
+        !--------------------------------------------------------------
+        ! 2-D Variables (Surface Fields)
+        !--------------------------------------------------------------
+        ! Loop over WRF (IIPAR, JJPAR would be OK too but we are leading with WRF vars on this one)
+        do j = jts, jte
+        do i = its, ite
+            II = i - its + 1
+            JJ = j - jts + 1
+
+            ! Prepare quantities zen for SUNCOS, PARDR, PARDF
+            call calc_zenithb(grid%xlat(i, j), grid%xlong(i, j)*(-1.), grid%julday, grid%dt, grid%gmt, curr_secs, zen)
+
+            ! ALBD              Visible surface albedo [1]
+            State_Met%ALBD(II, JJ) = grid%albedo(i, j)
+
+            ! AREA_M2           Grid box surface area [m^2]
+            State_Met%AREA_M2(II, JJ) = grid%dx * grid%dy / grid%msftx(i, j) / grid%msfty(i, j)
+            State_Grid%AREA_M2(II, JJ) = State_Met%AREA_M2(II, JJ)
+
+            ! CLDFRC            Column cloud fraction [1]
+            State_Met%CLDFRC(II, JJ) = grid%CLDT(i, j)
+
+            ! CLDTOPS           Max cloud top height [levels]
+            ! Used for G-C bpch diagnostics, not used for GIGC
+
+            ! CONV_DEPTH        Convective cloud depth [m]
+            if (config_flags%cu_physics .eq. 16) then
+                ltop     = cloud_top(i, j)
+                State_Met%CONV_DEPTH(II, JJ) = sum( State_Met%BXHEIGHT(II, JJ, 1:ltop) )
+                if ( State_Met%CONV_DEPTH(II, JJ) .gt. 0. ) then
+                    State_Met%CONV_DEPTH(II, JJ) = State_Met%CONV_DEPTH(II, JJ) - 1e+0_fp
+                endif
+            endif
+
+            ! EFLUX             Latent heat flux [W/m^2]
+            State_Met%EFLUX(II, JJ) = grid%LH(i, j)
+
+            ! FLASH_DENS        Lightning flash density [#/km^2/s] | IC+CG flash rate [#/s]
+            if (config_flags%lightning_option .eq. 1 .or. config_flags%lightning_option .eq. 2 ) then
+                State_Met%FLASH_DENS(II, JJ) = ( grid%cg_flashrate(i, j) + grid%ic_flashrate(i, j) ) / State_Met%AREA_M2(II, JJ) * 1e+6_fp
+            endif
+
+            ! FRCLND            Olson land fraction [1]
+            State_Met%FRCLND(II, JJ) = State_Met%FRLAND(II, JJ)
+
+            ! FRLAND            Fraction of land [1]
+            ! FROCEAN           Fraction of ocean [1]
+            ! FRLAKE            Fraction of lake [1]
+            ! FRSNO             Surface snow fraction [1]
+            ! FRLANDIC          Fraction of land ice [1]
+            if(grid%lu_mask(i, j) .eq. 0 .and. grid%lakemask(i, j) .eq. 0 .and. grid%snowh(i, j) .eq. 0) then
+                 State_Met%FRLAND(II, JJ) = 1.0_fp
+                 State_Met%FROCEAN(II, JJ) = 0.0_fp
+                 State_Met%FRSNO(II, JJ) = 0.0_fp
+                 State_Met%FRLAKE(II, JJ) = 0.0_fp
+                 State_Met%FRLANDIC(II, JJ) = 0.0_fp
+            else if(grid%lu_mask(i, j) .eq. 1) then
+                 State_Met%FRLAND(II, JJ) = 0.0_fp
+                 State_Met%FROCEAN(II, JJ) = 1.0_fp
+                 State_Met%FRSNO(II, JJ) = 0.0_fp
+                 State_Met%FRLAKE(II, JJ) = 0.0_fp
+                 State_Met%FRLANDIC(II, JJ) = 0.0_fp
+            else if(grid%lakemask(i, j) .eq. 1) then
+                 State_Met%FRLAND(II, JJ) = 0.0_fp
+                 State_Met%FROCEAN(II, JJ) = 0.0_fp
+                 State_Met%FRSNO(II, JJ) = 0.0_fp
+                 State_Met%FRLAKE(II, JJ) = 1.0_fp
+                 State_Met%FRLANDIC(II, JJ) = 0.0_fp
+            else if(grid%snowh(i, j) .ge. 0) then
+                 State_Met%FRLAND(II, JJ) = 0.0_fp
+                 State_Met%FROCEAN(II, JJ) = 0.0_fp
+                 State_Met%FRSNO(II, JJ) = 1.0_fp
+                 State_Met%FRLAKE(II, JJ) = 0.0_fp
+                 State_Met%FRLANDIC(II, JJ) = 1.0_fp
+            endif
+
+            ! FRSEAICE          Surface sea ice fraction [1] | Sea ice fraction [1]
+            State_Met%FRSEAICE(II, JJ) = grid%xice(i, j)
+
+            ! LandTypeFrac      Olson landmap fraction per type (I,J,TYPE) [1]
+            !
+            ! XLAI              MODIS LAI per land type for this month, dims I,J,N
+            ! Note that the third dimension is actually land type# - 1, as dry dep indexes
+            ! start with 0.
+            !
+            ! IMPORTANT: State_Met%XLAI is average LAI for this surface type
+            !  DIVIDED BY THE FRACTIONAL COVERAGE OF THIS SURFACE TYPE. Which means that
+            !  it is calculated as
+            !    S = 1...%IREG(I,J) (land use type minus 1 for drydep)
+            !     State_Met%XLAI(I,J,S) = State_Met%XLAI_NATIVE(I,J,S+1) / landFrac
+            !  Where landFrac is State_Met%LandTypeFrac(I,J,S+1)
+            !  This means that it is scaled to be larger or equal to the original LAI
+            !
+            ! For now (hplin, xfeng with discussion 12/1/18) we decide to assign 1.0 fractions to land types
+            ! based on grid%lu_index, so we don't have to scale XLAI from LAI for now.
+            if(mminlu_loc .eq. 'USGS') then
+                select case(int(grid%lu_index(i, j)))
+                case (1, 31, 32, 33) ! Urban, residential
+                    State_Met%LandTypeFrac(II, JJ, 2 ) = 1.0_fp
+                    State_Met%XLAI        (II, JJ, 2 ) = grid%lai(i, j)
+                case (2, 3, 4, 5, 6) ! Dryland Cropland, Cr/Grassland Mosaic, Cr/Woodland Mosaic
+                    State_Met%LandTypeFrac(II, JJ, 39) = 1.0_fp ! Cool Irrigated Cropland
+                    State_Met%XLAI        (II, JJ, 39) = grid%lai(i, j)
+                case (7, 8, 9) ! Grassland, Shrubland, Mixed Sh/Gr
+                    State_Met%LandTypeFrac(II, JJ, 43) = 1.0_fp ! Cold Grassland
+                    State_Met%XLAI        (II, JJ, 43) = grid%lai(i, j)
+                case (10) ! Savanna
+                    State_Met%LandTypeFrac(II, JJ, 44) = 1.0_fp ! Woody Savanna
+                    State_Met%XLAI        (II, JJ, 44) = grid%lai(i, j)
+                case (11) ! Deciduous Broadleaf Forest
+                    State_Met%LandTypeFrac(II, JJ, 6 ) = 1.0_fp
+                    State_Met%XLAI        (II, JJ, 6 ) = grid%lai(i, j)
+                case (12) ! Deciduous Needleleaf Forest
+                    State_Met%LandTypeFrac(II, JJ, 5 ) = 1.0_fp
+                    State_Met%XLAI        (II, JJ, 5 ) = grid%lai(i, j)
+                case (13) ! Evergreen Broadleaf Forest
+                    State_Met%LandTypeFrac(II, JJ, 7 ) = 1.0_fp
+                    State_Met%XLAI        (II, JJ, 7 ) = grid%lai(i, j)
+                case (14) ! Evergreen Needleleaf Forest
+                    State_Met%LandTypeFrac(II, JJ, 4 ) = 1.0_fp ! Coniferous Forest
+                    State_Met%XLAI        (II, JJ, 4 ) = grid%lai(i, j)
+                case (15) ! Mixed forest
+                    State_Met%LandTypeFrac(II, JJ, 25) = 1.0_fp
+                    State_Met%XLAI        (II, JJ, 25) = grid%lai(i, j)
+                case (16) ! Water bodies
+                    State_Met%LandTypeFrac(II, JJ, 1 ) = 1.0_fp ! Inland/Sea Water
+                    State_Met%XLAI        (II, JJ, 1 ) = grid%lai(i, j)
+                case (18) ! Wooded Wetland
+                    State_Met%LandTypeFrac(II, JJ, 14) = 1.0_fp ! Wooded Wet Swamp
+                    State_Met%XLAI        (II, JJ, 14) = grid%lai(i, j)
+                case (19) ! Barren or Sparsely Vegetated
+                    State_Met%LandTypeFrac(II, JJ, 3 ) = 1.0_fp ! Low Sparse Grassland
+                    State_Met%XLAI        (II, JJ, 3 ) = grid%lai(i, j)
+                case (21) ! Wooded Tundra
+                    State_Met%LandTypeFrac(II, JJ, 64) = 1.0_fp ! Wooden Tundra
+                    State_Met%XLAI        (II, JJ, 64) = grid%lai(i, j)
+                case (23) ! Bare Ground Tundra
+                    State_Met%LandTypeFrac(II, JJ, 54) = 1.0_fp ! Barren Tundra
+                    State_Met%XLAI        (II, JJ, 54) = grid%lai(i, j)
+                case (24) ! Snow or Ice
+                    State_Met%LandTypeFrac(II, JJ, 13) = 1.0_fp ! Glacier Ice
+                    State_Met%XLAI        (II, JJ, 13) = grid%lai(i, j)
+                case (25) ! Playa
+                    State_Met%LandTypeFrac(II, JJ, 8 ) = 1.0_fp ! Bare Desert
+                    State_Met%XLAI        (II, JJ, 8 ) = grid%lai(i, j)
+                case default
+                    ! default: Urban
+                    State_Met%LandTypeFrac(II, JJ, 2 ) = 1.0_fp
+                    State_Met%XLAI        (II, JJ, 2 ) = grid%lai(i, j)
+                end select
+            else if(mminlu_loc .eq. 'MODIFIED_IGBP_MODIS_NOAH') then
+
+            endif
+
+            ! LandTypeFrac      Olson landmap fraction per type (I,J,TYPE) [1]
+            ! We translate each of the WRF land use maps to the Olson landmaps used by G-C below
+            ! ... in the future, TBD
+            ! if(mminlu_loc .eq. 'USGS') then
+            !     ! 1 Inland/sea water
+            !     !  = 16 Water Bodies
+            !     State_Met%LandTypeFrac(II, JJ, 1) = grid%landusef(i, 16, j)
+
+            !     ! 2 Urban
+            !     !  = 1 Urban and Built-up Land
+            !     State_Met%LandTypeFrac(II, JJ, 2) = grid%landusef(i, 1, j)
+
+            !     ! 3 Low Sparse Grassland
+
+            !     ! 4 Coniferous Forest
+
+            !     ! 5 Deciduous Conifer Forest
+            !     !  = 12 Deciduous Needleleaf Forest
+            !     State_Met%LandTypeFrac(II, JJ, 5) = grid%landusef(i, 12, j)
+
+            !     ! 6 Deciduous Broadleaf Forest
+            !     !  = 11 Deciduous Broadleaf Forest
+            !     State_Met%LandTypeFrac(II, JJ, 6) = grid%landusef(i, 11, j)
+
+            !     ! 7 Evergreen Broadleaf Forests
+            !     !  = 13 Evergreen Broadleaf Forests
+            !     State_Met%LandTypeFrac(II, JJ, 7) = grid%landusef(i, 13, j)
+
+            !     ! 8 Tall Grasses and Shrubs
+
+            !     ! 9 Bare Desert
+
+            !     ! 10 Upland Tundra
+
+            !     ! 11 Irrigated Grassland
+
+            !     ! 12 Semi Desert
+
+            !     ! 13 Glacier Ice
+
+            !     ! 14 Wooded Wet Swamp
+            ! else if(mminlu_loc .eq. 'MODIFIED_IGBP_MODIS_NOAH') then
+            ! endif
+
+            ! GWETROOT          Root soil wetness [1]
+            State_Met%GWETROOT(II, JJ) = grid%smois(i, 4, j)
+
+            ! GWETTOP           Top soil moisture [1]
+            State_Met%GWETTOP(II, JJ) = grid%smois(i, 1, j)
+
+            ! HFLUX             Sensible heat flux [W/m^2]
+            State_Met%HFLUX(II, JJ) = grid%hfx(i, j)
+
+            ! LAI               Leaf area index [m^2/m^2] (online)
+            State_Met%LAI(II, JJ) = grid%lai(i, j)
+
+            ! MODISLAI          Daily LAI computed from monthly offline MODIS [m2/m2]
+            State_Met%MODISLAI(II, JJ) = grid%lai(i, j)
+
+            ! PARDR             Surface downwelling PAR direct flux [W/m^2] | from WRF module_bioemi_beis314.F:subroutine getpar
+            ! PARDF             Surface downwelling PAR diffusive flux [W/m^2] | from WRF module_bioemi_beis314.F:subroutine getpar
+            call getpar(grid%swdown(i, j), 0.01*(grid%p(i, kts, j)+grid%pb(i, kts, j)), zen, pardb, pardif)
+            if (config_flags%ra_sw_physics .eq. 4) then
+               State_Met%PARDR(II, JJ) = grid%swvisdir(i, j)
+               State_Met%PARDF(II, JJ) = grid%swvisdif(i, j)
+            else
+               State_Met%PARDR(II, JJ) = 0.8_fp*pardb
+               State_Met%PARDF(II, JJ) = 0.8_fp*pardif
+            endif
+
+            ! PBLH              PBL height [m]
+            State_Met%PBLH(II, JJ) = grid%pblh(i, j)
+
+            ! PBL_TOP_L         PBL layer k-index [1] | WRF: kpbl
+            State_Met%PBL_TOP_L(II, JJ) = grid%kpbl(i, j)
+
+            ! PHIS              Surface geopotential height [m^2/s^2] | geopotential height at max pressure [m]
+            ! State_Met%PHIS(II, JJ) = 9.80665*(grid%ght_max_p(i, j))
+            State_Met%PHIS(II, JJ) = grid%ph_2(i, kts, j) + grid%phb(i, kts, j)
+
+            ! PRECANV           Anvil precipitation @ ground [kg/m^2/s]
+            State_Met%PRECANV(II, JJ) = (grid%snowncv(i, j) + grid%graupelncv(i, j) + grid%hailncv(i, j))/grid%dt
+
+            ! PRECCON           Convective precipitation @ ground [kg/m^2/s] | PRECIP rate from cumulus scheme [mm/s]*water density [kg/m^3]
+            State_Met%PRECCON(II, JJ) = grid%pratec(i, j)
+
+            ! PRECTOT           Total precipitation @ ground [kg/m^2/s] | rain+ice+snow+graupel precipitation rate at all levels [kg/m^2/s]
+            State_Met%PRECTOT(II, JJ) = (grid%rainncv(i, j) + grid%snowncv(i, j) + grid%graupelncv(i, j) + grid%hailncv(i, j))/grid%dt + grid%pratec(i, j)
+
+            ! PRECLSC           Non-anvil large-scale precipitation @ ground [kg/m^2/s]
+            State_Met%PRECLSC(II, JJ) = grid%rainncv(i, j)/grid%dt
+
+            ! PS1_WET           Wet sfc press at dt start [hPa] | surface pressure [Pa]
+            ! PS2_WET           Wet sfc press at dt end [hPa]
+            ! PSC2_WET          Wet interpolated sfc press [hPa]
+            State_Met%PS1_WET(II, JJ) = .01*grid%psfc(i, j)
+            State_Met%PS2_WET(II, JJ) = .01*(grid%psfc(i, j) + grid%dpsdt(i, j) * grid%dt)
+            State_Met%PSC2_WET(II, JJ) = .01*grid%psfc(i, j)
+
+            ! PS1_DRY           Dry sfc press at dt start [hPa] | Surface pressure - water vapor partial pressure
+            ! PS2_DRY           Dry sfc press at dt end [hPa]
+            ! PSC2_DRY          Dry interpolated sfc press [hPa]
+            !
+            ! from http://wiki.seas.harvard.edu/geos-chem/index.php/Moisture_Updates_in_v11-01 (Legacy implementation)
+            ! GeosCore/dao_mod.F (New implementation)
+            !
+            ! FIXME (hplin): As this is online coupling, we do not have access to next dt info.
+            ! Possibly port a diagnostics Pa/s tendency from WRFV3/
+            ! module_diag_misc? Anyway, if grid%dpsdt (sfc prs tendency) is present, add it to PS2_DRY
+
+            ! State_Met%PS1_DRY(II, JJ) = .01*grid%psfc(i, j) - max(moist(i, kts, j, p_qv) * (1._fp/(1._fp + moist(i, kts, j, p_qv))), 1.0e-30_fp) * 1.6072e-3_fp * grid%psfc(i, j)
+            State_Met%PS1_DRY(II, JJ) = .01*grid%psfc(i, j) - 28.97e-3_fp*max(moist(i, kts, j, p_qv) * (1._fp / (1._fp + moist(i, kts, j, p_qv))), 1.0e-30_fp) /&
+                                    (18.01e+0_fp + 10.96e-3_fp * max(moist(i, kts, j, p_qv) * (1._fp / (1._fp + moist(i, kts, j, p_qv))), 1.0e-30_fp)) * grid%psfc(i, j)
+            State_Met%PS2_DRY(II, JJ) = State_Met%PS1_DRY(II, JJ) + .01 * grid%dpsdt(i, j) * grid%dt
+            ! State_Met%PSC2_DRY(II, JJ) = .01*grid%psfc(i, j) - max(moist(i, kts, j, p_qv) * (1._fp / (1._fp + moist(i, kts, j, p_qv))), 1.0e-30_fp) * 1.6072e-3_fp * grid%psfc(i, j)
+            State_Met%PSC2_DRY(II, JJ) = .01*grid%psfc(i, j) - 28.97e-3_fp*max(moist(i, kts, j, p_qv) * (1._fp / (1._fp + moist(i, kts, j, p_qv))), 1.0e-30_fp) /&
+                                    (18.01e+0_fp + 10.96e-3_fp * max(moist(i, kts, j, p_qv) * (1._fp / (1._fp + moist(i, kts, j, p_qv))), 1.0e-30_fp)) * grid%psfc(i, j)
+
+            ! QV2M              Specific humidity at 2m [kg/kg]   |
+            ! TODO - 14.0.0
+            State_Met%QV2M(II, JJ) = max(grid%q2(i, j) * (1._fp / (1._fp + grid%q2(i, j))) , 1.0e-30_fp)
+
+            ! SEAICE00/.../90   Sea Ice Coverage
+            ! FIXME (hplin): Set as 1.0 for 00 for now, used only for specialty simulations
+            State_Met%SEAICE00(II, JJ) = 1.0_fp
+
+            ! SLP               Sea level pressure [hPa]
+            State_Met%SLP(II, JJ) = slp(i, j)
+
+            ! SNODP             Snow depth [m] | Physical snow depth [m]
+            State_Met%SNODP(II, JJ) = grid%snowh(i, j)
+
+            ! SNOMAS            Snow mass [kg/m^2] | Snow water equivalent [kg/m^2]
+            State_Met%SNOMAS(II, JJ) = grid%acsnow(i, j)
+
+            ! SUNCOS            COS(Solar Zenith Angle) current time [1] | COS of solar zenith angle [1]
+            State_Met%SUNCOS(II, JJ) = grid%coszen(i, j)
+
+            ! SUNCOSmid         COS(SZA) at midpoint
+            State_Met%SUNCOSmid(II, JJ) = cos(zen)
+
+            ! SUNCOSsum is computed by HEMCO. hplin, 8/15/22
+
+            ! SWGDN             Incident radiation @ ground [W/m^2] (RADSWG)
+            State_Met%SWGDN(II, JJ) = grid%swdown(i, j)
+
+            ! TO3               Total overhead O3 column [DU]
+            if (.not. FIRST(grid%id)) then
+                State_Met%TO3(II, JJ) = 0.0_fp
+                do k = kts, kte
+                   State_Met%TO3(II, JJ) =  State_Met%TO3(II, JJ) + chem(i, k, j, p_o3) * State_Met%AD(II, JJ, k) / (grid%dx * grid%dy / grid%msftx(i, j) / grid%msfty(i, j)) * 22.4e+0_fp / 28.97e+0_fp * 0.1_fp
+                enddo
+            endif
+
+            ! TROPP             Tropopause pressure [hPa] | tropo_p [Pa]
+            State_Met%TROPP(II, JJ) = grid%tropo_p(i, j) / 100.
+
+            ! TS                Surface temperature [K]
+            State_Met%TS(II, JJ) = grid%t2(i, j)
+
+            ! TSKIN             Surface skin temperature [K]
+            State_Met%TSKIN(II, JJ) = grid%tsk(i, j)
+
+            ! U10M              E/W wind speed @ 10m height [m/s] | u10
+            State_Met%U10M(II, JJ) = grid%u10(i, j)
+
+            ! USTAR             Fraction velocity [m/s] | ust
+            State_Met%USTAR(II, JJ) = grid%ust(i, j)
+
+            ! UVALBEDO          UV surface albedo [1] | albedo
+            State_Met%UVALBEDO(II, JJ) = grid%albedo(i, j)
+
+            ! V10M              N/S wind speed @ 10m height [m/s] | v10
+            State_Met%V10M(II, JJ) = grid%v10(i, j)
+
+            ! Z0                Surface roughness length [m] | Time varying roughness length [m]
+            State_Met%Z0(II, JJ) = grid%znt(i, j)
+
+            ! CNV_FRC           Convective fraction, used by ESMF_ mode [1]
+
+            !----------------------------------------------------------
+            ! 3-D variables filled on bottom/top levels
+            !----------------------------------------------------------
+            ! Fill top levels
+            State_Met%PFLCU(II, JJ, LM+1) = 0._fp
+            State_Met%PFICU(II, JJ, LM+1) = 0._fp
+            State_Met%PFLLSAN(II, JJ, LM+1) = 0._fp
+            State_Met%PFILSAN(II, JJ, LM+1) = 0._fp
+
+            ! PEDGE at bottom level [hPa]
+            State_Met%PEDGE(II, JJ, kts) = 0.01_fp*grid%psfc(i, j)
+!            State_Met%PEDGE(II, JJ, 1) = .01*((grid%ph_2(i, 1, j) + grid%phb(i, 1, j) - grid%ph_2(i, 3, j) - grid%phb(i, 3, j))/                                         &
+!                                               (grid%ph_2(i, 1, j) + grid%phb(i, 1, j) - grid%ph_2(i, 2, j) - grid%phb(i, 2, j))*(grid%p(i, 1, j) + grid%pb(i, 1, j)) +  &
+!                                               (grid%ph_2(i, 3, j) + grid%phb(i, 3, j) - grid%ph_2(i, 2, j) - grid%phb(i, 2, j))/                                        &
+!                                               (grid%ph_2(i, 1, j) + grid%phb(i, 1, j) - grid%ph_2(i, 2, j) - grid%phb(i, 2, j))*(grid%p(i, 2, j) + grid%pb(i, 2, j)))
+
+            ! PEDGE at top level [hPa]
+            ! Need to cap at 0.3 hPa (the top level must be < 0.3 hPa) or linoz will
+            ! crash.
+            State_Met%PEDGE(II, JJ, LM+1) = 0.01_fp*grid%p_top
+            if(State_Met%PEDGE(II, JJ, LM+1) .ge. 0.3_fp) then
+                State_Met%PEDGE(II, JJ, LM+1) = 0.29_fp
+            endif
+
+!            State_Met%PEDGE(II, JJ, LM + 1) = .01*(exp((grid%ph_2(i, 1, j) + grid%phb(i, 1, j) - grid%ph_2(i, 3, j) - grid%phb(i, 3, j))/                                &
+!                                                      (grid%ph_2(i, 1, j) + grid%phb(i, 1, j) - grid%ph_2(i, 2, j) - grid%phb(i, 2, j))*                                 &
+!                                                   log(grid%p(i, kte, j) + grid%pb(i, kte, j)) +                                                                         &
+!                                                      (grid%ph_2(i, 3, j) + grid%phb(i, 3, j) - grid%ph_2(i, 2, j) - grid%phb(i, 2, j))/                                 &
+!                                                      (grid%ph_2(i, 1, j) + grid%phb(i, 1, j) - grid%ph_2(i, 2, j) - grid%phb(i, 2, j))*                                 &
+!                                                   log(grid%p(i, kte-1, j) + grid%pb(i, kte-1, j))))
+        enddo
+        enddo
+
+        call wrf_debug(100, "WRFGC_Convert_State_Mod after 2-D State_Met% Conversion")
+
+        ! Loop over WRF tile but in GEOS-Chem order as we are writing to GEOS-Chem
+        ! Remember, for 3-D looping over (I, J, K) loops should be written outermost to innermost
+        ! to make the most efficient use of the column-first order in Fortran
+        !
+        ! Top levels and lowermost levels (edge conditions) are now filled in the 2-D loop that
+        ! does not loop over k
+        do k = kts, kte
+        do j = jts, jte
+        do i = its, ite
+            II = i - its + 1
+            JJ = j - jts + 1
+
+            !--------------------------------------------------------------
+            ! 3-D Variables
+            !
+            ! For 3-D Variables, there is one unified loop that performs
+            ! the conversions over vertical levs.
+            !--------------------------------------------------------------
+
+            ! PEDGE             Wet air pressure at (vertial) level edges [hPa]
+            if(k .ne. kts) then ! Start from kts + 1
+                State_Met%PEDGE(II, JJ, k) = .01_fp*(grid%c3f(k)*(grid%psfc(i, j) - grid%p_top) + grid%c4f(k) + grid%p_top)
+!                State_Met%PEDGE(II, JJ, k) = .01*(grid%fnm(k)*(grid%p(i, k, j) + grid%pb(i, k, j)) + grid%fnp(k)*(grid%p(i, k-1, j) + grid%pb(i, k-1, j)))
+            endif
+
+            ! CLDF              3-D cloud fraction [1]
+            State_Met%CLDF(II, JJ, k) = grid%cldfra(i, k, j)
+
+            ! CMFMC                               Upward moist convective mass flux [kg/m^2/s] (max:LM+1)
+            if(config_flags%cu_physics .eq. 10) then
+                State_Met%CMFMC(II, JJ, k) = grid%mfup_cup(i, k, j)
+            else if(config_flags%cu_physics .eq. 7) then
+                State_Met%CMFMC(II, JJ, k) = grid%cmfmcdzm(i, k, j)
+            else if(config_flags%cu_physics .eq. 16) then
+                State_Met%CMFMC(II, JJ, k) = cmfmc(i, k, j)
+            endif
+
+            ! T                 Temperature [K]
+            ! These calculations are linked, do not change their order and place them first
+            State_Met%T(II, JJ, k) = (grid%t_2(i, k, j) + t0)*((grid%p(i, k, j) + grid%pb(i, k, j))/p1000mb)**rcp
+
+            ! DQRCU             Convective precipitation production rate [kg/kg(dry air)/s] | dq/dt due to deep convective rainout [kg/kg/s]
+            if(config_flags%cu_physics .eq. 7) then
+                State_Met%DQRCU(II, JJ, k) = grid%zmntprpd(i, k, j)
+            else if(config_flags%cu_physics .eq. 16) then
+                State_Met%DQRCU(II, JJ, k) = dqrcu(i, k, j)
+            endif
+
+            ! DQRLSAN           Large scale precipitation production rate [kg/kg(dry air)/s] | Rate of conversion of condensate to precipitation [kg/kg/s]
+            if(config_flags%mp_physics .eq. 10 .or. config_flags%mp_physics .eq. 8 .or. &
+               config_flags%mp_physics .eq. 6) then
+                ! WRFv3
+                ! State_Met%DQRLSAN(II, JJ, k) = grid%rainprod(i, k, j)
+
+                ! WRFv4
+                State_Met%DQRLSAN(II, JJ, k) = grid%wetscav_frcing(i, k, j, p_rainprod)
+            else if(config_flags%mp_physics .eq. 11) then
+                State_Met%DQRLSAN(II, JJ, k) = grid%prain3d(i, k, j)
+            endif
+
+            ! DTRAIN            Detrainment flux [kg/m^2/s]
+            if(config_flags%cu_physics .eq. 7) then
+                State_Met%DTRAIN(II, JJ, k) = grid%du3d(i, k, j)*grid%dp3d(i, k, j)*100._fp/9.8_fp
+                if(State_Met%DTRAIN(II, JJ, k) > 0.5) then
+                    State_Met%DTRAIN(II, JJ, k) = 0.5
+                endif
+            else if(config_flags%cu_physics .eq. 16) then
+                State_Met%DTRAIN(II, JJ, k) = dtrain(i, k, j)
+            endif
+
+            ! OMEGA                  Updraft velocity [Pa/s]
+            if(State_Met%AIRVOL(II, JJ, k) .ne. 0) then
+                ! State_Met%OMEGA(II, JJ, k) = -9.8_fp*State_Met%AD(II, JJ, k)/State_Met%AIRVOL(II, JJ, k)*grid%w_2(i, k, j)
+            endif
+
+            ! QI                Ice mixing ratio [kg/kg dry air] || cloud ice mixing ratio [kg/kg]
+            ! QL                Water mixing ratio [kg/kg dry air] || cloud water mixing ratio [kg/kg]
+            ! QI, QL (WRF registry ikjftb on moist)
+            State_Met%QI(II, JJ, k) = moist(i, k, j, p_qi)
+            State_Met%QL(II, JJ, k) = moist(i, k, j, p_qc)
+
+            ! REEVAPCN
+            if(config_flags%cu_physics .eq. 7) then
+                State_Met%REEVAPCN(II, JJ, k) = abs(grid%evapcdp3d(i, k, j))
+            else if(config_flags%cu_physics .eq. 16) then
+                State_Met%REEVAPCN(II, JJ, k) = abs(reevapcn(i, k, j)*State_Met%AD(II, JJ, k)/State_Met%AREA_M2(II, JJ))
+            endif
+
+            ! REEVAPLS
+            if(config_flags%mp_physics .eq. 10 .or. config_flags%mp_physics .eq. 8 .or. &
+               config_flags%mp_physics .eq. 6) then
+                ! WRFv3
+                ! State_Met%REEVAPLS(II, JJ, k) = abs(grid%evapprod(i, k, j))
+
+                ! WRFv4
+                State_Met%REEVAPLS(II, JJ, k) = grid%wetscav_frcing(i, k, j, p_evapprod)
+            else if(config_flags%mp_physics .eq. 11) then
+                State_Met%REEVAPLS(II, JJ, k) = abs(grid%nevapr3d(i, k, j))
+            endif
+
+            ! RH                Relative humidity [%]
+            State_Met%RH(II, JJ, k) = max(.1, min(.95, moist(i, k, j, p_qv)/ &
+                                   (3.80*exp(17.27*(State_Met%T(II, JJ, k) - 273.)/ &
+                                             (State_Met%T(II, JJ, k) - 36.))/(.01*(grid%p(i, k, j) + grid%pb(i, k, j)))))) * 100
+
+            ! SPHU              Specific humidity [g H2O/kg tot air]
+            ! SPHU1             ... at ts start [g/kg]
+            ! SPHU2             ... at ts end [g/kg]
+            ! Compute specific humidities based on moisture data
+            ! from module_cam_mam_gas_wetdep_driver:168
+            State_Met%SPHU(II, JJ, k) = max(moist(i, k, j, p_qv) * (1._fp / (1._fp + moist(i, k, j, p_qv))), 1.0e-30_fp)
+            State_Met%SPHU1(II, JJ, k) = State_Met%SPHU(II, JJ, k)
+            if(config_flags%cu_physics .eq. 7) then
+                State_Met%SPHU2(II, JJ, k) = State_Met%SPHU(II, JJ, k) + grid%zmdq(i, k, j)*1.0e3_fp*grid%dt
+            else ! Unsupported physics option
+                State_Met%SPHU2(II, JJ, k) = State_Met%SPHU(II, JJ, k)
+            endif
+
+            ! U                 E/W component of wind [m/s] (from WRF U - X cmp)
+            ! V                 N/S component of wind [m/s] (from WRF V - X cmp)
+            if(i .ne. ide) then
+                State_Met%U(II, JJ, k) = 0.5*(grid%u_2(i, k, j) + grid%u_2(i + 1, k, j))
+            else
+                State_Met%U(II, JJ, k) = grid%u_2(i, k, j)
+            endif
+
+            if(j .ne. jde) then
+                State_Met%V(II, JJ, k) = 0.5*(grid%v_2(i, k, j) + grid%v_2(i, k, j + 1))
+            else
+                State_Met%V(II, JJ, k) = grid%v_2(i, k, j)
+            endif
+
+            ! TAUCLI                 Optical depth of ice clouds [1] | Cloud optical thickness for ice [1]
+            ! TAUCLW                 Optical depth of H20 clouds [1] | Cloud optical thickness for water [1]
+            ! OPTD                   Total in-cloud optical depth (visible band)
+            if(config_flags%ra_lw_physics .eq. 3 .or. config_flags%ra_lw_physics .eq. 5) then
+                State_Met%TAUCLI(II, JJ, k) = grid%taucldi(i, k, j)
+                State_Met%TAUCLW(II, JJ, k) = grid%taucldc(i, k, j)
+                State_Met%OPTD(II, JJ, k) = State_Met%TAUCLI(II, JJ, k) + State_Met%TAUCLW(II, JJ, k)
+            else if(config_flags%ra_lw_physics .eq. 4) then
+                State_Met%TAUCLI(II, JJ, k) = taucldi(i, k, j)
+                State_Met%TAUCLW(II, JJ, k) = taucldc(i, k, j)
+                State_Met%OPTD(II, JJ, k) = optd(i, k, j)
+            endif
+
+            ! PFICU/PFLCU                         Downward flux of ice/liquid precipitation (convective) [kg/m^2/s]
+            if(config_flags%cu_physics .eq. 7) then
+                State_Met%PFLCU(II, JJ, k) = grid%zmflxprc(i, k, j)
+                State_Met%PFICU(II, JJ, k) = grid%zmflxsnw(i, k, j)
+            else if(config_flags%cu_physics .eq. 16) then
+                State_Met%PFLCU(II, JJ, k) = pmflxrain(i, k, j)
+                State_Met%PFICU(II, JJ, k) = pmflxsnow(i, k, j)
+            endif
+
+            ! PFILSAN/PFLLSAN                    Downward flux of ice/liquid precipitation (Large-scale & Anvil) [kg/m^2/s]
+            State_Met%PFLLSAN(II, JJ, k) = grid%precr(i, k, j)
+            State_Met%PFILSAN(II, JJ, k) = grid%preci(i, k, j) + grid%precs(i, k, j) + grid%precg(i, k, j)
+
+            ! TMPU1                              Temperature at start of timestep [K]
+            ! TMPU2                              Temperature at end of timestep [K]
+            ! Not used for main G-C, only in Met Fields by FlexGrid, but for safety set to %T
+            State_Met%TMPU1(II, JJ, k) = State_Met%T(II, JJ, k)
+            State_Met%TMPU2(II, JJ, k) = State_Met%T(II, JJ, k)
+
+            ! UPDVVEL                            Updraft vertical velocity [hPa/s]
+            if(State_Met%AIRVOL(II, JJ, k) .ne. 0) then
+                ! State_Met%UPDVVEL(II, JJ, k) = -9.8_fp*State_Met%AD(II, JJ, k)/State_Met%AIRVOL(II, JJ, k)*grid%w_2(i, k, j)
+            endif
+
+            ! This code ONLY runs after all levels for given grid box are filled (k = LM)
+            if(k .eq. kte) then
+                ! A kludge that stops GEOS-CHEM CGM ("ChemGrid_Mod") GET_TPAUSE_LEVEL from breaking,
+                ! when the T-PAUSE could not be found.
+                ! WRF has a weaker stratosphere routine, so some grid boxes might NOT have a T-PAUSE at
+                ! all. In this case, force CGM to recognize LLPAR (top level, LM) as T-PAUSE.
+                ! Is T_PAUSE cond: State_Met%TROPP(I, J) >= State_Met%PEDGE(I, J, L_CURRENT)
+                if(minval(State_Met%PEDGE(II, JJ, 1:LM)) .ge. State_Met%TROPP(II, JJ)) then
+                    State_Met%TROPP(II, JJ) = minval(State_Met%PEDGE(II, JJ, 1:LM))
+                    write(6, *) "WRFGC_Convert_State_Mod fixed T-PAUSE for GEOS-CHEM-CGM, set T-PAUSE to LLPAR"
+                endif
+
+                ! Calculate CLDTOPS (highest location of CMFMC in the column) (GC > 12.4)
+                ! This can potentially be optimized further by collapsing this into the CMFMC loop
+                ! but I will keep this consistent with GCHP for now (hplin, 12/31/19)
+                State_Met%CLDTOPS(II,JJ) = 1
+                do kk = LM, 1, -1
+                    if(State_Met%CMFMC(II, JJ, kk) > 0d0) then
+                        State_Met%CLDTOPS(II, JJ) = kk + 1
+                    endif
+                enddo
+            endif
+
+            ! Update chemistry concentrations in GEOS-Chem from WRF IC values
+            if((.not. FIRST(grid%id)) .or. (config_flags%chem_in_opt .eq. 1 .and. FIRST(grid%id))) then
+                State_Chm%Species(gi_acet)%Conc(II, JJ, k) = chem(i, k, j, p_acet) * 1.0e-6_fp
+                State_Chm%Species(gi_acta)%Conc(II, JJ, k) = chem(i, k, j, p_acta) * 1.0e-6_fp
+                State_Chm%Species(gi_aeri)%Conc(II, JJ, k) = chem(i, k, j, p_aeri) * 1.0e-6_fp
+                State_Chm%Species(gi_ald2)%Conc(II, JJ, k) = chem(i, k, j, p_ald2) * 1.0e-6_fp
+                State_Chm%Species(gi_alk4)%Conc(II, JJ, k) = chem(i, k, j, p_alk4) * 1.0e-6_fp
+                State_Chm%Species(gi_aonita)%Conc(II, JJ, k) = chem(i, k, j, p_aonita) * 1.0e-6_fp
+                State_Chm%Species(gi_aromp4)%Conc(II, JJ, k) = chem(i, k, j, p_aromp4) * 1.0e-6_fp
+                State_Chm%Species(gi_aromp5)%Conc(II, JJ, k) = chem(i, k, j, p_aromp5) * 1.0e-6_fp
+                State_Chm%Species(gi_atooh)%Conc(II, JJ, k) = chem(i, k, j, p_atooh) * 1.0e-6_fp
+                State_Chm%Species(gi_bald)%Conc(II, JJ, k) = chem(i, k, j, p_bald) * 1.0e-6_fp
+                State_Chm%Species(gi_bcpi)%Conc(II, JJ, k) = chem(i, k, j, p_bcpi) * 1.0e-6_fp
+                State_Chm%Species(gi_bcpo)%Conc(II, JJ, k) = chem(i, k, j, p_bcpo) * 1.0e-6_fp
+                State_Chm%Species(gi_benz)%Conc(II, JJ, k) = chem(i, k, j, p_benz) * 1.0e-6_fp
+                State_Chm%Species(gi_benzp)%Conc(II, JJ, k) = chem(i, k, j, p_benzp) * 1.0e-6_fp
+                State_Chm%Species(gi_bzco3h)%Conc(II, JJ, k) = chem(i, k, j, p_bzco3h) * 1.0e-6_fp
+                State_Chm%Species(gi_bzpan)%Conc(II, JJ, k) = chem(i, k, j, p_bzpan) * 1.0e-6_fp
+                State_Chm%Species(gi_br)%Conc(II, JJ, k) = chem(i, k, j, p_br) * 1.0e-6_fp
+                State_Chm%Species(gi_br2)%Conc(II, JJ, k) = chem(i, k, j, p_br2) * 1.0e-6_fp
+                State_Chm%Species(gi_brcl)%Conc(II, JJ, k) = chem(i, k, j, p_brcl) * 1.0e-6_fp
+                State_Chm%Species(gi_brno2)%Conc(II, JJ, k) = chem(i, k, j, p_brno2) * 1.0e-6_fp
+                State_Chm%Species(gi_brno3)%Conc(II, JJ, k) = chem(i, k, j, p_brno3) * 1.0e-6_fp
+                State_Chm%Species(gi_bro)%Conc(II, JJ, k) = chem(i, k, j, p_bro) * 1.0e-6_fp
+                State_Chm%Species(gi_brsala)%Conc(II, JJ, k) = chem(i, k, j, p_brsala) * 1.0e-6_fp
+                State_Chm%Species(gi_brsalc)%Conc(II, JJ, k) = chem(i, k, j, p_brsalc) * 1.0e-6_fp
+                State_Chm%Species(gi_c2h2)%Conc(II, JJ, k) = chem(i, k, j, p_c2h2) * 1.0e-6_fp
+                State_Chm%Species(gi_c2h4)%Conc(II, JJ, k) = chem(i, k, j, p_c2h4) * 1.0e-6_fp
+                State_Chm%Species(gi_c2h6)%Conc(II, JJ, k) = chem(i, k, j, p_c2h6) * 1.0e-6_fp
+                State_Chm%Species(gi_c3h8)%Conc(II, JJ, k) = chem(i, k, j, p_c3h8) * 1.0e-6_fp
+                State_Chm%Species(gi_ccl4)%Conc(II, JJ, k) = chem(i, k, j, p_ccl4) * 1.0e-6_fp
+                State_Chm%Species(gi_cfc11)%Conc(II, JJ, k) = chem(i, k, j, p_cfc11) * 1.0e-6_fp
+                State_Chm%Species(gi_cfc113)%Conc(II, JJ, k) = chem(i, k, j, p_cfc113) * 1.0e-6_fp
+                State_Chm%Species(gi_cfc114)%Conc(II, JJ, k) = chem(i, k, j, p_cfc114) * 1.0e-6_fp
+                State_Chm%Species(gi_cfc115)%Conc(II, JJ, k) = chem(i, k, j, p_cfc115) * 1.0e-6_fp
+                State_Chm%Species(gi_cfc12)%Conc(II, JJ, k) = chem(i, k, j, p_cfc12) * 1.0e-6_fp
+                State_Chm%Species(gi_ch2br2)%Conc(II, JJ, k) = chem(i, k, j, p_ch2br2) * 1.0e-6_fp
+                State_Chm%Species(gi_ch2cl2)%Conc(II, JJ, k) = chem(i, k, j, p_ch2cl2) * 1.0e-6_fp
+                State_Chm%Species(gi_ch2i2)%Conc(II, JJ, k) = chem(i, k, j, p_ch2i2) * 1.0e-6_fp
+                State_Chm%Species(gi_ch2ibr)%Conc(II, JJ, k) = chem(i, k, j, p_ch2ibr) * 1.0e-6_fp
+                State_Chm%Species(gi_ch2icl)%Conc(II, JJ, k) = chem(i, k, j, p_ch2icl) * 1.0e-6_fp
+                State_Chm%Species(gi_ch2o)%Conc(II, JJ, k) = chem(i, k, j, p_ch2o) * 1.0e-6_fp
+                State_Chm%Species(gi_ch3br)%Conc(II, JJ, k) = chem(i, k, j, p_ch3br) * 1.0e-6_fp
+                State_Chm%Species(gi_ch3ccl3)%Conc(II, JJ, k) = chem(i, k, j, p_ch3ccl3) * 1.0e-6_fp
+                State_Chm%Species(gi_ch3cl)%Conc(II, JJ, k) = chem(i, k, j, p_ch3cl) * 1.0e-6_fp
+                State_Chm%Species(gi_ch3i)%Conc(II, JJ, k) = chem(i, k, j, p_ch3i) * 1.0e-6_fp
+                State_Chm%Species(gi_ch4)%Conc(II, JJ, k) = chem(i, k, j, p_ch4) * 1.0e-6_fp
+                State_Chm%Species(gi_chbr3)%Conc(II, JJ, k) = chem(i, k, j, p_chbr3) * 1.0e-6_fp
+                State_Chm%Species(gi_chcl3)%Conc(II, JJ, k) = chem(i, k, j, p_chcl3) * 1.0e-6_fp
+                State_Chm%Species(gi_clock)%Conc(II, JJ, k) = chem(i, k, j, p_clock) * 1.0e-6_fp
+                State_Chm%Species(gi_co)%Conc(II, JJ, k) = chem(i, k, j, p_co) * 1.0e-6_fp
+                State_Chm%Species(gi_csl)%Conc(II, JJ, k) = chem(i, k, j, p_csl) * 1.0e-6_fp
+                State_Chm%Species(gi_cl)%Conc(II, JJ, k) = chem(i, k, j, p_cl) * 1.0e-6_fp
+                State_Chm%Species(gi_cl2)%Conc(II, JJ, k) = chem(i, k, j, p_cl2) * 1.0e-6_fp
+                State_Chm%Species(gi_cl2o2)%Conc(II, JJ, k) = chem(i, k, j, p_cl2o2) * 1.0e-6_fp
+                State_Chm%Species(gi_clno2)%Conc(II, JJ, k) = chem(i, k, j, p_clno2) * 1.0e-6_fp
+                State_Chm%Species(gi_clno3)%Conc(II, JJ, k) = chem(i, k, j, p_clno3) * 1.0e-6_fp
+                State_Chm%Species(gi_clo)%Conc(II, JJ, k) = chem(i, k, j, p_clo) * 1.0e-6_fp
+                State_Chm%Species(gi_cloo)%Conc(II, JJ, k) = chem(i, k, j, p_cloo) * 1.0e-6_fp
+                State_Chm%Species(gi_dms)%Conc(II, JJ, k) = chem(i, k, j, p_dms) * 1.0e-6_fp
+                State_Chm%Species(gi_dst1)%Conc(II, JJ, k) = chem(i, k, j, p_dst1) * 1.0e-6_fp
+                State_Chm%Species(gi_dst2)%Conc(II, JJ, k) = chem(i, k, j, p_dst2) * 1.0e-6_fp
+                State_Chm%Species(gi_dst3)%Conc(II, JJ, k) = chem(i, k, j, p_dst3) * 1.0e-6_fp
+                State_Chm%Species(gi_dst4)%Conc(II, JJ, k) = chem(i, k, j, p_dst4) * 1.0e-6_fp
+                State_Chm%Species(gi_eoh)%Conc(II, JJ, k) = chem(i, k, j, p_eoh) * 1.0e-6_fp
+                State_Chm%Species(gi_ethln)%Conc(II, JJ, k) = chem(i, k, j, p_ethln) * 1.0e-6_fp
+                State_Chm%Species(gi_ethn)%Conc(II, JJ, k) = chem(i, k, j, p_ethn) * 1.0e-6_fp
+                State_Chm%Species(gi_ethp)%Conc(II, JJ, k) = chem(i, k, j, p_ethp) * 1.0e-6_fp
+                State_Chm%Species(gi_etno3)%Conc(II, JJ, k) = chem(i, k, j, p_etno3) * 1.0e-6_fp
+                State_Chm%Species(gi_etp)%Conc(II, JJ, k) = chem(i, k, j, p_etp) * 1.0e-6_fp
+                State_Chm%Species(gi_glyc)%Conc(II, JJ, k) = chem(i, k, j, p_glyc) * 1.0e-6_fp
+                State_Chm%Species(gi_glyx)%Conc(II, JJ, k) = chem(i, k, j, p_glyx) * 1.0e-6_fp
+                State_Chm%Species(gi_h1211)%Conc(II, JJ, k) = chem(i, k, j, p_h1211) * 1.0e-6_fp
+                State_Chm%Species(gi_h1301)%Conc(II, JJ, k) = chem(i, k, j, p_h1301) * 1.0e-6_fp
+                State_Chm%Species(gi_h2402)%Conc(II, JJ, k) = chem(i, k, j, p_h2402) * 1.0e-6_fp
+                State_Chm%Species(gi_h2o)%Conc(II, JJ, k) = chem(i, k, j, p_h2o) * 1.0e-6_fp
+                State_Chm%Species(gi_h2o2)%Conc(II, JJ, k) = chem(i, k, j, p_h2o2) * 1.0e-6_fp
+                State_Chm%Species(gi_hac)%Conc(II, JJ, k) = chem(i, k, j, p_hac) * 1.0e-6_fp
+                State_Chm%Species(gi_hbr)%Conc(II, JJ, k) = chem(i, k, j, p_hbr) * 1.0e-6_fp
+                State_Chm%Species(gi_hc5a)%Conc(II, JJ, k) = chem(i, k, j, p_hc5a) * 1.0e-6_fp
+                State_Chm%Species(gi_hcfc123)%Conc(II, JJ, k) = chem(i, k, j, p_hcfc123) * 1.0e-6_fp
+                State_Chm%Species(gi_hcfc141b)%Conc(II, JJ, k) = chem(i, k, j, p_hcfc141b) * 1.0e-6_fp
+                State_Chm%Species(gi_hcfc142b)%Conc(II, JJ, k) = chem(i, k, j, p_hcfc142b) * 1.0e-6_fp
+                State_Chm%Species(gi_hcfc22)%Conc(II, JJ, k) = chem(i, k, j, p_hcfc22) * 1.0e-6_fp
+                State_Chm%Species(gi_hcooh)%Conc(II, JJ, k) = chem(i, k, j, p_hcooh) * 1.0e-6_fp
+                State_Chm%Species(gi_hcl)%Conc(II, JJ, k) = chem(i, k, j, p_hcl) * 1.0e-6_fp
+                State_Chm%Species(gi_hi)%Conc(II, JJ, k) = chem(i, k, j, p_hi) * 1.0e-6_fp
+                State_Chm%Species(gi_hmhp)%Conc(II, JJ, k) = chem(i, k, j, p_hmhp) * 1.0e-6_fp
+                State_Chm%Species(gi_hmml)%Conc(II, JJ, k) = chem(i, k, j, p_hmml) * 1.0e-6_fp
+                State_Chm%Species(gi_hms)%Conc(II, JJ, k) = chem(i, k, j, p_hms) * 1.0e-6_fp
+                State_Chm%Species(gi_hno2)%Conc(II, JJ, k) = chem(i, k, j, p_hno2) * 1.0e-6_fp
+                State_Chm%Species(gi_hno3)%Conc(II, JJ, k) = chem(i, k, j, p_hno3) * 1.0e-6_fp
+                State_Chm%Species(gi_hno4)%Conc(II, JJ, k) = chem(i, k, j, p_hno4) * 1.0e-6_fp
+                State_Chm%Species(gi_hobr)%Conc(II, JJ, k) = chem(i, k, j, p_hobr) * 1.0e-6_fp
+                State_Chm%Species(gi_hocl)%Conc(II, JJ, k) = chem(i, k, j, p_hocl) * 1.0e-6_fp
+                State_Chm%Species(gi_hoi)%Conc(II, JJ, k) = chem(i, k, j, p_hoi) * 1.0e-6_fp
+                State_Chm%Species(gi_honit)%Conc(II, JJ, k) = chem(i, k, j, p_honit) * 1.0e-6_fp
+                State_Chm%Species(gi_hpald1)%Conc(II, JJ, k) = chem(i, k, j, p_hpald1) * 1.0e-6_fp
+                State_Chm%Species(gi_hpald2)%Conc(II, JJ, k) = chem(i, k, j, p_hpald2) * 1.0e-6_fp
+                State_Chm%Species(gi_hpald3)%Conc(II, JJ, k) = chem(i, k, j, p_hpald3) * 1.0e-6_fp
+                State_Chm%Species(gi_hpald4)%Conc(II, JJ, k) = chem(i, k, j, p_hpald4) * 1.0e-6_fp
+                State_Chm%Species(gi_hpethnl)%Conc(II, JJ, k) = chem(i, k, j, p_hpethnl) * 1.0e-6_fp
+                State_Chm%Species(gi_i)%Conc(II, JJ, k) = chem(i, k, j, p_i) * 1.0e-6_fp
+                State_Chm%Species(gi_i2)%Conc(II, JJ, k) = chem(i, k, j, p_i2) * 1.0e-6_fp
+                State_Chm%Species(gi_i2o2)%Conc(II, JJ, k) = chem(i, k, j, p_i2o2) * 1.0e-6_fp
+                State_Chm%Species(gi_i2o3)%Conc(II, JJ, k) = chem(i, k, j, p_i2o3) * 1.0e-6_fp
+                State_Chm%Species(gi_i2o4)%Conc(II, JJ, k) = chem(i, k, j, p_i2o4) * 1.0e-6_fp
+                State_Chm%Species(gi_ibr)%Conc(II, JJ, k) = chem(i, k, j, p_ibr) * 1.0e-6_fp
+                State_Chm%Species(gi_iche)%Conc(II, JJ, k) = chem(i, k, j, p_iche) * 1.0e-6_fp
+                State_Chm%Species(gi_icn)%Conc(II, JJ, k) = chem(i, k, j, p_icn) * 1.0e-6_fp
+                State_Chm%Species(gi_icpdh)%Conc(II, JJ, k) = chem(i, k, j, p_icpdh) * 1.0e-6_fp
+                State_Chm%Species(gi_icl)%Conc(II, JJ, k) = chem(i, k, j, p_icl) * 1.0e-6_fp
+                State_Chm%Species(gi_idc)%Conc(II, JJ, k) = chem(i, k, j, p_idc) * 1.0e-6_fp
+                State_Chm%Species(gi_idchp)%Conc(II, JJ, k) = chem(i, k, j, p_idchp) * 1.0e-6_fp
+                State_Chm%Species(gi_idhdp)%Conc(II, JJ, k) = chem(i, k, j, p_idhdp) * 1.0e-6_fp
+                State_Chm%Species(gi_idhpe)%Conc(II, JJ, k) = chem(i, k, j, p_idhpe) * 1.0e-6_fp
+                State_Chm%Species(gi_idn)%Conc(II, JJ, k) = chem(i, k, j, p_idn) * 1.0e-6_fp
+                State_Chm%Species(gi_iepoxa)%Conc(II, JJ, k) = chem(i, k, j, p_iepoxa) * 1.0e-6_fp
+                State_Chm%Species(gi_iepoxb)%Conc(II, JJ, k) = chem(i, k, j, p_iepoxb) * 1.0e-6_fp
+                State_Chm%Species(gi_iepoxd)%Conc(II, JJ, k) = chem(i, k, j, p_iepoxd) * 1.0e-6_fp
+                State_Chm%Species(gi_ihn1)%Conc(II, JJ, k) = chem(i, k, j, p_ihn1) * 1.0e-6_fp
+                State_Chm%Species(gi_ihn2)%Conc(II, JJ, k) = chem(i, k, j, p_ihn2) * 1.0e-6_fp
+                State_Chm%Species(gi_ihn3)%Conc(II, JJ, k) = chem(i, k, j, p_ihn3) * 1.0e-6_fp
+                State_Chm%Species(gi_ihn4)%Conc(II, JJ, k) = chem(i, k, j, p_ihn4) * 1.0e-6_fp
+                State_Chm%Species(gi_indiol)%Conc(II, JJ, k) = chem(i, k, j, p_indiol) * 1.0e-6_fp
+                State_Chm%Species(gi_ino)%Conc(II, JJ, k) = chem(i, k, j, p_ino) * 1.0e-6_fp
+                State_Chm%Species(gi_inpb)%Conc(II, JJ, k) = chem(i, k, j, p_inpb) * 1.0e-6_fp
+                State_Chm%Species(gi_inpd)%Conc(II, JJ, k) = chem(i, k, j, p_inpd) * 1.0e-6_fp
+                State_Chm%Species(gi_io)%Conc(II, JJ, k) = chem(i, k, j, p_io) * 1.0e-6_fp
+                State_Chm%Species(gi_ionita)%Conc(II, JJ, k) = chem(i, k, j, p_ionita) * 1.0e-6_fp
+                State_Chm%Species(gi_iono)%Conc(II, JJ, k) = chem(i, k, j, p_iono) * 1.0e-6_fp
+                State_Chm%Species(gi_iono2)%Conc(II, JJ, k) = chem(i, k, j, p_iono2) * 1.0e-6_fp
+                State_Chm%Species(gi_iprno3)%Conc(II, JJ, k) = chem(i, k, j, p_iprno3) * 1.0e-6_fp
+                State_Chm%Species(gi_isala)%Conc(II, JJ, k) = chem(i, k, j, p_isala) * 1.0e-6_fp
+                State_Chm%Species(gi_isalc)%Conc(II, JJ, k) = chem(i, k, j, p_isalc) * 1.0e-6_fp
+                State_Chm%Species(gi_isop)%Conc(II, JJ, k) = chem(i, k, j, p_isop) * 1.0e-6_fp
+                State_Chm%Species(gi_itcn)%Conc(II, JJ, k) = chem(i, k, j, p_itcn) * 1.0e-6_fp
+                State_Chm%Species(gi_ithn)%Conc(II, JJ, k) = chem(i, k, j, p_ithn) * 1.0e-6_fp
+                State_Chm%Species(gi_limo)%Conc(II, JJ, k) = chem(i, k, j, p_limo) * 1.0e-6_fp
+                State_Chm%Species(gi_lvoc)%Conc(II, JJ, k) = chem(i, k, j, p_lvoc) * 1.0e-6_fp
+                State_Chm%Species(gi_lvocoa)%Conc(II, JJ, k) = chem(i, k, j, p_lvocoa) * 1.0e-6_fp
+                State_Chm%Species(gi_macr)%Conc(II, JJ, k) = chem(i, k, j, p_macr) * 1.0e-6_fp
+                State_Chm%Species(gi_macr1ooh)%Conc(II, JJ, k) = chem(i, k, j, p_macr1ooh) * 1.0e-6_fp
+                State_Chm%Species(gi_map)%Conc(II, JJ, k) = chem(i, k, j, p_map) * 1.0e-6_fp
+                State_Chm%Species(gi_mcrdh)%Conc(II, JJ, k) = chem(i, k, j, p_mcrdh) * 1.0e-6_fp
+                State_Chm%Species(gi_mcrenol)%Conc(II, JJ, k) = chem(i, k, j, p_mcrenol) * 1.0e-6_fp
+                State_Chm%Species(gi_mcrhn)%Conc(II, JJ, k) = chem(i, k, j, p_mcrhn) * 1.0e-6_fp
+                State_Chm%Species(gi_mcrhnb)%Conc(II, JJ, k) = chem(i, k, j, p_mcrhnb) * 1.0e-6_fp
+                State_Chm%Species(gi_mcrhp)%Conc(II, JJ, k) = chem(i, k, j, p_mcrhp) * 1.0e-6_fp
+                State_Chm%Species(gi_mct)%Conc(II, JJ, k) = chem(i, k, j, p_mct) * 1.0e-6_fp
+                State_Chm%Species(gi_mek)%Conc(II, JJ, k) = chem(i, k, j, p_mek) * 1.0e-6_fp
+                State_Chm%Species(gi_meno3)%Conc(II, JJ, k) = chem(i, k, j, p_meno3) * 1.0e-6_fp
+                State_Chm%Species(gi_mgly)%Conc(II, JJ, k) = chem(i, k, j, p_mgly) * 1.0e-6_fp
+                State_Chm%Species(gi_moh)%Conc(II, JJ, k) = chem(i, k, j, p_moh) * 1.0e-6_fp
+                State_Chm%Species(gi_monita)%Conc(II, JJ, k) = chem(i, k, j, p_monita) * 1.0e-6_fp
+                State_Chm%Species(gi_monits)%Conc(II, JJ, k) = chem(i, k, j, p_monits) * 1.0e-6_fp
+                State_Chm%Species(gi_monitu)%Conc(II, JJ, k) = chem(i, k, j, p_monitu) * 1.0e-6_fp
+                State_Chm%Species(gi_mp)%Conc(II, JJ, k) = chem(i, k, j, p_mp) * 1.0e-6_fp
+                State_Chm%Species(gi_mpan)%Conc(II, JJ, k) = chem(i, k, j, p_mpan) * 1.0e-6_fp
+                State_Chm%Species(gi_mpn)%Conc(II, JJ, k) = chem(i, k, j, p_mpn) * 1.0e-6_fp
+                State_Chm%Species(gi_msa)%Conc(II, JJ, k) = chem(i, k, j, p_msa) * 1.0e-6_fp
+                State_Chm%Species(gi_mtpa)%Conc(II, JJ, k) = chem(i, k, j, p_mtpa) * 1.0e-6_fp
+                State_Chm%Species(gi_mtpo)%Conc(II, JJ, k) = chem(i, k, j, p_mtpo) * 1.0e-6_fp
+                State_Chm%Species(gi_mvk)%Conc(II, JJ, k) = chem(i, k, j, p_mvk) * 1.0e-6_fp
+                State_Chm%Species(gi_mvkdh)%Conc(II, JJ, k) = chem(i, k, j, p_mvkdh) * 1.0e-6_fp
+                State_Chm%Species(gi_mvkhc)%Conc(II, JJ, k) = chem(i, k, j, p_mvkhc) * 1.0e-6_fp
+                State_Chm%Species(gi_mvkhcb)%Conc(II, JJ, k) = chem(i, k, j, p_mvkhcb) * 1.0e-6_fp
+                State_Chm%Species(gi_mvkhp)%Conc(II, JJ, k) = chem(i, k, j, p_mvkhp) * 1.0e-6_fp
+                State_Chm%Species(gi_mvkn)%Conc(II, JJ, k) = chem(i, k, j, p_mvkn) * 1.0e-6_fp
+                State_Chm%Species(gi_mvkpc)%Conc(II, JJ, k) = chem(i, k, j, p_mvkpc) * 1.0e-6_fp
+                State_Chm%Species(gi_n2o)%Conc(II, JJ, k) = chem(i, k, j, p_n2o) * 1.0e-6_fp
+                State_Chm%Species(gi_n2o5)%Conc(II, JJ, k) = chem(i, k, j, p_n2o5) * 1.0e-6_fp
+                State_Chm%Species(gi_nap)%Conc(II, JJ, k) = chem(i, k, j, p_nap) * 1.0e-6_fp
+                State_Chm%Species(gi_nh3)%Conc(II, JJ, k) = chem(i, k, j, p_nh3) * 1.0e-6_fp
+                State_Chm%Species(gi_nh4)%Conc(II, JJ, k) = chem(i, k, j, p_nh4) * 1.0e-6_fp
+                State_Chm%Species(gi_nit)%Conc(II, JJ, k) = chem(i, k, j, p_nit) * 1.0e-6_fp
+                State_Chm%Species(gi_nits)%Conc(II, JJ, k) = chem(i, k, j, p_nits) * 1.0e-6_fp
+                State_Chm%Species(gi_no)%Conc(II, JJ, k) = chem(i, k, j, p_no) * 1.0e-6_fp
+                State_Chm%Species(gi_no2)%Conc(II, JJ, k) = chem(i, k, j, p_no2) * 1.0e-6_fp
+                State_Chm%Species(gi_no3)%Conc(II, JJ, k) = chem(i, k, j, p_no3) * 1.0e-6_fp
+                State_Chm%Species(gi_nphen)%Conc(II, JJ, k) = chem(i, k, j, p_nphen) * 1.0e-6_fp
+                State_Chm%Species(gi_nprno3)%Conc(II, JJ, k) = chem(i, k, j, p_nprno3) * 1.0e-6_fp
+                State_Chm%Species(gi_o3)%Conc(II, JJ, k) = chem(i, k, j, p_o3) * 1.0e-6_fp
+                State_Chm%Species(gi_ocpi)%Conc(II, JJ, k) = chem(i, k, j, p_ocpi) * 1.0e-6_fp
+                State_Chm%Species(gi_ocpo)%Conc(II, JJ, k) = chem(i, k, j, p_ocpo) * 1.0e-6_fp
+                State_Chm%Species(gi_ocs)%Conc(II, JJ, k) = chem(i, k, j, p_ocs) * 1.0e-6_fp
+                State_Chm%Species(gi_oclo)%Conc(II, JJ, k) = chem(i, k, j, p_oclo) * 1.0e-6_fp
+                State_Chm%Species(gi_oio)%Conc(II, JJ, k) = chem(i, k, j, p_oio) * 1.0e-6_fp
+                State_Chm%Species(gi_pan)%Conc(II, JJ, k) = chem(i, k, j, p_pan) * 1.0e-6_fp
+                State_Chm%Species(gi_phen)%Conc(II, JJ, k) = chem(i, k, j, p_phen) * 1.0e-6_fp
+                State_Chm%Species(gi_pip)%Conc(II, JJ, k) = chem(i, k, j, p_pip) * 1.0e-6_fp
+                State_Chm%Species(gi_pp)%Conc(II, JJ, k) = chem(i, k, j, p_pp) * 1.0e-6_fp
+                State_Chm%Species(gi_ppn)%Conc(II, JJ, k) = chem(i, k, j, p_ppn) * 1.0e-6_fp
+                State_Chm%Species(gi_propnn)%Conc(II, JJ, k) = chem(i, k, j, p_propnn) * 1.0e-6_fp
+                State_Chm%Species(gi_prpe)%Conc(II, JJ, k) = chem(i, k, j, p_prpe) * 1.0e-6_fp
+                State_Chm%Species(gi_prpn)%Conc(II, JJ, k) = chem(i, k, j, p_prpn) * 1.0e-6_fp
+                State_Chm%Species(gi_pyac)%Conc(II, JJ, k) = chem(i, k, j, p_pyac) * 1.0e-6_fp
+                State_Chm%Species(gi_r4n2)%Conc(II, JJ, k) = chem(i, k, j, p_r4n2) * 1.0e-6_fp
+                State_Chm%Species(gi_r4p)%Conc(II, JJ, k) = chem(i, k, j, p_r4p) * 1.0e-6_fp
+                State_Chm%Species(gi_ra3p)%Conc(II, JJ, k) = chem(i, k, j, p_ra3p) * 1.0e-6_fp
+                State_Chm%Species(gi_rb3p)%Conc(II, JJ, k) = chem(i, k, j, p_rb3p) * 1.0e-6_fp
+                State_Chm%Species(gi_rcho)%Conc(II, JJ, k) = chem(i, k, j, p_rcho) * 1.0e-6_fp
+                State_Chm%Species(gi_ripa)%Conc(II, JJ, k) = chem(i, k, j, p_ripa) * 1.0e-6_fp
+                State_Chm%Species(gi_ripb)%Conc(II, JJ, k) = chem(i, k, j, p_ripb) * 1.0e-6_fp
+                State_Chm%Species(gi_ripc)%Conc(II, JJ, k) = chem(i, k, j, p_ripc) * 1.0e-6_fp
+                State_Chm%Species(gi_ripd)%Conc(II, JJ, k) = chem(i, k, j, p_ripd) * 1.0e-6_fp
+                State_Chm%Species(gi_rp)%Conc(II, JJ, k) = chem(i, k, j, p_rp) * 1.0e-6_fp
+                State_Chm%Species(gi_sala)%Conc(II, JJ, k) = chem(i, k, j, p_sala) * 1.0e-6_fp
+                State_Chm%Species(gi_salaal)%Conc(II, JJ, k) = chem(i, k, j, p_salaal) * 1.0e-6_fp
+                State_Chm%Species(gi_salacl)%Conc(II, JJ, k) = chem(i, k, j, p_salacl) * 1.0e-6_fp
+                State_Chm%Species(gi_salc)%Conc(II, JJ, k) = chem(i, k, j, p_salc) * 1.0e-6_fp
+                State_Chm%Species(gi_salcal)%Conc(II, JJ, k) = chem(i, k, j, p_salcal) * 1.0e-6_fp
+                State_Chm%Species(gi_salccl)%Conc(II, JJ, k) = chem(i, k, j, p_salccl) * 1.0e-6_fp
+                State_Chm%Species(gi_so2)%Conc(II, JJ, k) = chem(i, k, j, p_so2) * 1.0e-6_fp
+                State_Chm%Species(gi_so4)%Conc(II, JJ, k) = chem(i, k, j, p_so4) * 1.0e-6_fp
+                State_Chm%Species(gi_so4s)%Conc(II, JJ, k) = chem(i, k, j, p_so4s) * 1.0e-6_fp
+                State_Chm%Species(gi_soagx)%Conc(II, JJ, k) = chem(i, k, j, p_soagx) * 1.0e-6_fp
+                State_Chm%Species(gi_soaie)%Conc(II, JJ, k) = chem(i, k, j, p_soaie) * 1.0e-6_fp
+                State_Chm%Species(gi_tolu)%Conc(II, JJ, k) = chem(i, k, j, p_tolu) * 1.0e-6_fp
+                State_Chm%Species(gi_xyle)%Conc(II, JJ, k) = chem(i, k, j, p_xyle) * 1.0e-6_fp
+                State_Chm%Species(gi_pfe)%Conc(II, JJ, k) = chem(i, k, j, p_pfe) * 1.0e-6_fp
+
+
+                ! Complex SOA species, only if available (hplin, 8/11/22)
+                if(Input_Opt%LSOA) then
+                    State_Chm%Species(gi_asoa1)%Conc(II, JJ, k) = chem(i, k, j, p_asoa1) * 1.0e-6_fp
+                    State_Chm%Species(gi_asoa2)%Conc(II, JJ, k) = chem(i, k, j, p_asoa2) * 1.0e-6_fp
+                    State_Chm%Species(gi_asoa3)%Conc(II, JJ, k) = chem(i, k, j, p_asoa3) * 1.0e-6_fp
+                    State_Chm%Species(gi_asoan)%Conc(II, JJ, k) = chem(i, k, j, p_asoan) * 1.0e-6_fp
+                    State_Chm%Species(gi_asog1)%Conc(II, JJ, k) = chem(i, k, j, p_asog1) * 1.0e-6_fp
+                    State_Chm%Species(gi_asog2)%Conc(II, JJ, k) = chem(i, k, j, p_asog2) * 1.0e-6_fp
+                    State_Chm%Species(gi_asog3)%Conc(II, JJ, k) = chem(i, k, j, p_asog3) * 1.0e-6_fp
+                    State_Chm%Species(gi_tsoa0)%Conc(II, JJ, k) = chem(i, k, j, p_tsoa0) * 1.0e-6_fp
+                    State_Chm%Species(gi_tsoa1)%Conc(II, JJ, k) = chem(i, k, j, p_tsoa1) * 1.0e-6_fp
+                    State_Chm%Species(gi_tsoa2)%Conc(II, JJ, k) = chem(i, k, j, p_tsoa2) * 1.0e-6_fp
+                    State_Chm%Species(gi_tsoa3)%Conc(II, JJ, k) = chem(i, k, j, p_tsoa3) * 1.0e-6_fp
+                    State_Chm%Species(gi_tsog0)%Conc(II, JJ, k) = chem(i, k, j, p_tsog0) * 1.0e-6_fp
+                    State_Chm%Species(gi_tsog1)%Conc(II, JJ, k) = chem(i, k, j, p_tsog1) * 1.0e-6_fp
+                    State_Chm%Species(gi_tsog2)%Conc(II, JJ, k) = chem(i, k, j, p_tsog2) * 1.0e-6_fp
+                    State_Chm%Species(gi_tsog3)%Conc(II, JJ, k) = chem(i, k, j, p_tsog3) * 1.0e-6_fp
+                else
+                    State_Chm%Species(gi_soap)%Conc(II, JJ, k) = chem(i, k, j, p_soap) * 1.0e-6_fp
+                    State_Chm%Species(gi_soas)%Conc(II, JJ, k) = chem(i, k, j, p_soas) * 1.0e-6_fp
+                endif
+
+                ! A lot of non-advected species were removed here
+                ! as we do NOT want them to be advected by WRF, so their concentrations
+                ! should NOT be updated from WRF values. (hplin, 8/23/18)
+            endif
+        enddo ! Loop over i
+        enddo ! Loop over j
+        enddo ! Loop over k
+
+        call wrf_debug(1, "WRFGC_Convert_State_Mod after State Conversion")
+
+        FIRST(grid%id) = .false.
+
+    end subroutine WRFGC_Get_WRF
+!EOC
+!------------------------------------------------------------------------------
+!                              The WRF-GC Project                             !
+!------------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: WRFGC_Set_WRF
+!
+! !DESCRIPTION: Subroutine GIGC\_Set\_WRF converts GIGC data structures to
+!  WRF data structures (grid, chem, moist, scalar) so that they are saved into
+!  wrfout outputs and advected by the WRF dynamics core. (hplin, 4/24/18)
+!\\
+!\\
+! !INTERFACE:
+!
+    subroutine WRFGC_Set_WRF(am_I_Root, &
+        config_flags, grid, &
+        num_chem, chem, num_scalar, scalar, num_moist, moist, &
+        its, ite, jts, jte, &
+        ide, jde, &
+        kts, kte, &
+        Input_Opt, State_Grid, State_Met, State_Chm, State_Diag)
+
+        ! GEOS-Chem data structures
+        use aerosol_mod, only:   PM25, PM10 ! GC 13.4 now has PM10
+
+        ! HEMCO data structures
+        use HCO_Utilities_GC_Mod, only:  HCO_GC_GetDiagn
+
+        implicit none
+
+!
+! !INPUT/OUTPUT PARAMETERS:
+!
+        logical, intent(in) :: am_I_Root
+        type(grid_config_rec_type), intent(in) :: config_flags
+        type(domain), target :: grid
+
+        integer, intent(in) :: num_chem, num_scalar, num_moist ! # of WRF chem, moist variables. Check "dummy_new_args.inc" & "actual_new_args.inc" in WRF compile.
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33, num_chem), intent(inout)   :: chem
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33, num_scalar), intent(inout) :: scalar
+        real, dimension(grid%sm31:grid%em31, grid%sm32:grid%em32, grid%sm33:grid%em33, num_moist), intent(inout)  :: moist
+
+        integer, intent(in) :: its, ite, jts, jte, ide, jde, kts, kte
+
+        type(OptInput), intent(inout) :: Input_Opt
+        type(GrdState), intent(inout) :: State_Grid
+        type(MetState), intent(inout) :: State_Met
+        type(ChmState), intent(inout) :: State_Chm
+        type(DgnState), intent(inout) :: State_Diag
+!
+! !REMARKS:
+!  Please do take note that in WRF, memorder is XZY so arrays are (i, k, j), whereas in
+!  GEOS-Chem the memorder is XYZ.
+!
+!  Also, the State_Chm conversion routines are auto-generated. Please use
+!  https://github.com/jimmielin/wrf-gchp-dev-tools to generate them.
+!  (hplin, 5/17/18)
+!
+! !REVISION HISTORY:
+!  17 May 2018 - H.P. Lin   - Added ProTeX headers
+!  12 Oct 2018 - H.P. Lin   - Add State_Diag for G-C netCDF diagnostics into WRF-GC output (wrfout)
+!  13 Nov 2018 - H.P. Lin   - Add a temporarily kludge for MPI striping; merge in aerosol pm25
+!  12 Nov 2019 - H.P. Lin   - Now WRFGC\_Set\_WRF
+!  15 Jun 2022 - H.P. Lin   - Add State\_Grid; demo for HEMCO structures
+!EOP
+!------------------------------------------------------------------------------
+!BOC
+!
+! !LOCAL VARIABLES:
+!
+        integer :: debug_level      ! WRF Debug Level
+        integer :: N
+        integer :: GEOS_CHEM_RC
+
+        integer :: IM, II           ! # of lons on this PET
+        integer :: JM, JJ           ! # of lats on this PET
+        integer :: LM               ! # of levs on this PET
+        integer :: i, j, k          ! Loop variable over xts, xte (x = i, j, k)
+
+        ! Temporaries for retrieving data from HEMCO. They are reallocated at every call of this method
+        ! because domains may switch. (hplin, 6/15/22)
+        real(f4), pointer         :: ParaNOxLoss_O3  (:,:) => NULL()
+        real(f4), pointer         :: ParaNOxLoss_HNO3(:,:) => NULL()
+
+        ! Code below
+        call nl_get_debug_level(1, debug_level)
+        call set_wrf_debug_level(debug_level)
+
+        ! # of lon, lat, lev in this PET
+        IM = ite - its + 1
+        JM = jte - jts + 1
+        LM = kte - kts + 1
+
+        ! write(6, *) "WRFGC_Convert_State_Mod::Set grid%id", grid%id
+        ! write(6, *) "WRFGC_Convert_State_Mod::Set ide =", ide, "jde =", jde
+        ! write(6, *) "WRFGC_Convert_State_Mod::Set its =", its, "ite =", ite, " IM =", IM
+        ! write(6, *) "WRFGC_Convert_State_Mod::Set jts =", jts, "jte =", jte, " JM =", JM
+        ! write(6, *) "WRFGC_Convert_State_Mod::Set kts =", kts, "kte =", kte, " LM =", LM
+
+        ! write(6, *) "Sanity check: State_Chm% species sizing"
+        ! write(6, *) "IM =", size(State_Chm%Species, 1)
+        ! write(6, *) "JM =", size(State_Chm%Species, 2)
+        ! write(6, *) "LM =", size(State_Chm%Species, 3)
+        ! write(6, *) "SPC =", size(State_Chm%Species, 4)
+
+        ! write(6, *) "Sanity check: State_Met%PEDGE sizing"
+        ! write(6, *) "IM =", size(State_Met%PEDGE, 1)
+        ! write(6, *) "JM =", size(State_Met%PEDGE, 2)
+        ! write(6, *) "LM+1 =", size(State_Met%PEDGE, 3)
+
+        ! When doing State_Chm% conversions, you can use State_Chm_Mod::IND_
+        ! to retrieve a species ID for N value, e.g. id_O3 = IND_('O3'), so
+        ! State_Chm%Species(id_O3)%Conc(:, :, :) holds the O3 information.
+        !
+        ! NEVER EVER USE IND_ IN A LOOP DIRECTLY, IT IS EXTREMELY SLOW
+
+        call wrf_debug(1, "WRFGC_Convert_State_Mod updating chemistry concs/diags in WRF from GEOS-Chem values")
+
+        ! Update data from HEMCO (for ParaNOx fluxes)
+        call HCO_GC_GetDiagn( Input_Opt, State_Grid,   'PARANOX_O3_DEPOSITION_FLUX', &
+                              .FALSE.,   GEOS_CHEM_RC,  Ptr2D = ParaNOxLoss_O3 )
+        call HCO_GC_GetDiagn( Input_Opt, State_Grid,   'PARANOX_HNO3_DEPOSITION_FLUX', &
+                              .FALSE.,   GEOS_CHEM_RC,  Ptr2D = ParaNOxLoss_HNO3 )
+
+        ! Below to avoid validation in a tight loop
+        if(associated(ParaNOxLoss_O3) .and. associated(ParaNOxLoss_HNO3)) then
+            do j = jts, jte
+            do i = its, ite
+                II = i - its + 1
+                JJ = j - jts + 1
+
+                ! Save O3, NO2 deposition flux for diagij4, diagij5 from HEMCO
+                ! This is an example of how HEMCO data is retrieved from within the WRF-GC coupler:
+                ! grid%diagij4(i, j) = ParaNOxLoss_O3(II, JJ)
+                ! grid%diagij5(i, j) = ParaNOxLoss_HNO3(II, JJ)
+            enddo
+            enddo
+        endif
+
+#ifdef use_wrfgc_history_output
+        !------------------WRF-GC diagnostics module------------------!
+        call wrf_debug(100, "WRFGC_Convert_State_Mod IO pnetCDF: Start writing diagnostics")
+        call writeDiag(debug_level, Input_Opt, State_Met, State_Chm, grid, State_Grid, State_Diag, its, ite, jts, jte, ide, jde, kte)
+        call wrf_debug(100, "WRFGC_Convert_State_Mod IO pnetCDF: End writing diagnostics")
+#endif
+        ! For now, "WRF-GC" style diagnostics from State_Diag are ALWAYS done.
+        ! If you use gc_do_gcdiagn, it only turns on/off the G-C/C GCHP style HISTORY.rc diagns,
+        ! it does not affect this.
+        ! Loop over WRF tile
+        do j = jts, jte
+        do k = kts, kte
+        do i = its, ite
+            ! write(6, *) "Debug WRFGC_Convert_State_Mod::Set loop i, its", i, its
+            ! write(6, *) "Debug WRFGC_Convert_State_Mod::Set loop j, jts", j, jts
+
+            II = i - its + 1
+            JJ = j - jts + 1
+
+            ! Loop over WRF levels (same as GEOS-Chem levels since there is no global indexing here)
+            ! write(6, *) "Debug WRFGC_Convert_State_Mod::Set in k loop IIJJk", II, JJ, k
+
+            chem(i, k, j, p_a3o2) = State_Chm%Species(gi_a3o2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_acet) = State_Chm%Species(gi_acet)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_acta) = State_Chm%Species(gi_acta)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_aeri) = State_Chm%Species(gi_aeri)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ald2) = State_Chm%Species(gi_ald2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_alk4) = State_Chm%Species(gi_alk4)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_aonita) = State_Chm%Species(gi_aonita)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_aromp4) = State_Chm%Species(gi_aromp4)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_aromp5) = State_Chm%Species(gi_aromp5)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_aromro2) = State_Chm%Species(gi_aromro2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ato2) = State_Chm%Species(gi_ato2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_atooh) = State_Chm%Species(gi_atooh)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_b3o2) = State_Chm%Species(gi_b3o2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_bald) = State_Chm%Species(gi_bald)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_bcpi) = State_Chm%Species(gi_bcpi)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_bcpo) = State_Chm%Species(gi_bcpo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_benz) = State_Chm%Species(gi_benz)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_benzo) = State_Chm%Species(gi_benzo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_benzo2) = State_Chm%Species(gi_benzo2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_benzp) = State_Chm%Species(gi_benzp)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_bro2) = State_Chm%Species(gi_bro2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_bzco3) = State_Chm%Species(gi_bzco3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_bzco3h) = State_Chm%Species(gi_bzco3h)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_bzpan) = State_Chm%Species(gi_bzpan)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_br) = State_Chm%Species(gi_br)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_br2) = State_Chm%Species(gi_br2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_brcl) = State_Chm%Species(gi_brcl)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_brno2) = State_Chm%Species(gi_brno2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_brno3) = State_Chm%Species(gi_brno3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_bro) = State_Chm%Species(gi_bro)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_brsala) = State_Chm%Species(gi_brsala)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_brsalc) = State_Chm%Species(gi_brsalc)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_c2h2) = State_Chm%Species(gi_c2h2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_c2h4) = State_Chm%Species(gi_c2h4)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_c2h6) = State_Chm%Species(gi_c2h6)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_c3h8) = State_Chm%Species(gi_c3h8)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_c4hvp1) = State_Chm%Species(gi_c4hvp1)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_c4hvp2) = State_Chm%Species(gi_c4hvp2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ccl4) = State_Chm%Species(gi_ccl4)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_cfc11) = State_Chm%Species(gi_cfc11)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_cfc113) = State_Chm%Species(gi_cfc113)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_cfc114) = State_Chm%Species(gi_cfc114)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_cfc115) = State_Chm%Species(gi_cfc115)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_cfc12) = State_Chm%Species(gi_cfc12)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ch2br2) = State_Chm%Species(gi_ch2br2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ch2cl2) = State_Chm%Species(gi_ch2cl2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ch2i2) = State_Chm%Species(gi_ch2i2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ch2ibr) = State_Chm%Species(gi_ch2ibr)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ch2icl) = State_Chm%Species(gi_ch2icl)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ch2o) = State_Chm%Species(gi_ch2o)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ch2oo) = State_Chm%Species(gi_ch2oo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ch3br) = State_Chm%Species(gi_ch3br)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ch3ccl3) = State_Chm%Species(gi_ch3ccl3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ch3choo) = State_Chm%Species(gi_ch3choo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ch3cl) = State_Chm%Species(gi_ch3cl)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ch3i) = State_Chm%Species(gi_ch3i)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ch4) = State_Chm%Species(gi_ch4)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_chbr3) = State_Chm%Species(gi_chbr3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_chcl3) = State_Chm%Species(gi_chcl3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_clock) = State_Chm%Species(gi_clock)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_co) = State_Chm%Species(gi_co)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_co2) = State_Chm%Species(gi_co2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_csl) = State_Chm%Species(gi_csl)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_cl) = State_Chm%Species(gi_cl)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_cl2) = State_Chm%Species(gi_cl2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_cl2o2) = State_Chm%Species(gi_cl2o2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_clno2) = State_Chm%Species(gi_clno2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_clno3) = State_Chm%Species(gi_clno3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_clo) = State_Chm%Species(gi_clo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_cloo) = State_Chm%Species(gi_cloo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_dms) = State_Chm%Species(gi_dms)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_dst1) = State_Chm%Species(gi_dst1)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_dst2) = State_Chm%Species(gi_dst2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_dst3) = State_Chm%Species(gi_dst3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_dst4) = State_Chm%Species(gi_dst4)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_eoh) = State_Chm%Species(gi_eoh)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ethln) = State_Chm%Species(gi_ethln)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ethn) = State_Chm%Species(gi_ethn)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ethp) = State_Chm%Species(gi_ethp)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_etno3) = State_Chm%Species(gi_etno3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_eto) = State_Chm%Species(gi_eto)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_eto2) = State_Chm%Species(gi_eto2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_etoo) = State_Chm%Species(gi_etoo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_etp) = State_Chm%Species(gi_etp)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_glyc) = State_Chm%Species(gi_glyc)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_glyx) = State_Chm%Species(gi_glyx)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_h) = State_Chm%Species(gi_h)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_h1211) = State_Chm%Species(gi_h1211)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_h1301) = State_Chm%Species(gi_h1301)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_h2) = State_Chm%Species(gi_h2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_h2402) = State_Chm%Species(gi_h2402)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_h2o) = State_Chm%Species(gi_h2o)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_h2o2) = State_Chm%Species(gi_h2o2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hac) = State_Chm%Species(gi_hac)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hbr) = State_Chm%Species(gi_hbr)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hc5a) = State_Chm%Species(gi_hc5a)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hcfc123) = State_Chm%Species(gi_hcfc123)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hcfc141b) = State_Chm%Species(gi_hcfc141b)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hcfc142b) = State_Chm%Species(gi_hcfc142b)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hcfc22) = State_Chm%Species(gi_hcfc22)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hcooh) = State_Chm%Species(gi_hcooh)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hcl) = State_Chm%Species(gi_hcl)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hi) = State_Chm%Species(gi_hi)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hmhp) = State_Chm%Species(gi_hmhp)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hmml) = State_Chm%Species(gi_hmml)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hms) = State_Chm%Species(gi_hms)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hno2) = State_Chm%Species(gi_hno2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hno3) = State_Chm%Species(gi_hno3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hno4) = State_Chm%Species(gi_hno4)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ho2) = State_Chm%Species(gi_ho2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hobr) = State_Chm%Species(gi_hobr)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hocl) = State_Chm%Species(gi_hocl)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hoi) = State_Chm%Species(gi_hoi)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_honit) = State_Chm%Species(gi_honit)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hpald1) = State_Chm%Species(gi_hpald1)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hpald1oo) = State_Chm%Species(gi_hpald1oo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hpald2) = State_Chm%Species(gi_hpald2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hpald2oo) = State_Chm%Species(gi_hpald2oo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hpald3) = State_Chm%Species(gi_hpald3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hpald4) = State_Chm%Species(gi_hpald4)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_hpethnl) = State_Chm%Species(gi_hpethnl)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_i) = State_Chm%Species(gi_i)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_i2) = State_Chm%Species(gi_i2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_i2o2) = State_Chm%Species(gi_i2o2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_i2o3) = State_Chm%Species(gi_i2o3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_i2o4) = State_Chm%Species(gi_i2o4)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ibr) = State_Chm%Species(gi_ibr)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_iche) = State_Chm%Species(gi_iche)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ichoo) = State_Chm%Species(gi_ichoo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_icn) = State_Chm%Species(gi_icn)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_icnoo) = State_Chm%Species(gi_icnoo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_icpdh) = State_Chm%Species(gi_icpdh)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_icl) = State_Chm%Species(gi_icl)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_idc) = State_Chm%Species(gi_idc)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_idchp) = State_Chm%Species(gi_idchp)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_idhdp) = State_Chm%Species(gi_idhdp)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_idhnboo) = State_Chm%Species(gi_idhnboo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_idhndoo1) = State_Chm%Species(gi_idhndoo1)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_idhndoo2) = State_Chm%Species(gi_idhndoo2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_idhpe) = State_Chm%Species(gi_idhpe)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_idn) = State_Chm%Species(gi_idn)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_idnoo) = State_Chm%Species(gi_idnoo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_iepoxa) = State_Chm%Species(gi_iepoxa)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_iepoxaoo) = State_Chm%Species(gi_iepoxaoo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_iepoxb) = State_Chm%Species(gi_iepoxb)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_iepoxboo) = State_Chm%Species(gi_iepoxboo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_iepoxd) = State_Chm%Species(gi_iepoxd)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ihn1) = State_Chm%Species(gi_ihn1)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ihn2) = State_Chm%Species(gi_ihn2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ihn3) = State_Chm%Species(gi_ihn3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ihn4) = State_Chm%Species(gi_ihn4)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ihoo1) = State_Chm%Species(gi_ihoo1)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ihoo4) = State_Chm%Species(gi_ihoo4)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ihpnboo) = State_Chm%Species(gi_ihpnboo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ihpndoo) = State_Chm%Species(gi_ihpndoo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ihpoo1) = State_Chm%Species(gi_ihpoo1)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ihpoo2) = State_Chm%Species(gi_ihpoo2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ihpoo3) = State_Chm%Species(gi_ihpoo3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ina) = State_Chm%Species(gi_ina)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_indiol) = State_Chm%Species(gi_indiol)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ino) = State_Chm%Species(gi_ino)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ino2b) = State_Chm%Species(gi_ino2b)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ino2d) = State_Chm%Species(gi_ino2d)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_inpb) = State_Chm%Species(gi_inpb)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_inpd) = State_Chm%Species(gi_inpd)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_io) = State_Chm%Species(gi_io)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ionita) = State_Chm%Species(gi_ionita)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_iono) = State_Chm%Species(gi_iono)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_iono2) = State_Chm%Species(gi_iono2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_iprno3) = State_Chm%Species(gi_iprno3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_isala) = State_Chm%Species(gi_isala)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_isalc) = State_Chm%Species(gi_isalc)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_isop) = State_Chm%Species(gi_isop)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_isopnoo1) = State_Chm%Species(gi_isopnoo1)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_isopnoo2) = State_Chm%Species(gi_isopnoo2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_itcn) = State_Chm%Species(gi_itcn)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ithn) = State_Chm%Species(gi_ithn)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ko2) = State_Chm%Species(gi_ko2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_lbro2h) = State_Chm%Species(gi_lbro2h)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_lbro2n) = State_Chm%Species(gi_lbro2n)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_lch4) = State_Chm%Species(gi_lch4)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_lco) = State_Chm%Species(gi_lco)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_limo) = State_Chm%Species(gi_limo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_limo2) = State_Chm%Species(gi_limo2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_lisopno3) = State_Chm%Species(gi_lisopno3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_lisopoh) = State_Chm%Species(gi_lisopoh)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_lnro2h) = State_Chm%Species(gi_lnro2h)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_lnro2n) = State_Chm%Species(gi_lnro2n)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_lox) = State_Chm%Species(gi_lox)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ltro2h) = State_Chm%Species(gi_ltro2h)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ltro2n) = State_Chm%Species(gi_ltro2n)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_lvoc) = State_Chm%Species(gi_lvoc)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_lvocoa) = State_Chm%Species(gi_lvocoa)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_lxro2h) = State_Chm%Species(gi_lxro2h)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_lxro2n) = State_Chm%Species(gi_lxro2n)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_macr) = State_Chm%Species(gi_macr)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_macr1oo) = State_Chm%Species(gi_macr1oo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_macr1ooh) = State_Chm%Species(gi_macr1ooh)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_macrno2) = State_Chm%Species(gi_macrno2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_map) = State_Chm%Species(gi_map)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mco3) = State_Chm%Species(gi_mco3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mcrdh) = State_Chm%Species(gi_mcrdh)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mcrenol) = State_Chm%Species(gi_mcrenol)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mcrhn) = State_Chm%Species(gi_mcrhn)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mcrhnb) = State_Chm%Species(gi_mcrhnb)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mcrhp) = State_Chm%Species(gi_mcrhp)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mcrohoo) = State_Chm%Species(gi_mcrohoo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mct) = State_Chm%Species(gi_mct)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mek) = State_Chm%Species(gi_mek)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_meno3) = State_Chm%Species(gi_meno3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mgly) = State_Chm%Species(gi_mgly)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mo2) = State_Chm%Species(gi_mo2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_moh) = State_Chm%Species(gi_moh)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_monita) = State_Chm%Species(gi_monita)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_monits) = State_Chm%Species(gi_monits)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_monitu) = State_Chm%Species(gi_monitu)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mp) = State_Chm%Species(gi_mp)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mpan) = State_Chm%Species(gi_mpan)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mpn) = State_Chm%Species(gi_mpn)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_msa) = State_Chm%Species(gi_msa)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mtpa) = State_Chm%Species(gi_mtpa)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mtpo) = State_Chm%Species(gi_mtpo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mvk) = State_Chm%Species(gi_mvk)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mvkdh) = State_Chm%Species(gi_mvkdh)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mvkhc) = State_Chm%Species(gi_mvkhc)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mvkhcb) = State_Chm%Species(gi_mvkhcb)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mvkhp) = State_Chm%Species(gi_mvkhp)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mvkn) = State_Chm%Species(gi_mvkn)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mvkohoo) = State_Chm%Species(gi_mvkohoo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_mvkpc) = State_Chm%Species(gi_mvkpc)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_n) = State_Chm%Species(gi_n)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_n2) = State_Chm%Species(gi_n2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_n2o) = State_Chm%Species(gi_n2o)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_n2o5) = State_Chm%Species(gi_n2o5)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_nap) = State_Chm%Species(gi_nap)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_nh3) = State_Chm%Species(gi_nh3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_nh4) = State_Chm%Species(gi_nh4)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_nit) = State_Chm%Species(gi_nit)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_nits) = State_Chm%Species(gi_nits)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_no) = State_Chm%Species(gi_no)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_no2) = State_Chm%Species(gi_no2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_no3) = State_Chm%Species(gi_no3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_nphen) = State_Chm%Species(gi_nphen)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_nprno3) = State_Chm%Species(gi_nprno3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_nro2) = State_Chm%Species(gi_nro2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_o) = State_Chm%Species(gi_o)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_o1d) = State_Chm%Species(gi_o1d)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_o2) = State_Chm%Species(gi_o2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_o3) = State_Chm%Species(gi_o3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ocpi) = State_Chm%Species(gi_ocpi)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ocpo) = State_Chm%Species(gi_ocpo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ocs) = State_Chm%Species(gi_ocs)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_oclo) = State_Chm%Species(gi_oclo)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_oh) = State_Chm%Species(gi_oh)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_oio) = State_Chm%Species(gi_oio)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_olnd) = State_Chm%Species(gi_olnd)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_olnn) = State_Chm%Species(gi_olnn)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_othro2) = State_Chm%Species(gi_othro2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_pan) = State_Chm%Species(gi_pan)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_pco) = State_Chm%Species(gi_pco)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ph2o2) = State_Chm%Species(gi_ph2o2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_phen) = State_Chm%Species(gi_phen)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_pio2) = State_Chm%Species(gi_pio2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_pip) = State_Chm%Species(gi_pip)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_po2) = State_Chm%Species(gi_po2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_pox) = State_Chm%Species(gi_pox)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_pp) = State_Chm%Species(gi_pp)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ppn) = State_Chm%Species(gi_ppn)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_prn1) = State_Chm%Species(gi_prn1)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_propnn) = State_Chm%Species(gi_propnn)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_prpe) = State_Chm%Species(gi_prpe)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_prpn) = State_Chm%Species(gi_prpn)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_pso4) = State_Chm%Species(gi_pso4)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_pyac) = State_Chm%Species(gi_pyac)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_r4n1) = State_Chm%Species(gi_r4n1)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_r4n2) = State_Chm%Species(gi_r4n2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_r4o2) = State_Chm%Species(gi_r4o2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_r4p) = State_Chm%Species(gi_r4p)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ra3p) = State_Chm%Species(gi_ra3p)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_rb3p) = State_Chm%Species(gi_rb3p)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_rcho) = State_Chm%Species(gi_rcho)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_rco3) = State_Chm%Species(gi_rco3)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_rcooh) = State_Chm%Species(gi_rcooh)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ripa) = State_Chm%Species(gi_ripa)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ripb) = State_Chm%Species(gi_ripb)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ripc) = State_Chm%Species(gi_ripc)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_ripd) = State_Chm%Species(gi_ripd)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_roh) = State_Chm%Species(gi_roh)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_rp) = State_Chm%Species(gi_rp)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_sala) = State_Chm%Species(gi_sala)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_salaal) = State_Chm%Species(gi_salaal)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_salacl) = State_Chm%Species(gi_salacl)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_salc) = State_Chm%Species(gi_salc)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_salcal) = State_Chm%Species(gi_salcal)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_salccl) = State_Chm%Species(gi_salccl)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_so2) = State_Chm%Species(gi_so2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_so4) = State_Chm%Species(gi_so4)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_so4s) = State_Chm%Species(gi_so4s)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_soagx) = State_Chm%Species(gi_soagx)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_soaie) = State_Chm%Species(gi_soaie)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_tolu) = State_Chm%Species(gi_tolu)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_tro2) = State_Chm%Species(gi_tro2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_xro2) = State_Chm%Species(gi_xro2)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_xyle) = State_Chm%Species(gi_xyle)%Conc(II, JJ, k) * 1.0e+6_fp
+            chem(i, k, j, p_pfe) = State_Chm%Species(gi_pfe)%Conc(II, JJ, k) * 1.0e+6_fp
+
+
+            ! Complex SOA species, only if available (hplin, 8/11/22)
+            if(Input_Opt%LSOA) then
+                chem(i, k, j, p_asoa1) = State_Chm%Species(gi_asoa1)%Conc(II, JJ, k) * 1.0e+6_fp
+                chem(i, k, j, p_asoa2) = State_Chm%Species(gi_asoa2)%Conc(II, JJ, k) * 1.0e+6_fp
+                chem(i, k, j, p_asoa3) = State_Chm%Species(gi_asoa3)%Conc(II, JJ, k) * 1.0e+6_fp
+                chem(i, k, j, p_asoan) = State_Chm%Species(gi_asoan)%Conc(II, JJ, k) * 1.0e+6_fp
+                chem(i, k, j, p_asog1) = State_Chm%Species(gi_asog1)%Conc(II, JJ, k) * 1.0e+6_fp
+                chem(i, k, j, p_asog2) = State_Chm%Species(gi_asog2)%Conc(II, JJ, k) * 1.0e+6_fp
+                chem(i, k, j, p_asog3) = State_Chm%Species(gi_asog3)%Conc(II, JJ, k) * 1.0e+6_fp
+                chem(i, k, j, p_tsoa0) = State_Chm%Species(gi_tsoa0)%Conc(II, JJ, k) * 1.0e+6_fp
+                chem(i, k, j, p_tsoa1) = State_Chm%Species(gi_tsoa1)%Conc(II, JJ, k) * 1.0e+6_fp
+                chem(i, k, j, p_tsoa2) = State_Chm%Species(gi_tsoa2)%Conc(II, JJ, k) * 1.0e+6_fp
+                chem(i, k, j, p_tsoa3) = State_Chm%Species(gi_tsoa3)%Conc(II, JJ, k) * 1.0e+6_fp
+                chem(i, k, j, p_tsog0) = State_Chm%Species(gi_tsog0)%Conc(II, JJ, k) * 1.0e+6_fp
+                chem(i, k, j, p_tsog1) = State_Chm%Species(gi_tsog1)%Conc(II, JJ, k) * 1.0e+6_fp
+                chem(i, k, j, p_tsog2) = State_Chm%Species(gi_tsog2)%Conc(II, JJ, k) * 1.0e+6_fp
+                chem(i, k, j, p_tsog3) = State_Chm%Species(gi_tsog3)%Conc(II, JJ, k) * 1.0e+6_fp
+            else
+                chem(i, k, j, p_soap) = State_Chm%Species(gi_soap)%Conc(II, JJ, k) * 1.0e+6_fp
+                chem(i, k, j, p_soas) = State_Chm%Species(gi_soas)%Conc(II, JJ, k) * 1.0e+6_fp
+            endif
+
+            ! Diagnose Particulate Matter (PM2.5 Concentration in ug/m^3)
+            ! Per GeosCore/aerosol_mod.F90 & http://wiki.seas.harvard.edu/geos-chem/index.php/Particulate_matter_in_GEOS-Chem
+            !
+            ! PM25 = 1.33 (NH4 + NIT  + SO4) + BCPI + BCPO +
+            !        2.10 (OCPO + 1.16 OCPI) + 1.16 SOA    +
+            !        DST1 + 0.38 DST2 + 1.86 SALA + SOAGX + SOAMG
+            !
+            if(allocated(PM25)) then
+                grid%pm2_5_dry(i, k, j) = PM25(II, JJ, k) * 1.0e+9_fp ! kg/m^3 -> \mug/m^3
+            endif
+
+            if(allocated(PM10)) then
+                grid%pm10(i, k, j) = PM10(II, JJ, k) * 1.0e+9_fp      ! kg/m^3 -> \mug/m^3
+            endif
+
+            !-----------------------------------------------------------------
+            !         *****  N E T C D F   D I A G N O S T I C S  *****
+            !    Needs to be done inside loop so we do not iterate over grid
+            !         more than once. i, k, j in WRF --> II, JJ, k in G-C
+            !-----------------------------------------------------------------
+            grid%gckpperror(i, k, j) = State_Diag%KppError(II, JJ, k)
+
+            !
+            ! 3-dimensional values (G-C I, J, K    --> WRF I, K, J)
+            !
+
+            ! Dry deposition fluxes in chemistry, mixing
+            ! Uses nDryDep map
+            ! grid%drydepchm(i, k, j) = State_Diag%DryDepChm(II, JJ, nDryDepSpecies)
+            ! grid%drydepmix(i, k, j) = State_Diag%DryDepMix(II, JJ, nDryDepSpecies)
+
+            ! Dry deposition velocity
+            ! grid%drydepvel(i, k, j) = State_Diag%DryDepVel(II, JJ, nDryDepSpecies)
+
+            ! PRLMixFrac: Fraction of BL occupied by level (mixing)
+            ! grid%pblmixfrc(i, k, j) = State_Diag%PBLMixFrac(II, JJ, k)
+
+            ! PrecipFracLS: Frac of box in LS precip (wetdep)
+            ! grid%precipfracls(i, k, j) = State_Diag%PrecipFracLS(II, JJ, k)
+
+            !
+            ! 4-dimensional values (G-C I, J, K, N --> WRF I, K, J)
+            ! OK so this is a bit tricky. NetCDF diagnostics for GEOS-Chem, when in 4-D values
+            ! cannot be passed as arrays to WRF directly, so you can choose UP to 4 species
+            ! by gc_diagn_spc_n0...3 which will correspond to GEOS-Chem species IDs
+            ! and these species will be diagnosed by WRF-GC.
+            !
+            ! This is a STOPGAP solution until we figure out output by G-C correctly.
+            ! hplin, 10/13/18
+            !
+
+            ! 2-dimensional values (G-C I, J, N --> WRF I, J)
+
+            !
+            ! Are for budget diagnostics summed over the Full column, PBL & Troposphere
+            ! for respective G-C operator processes --
+            !   Emissions + Dry Deposition
+            !   Mixing
+            !   Convection
+            !   Chemistry
+            !   Wet Deposition
+            if(config_flags%gc_diagn_spc_n0 .ne. 0 .and. config_flags%gc_diagn_spc_n0 .le. State_Chm%nSpecies) then
+                !grid%pblflux_n0(i, k, j) = State_Diag%PBLFlux(II, JJ, k, config_flags%gc_diagn_spc_n0)
+                grid%cldcnvflx_n0(i, k, j) = State_Diag%CloudConvFlux(II, JJ, k, config_flags%gc_diagn_spc_n0)
+                !grid%rainfrcls_n0(i, k, j) = State_Diag%RainFracLS(II, JJ, k, config_flags%gc_diagn_spc_n0)
+                !grid%washfrcls_n0(i, k, j) = State_Diag%WashFracLS(II, JJ, k, config_flags%gc_diagn_spc_n0)
+
+                ! Budget Diagnostics
+
+                ! EmisDryDep uses nAdvect map
+                grid%gcemisdrydep_full_n0(i, j) = State_Diag%BudgetEmisDryDepFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%AdvectID)
+                grid%gcemisdrydep_trop_n0(i, j) = State_Diag%BudgetEmisDryDepTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%AdvectID)
+                grid%gcemisdrydep_pbl_n0(i, j)  = State_Diag%BudgetEmisDryDepPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%AdvectID)
+
+                ! Mixing uses nAdvect map
+                grid%gcmixing_full_n0(i, j) = State_Diag%BudgetMixingFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%AdvectID)
+                grid%gcmixing_trop_n0(i, j) = State_Diag%BudgetMixingTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%AdvectID)
+                grid%gcmixing_pbl_n0(i, j)  = State_Diag%BudgetMixingPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%AdvectID)
+
+                ! Convection uses nAdvect map
+                grid%gcconv_full_n0(i, j) = State_Diag%BudgetConvectionFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%AdvectID)
+                grid%gcconv_trop_n0(i, j) = State_Diag%BudgetConvectionTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%AdvectID)
+                grid%gcconv_pbl_n0(i, j)  = State_Diag%BudgetConvectionPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%AdvectID)
+
+                ! Chemistry uses nAdvect map
+                grid%gcchem_full_n0(i, j) = State_Diag%BudgetChemistryFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%AdvectID)
+                grid%gcchem_trop_n0(i, j) = State_Diag%BudgetChemistryTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%AdvectID)
+                grid%gcchem_pbl_n0(i, j)  = State_Diag%BudgetChemistryPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%AdvectID)
+
+                ! Wet Deposition uses nWetDep map
+                if(State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%WetDepId .ne. MISSING_INT) then
+                    grid%gcwetdep_full_n0(i, j) = State_Diag%BudgetWetDepFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%WetDepId)
+                    grid%gcwetdep_trop_n0(i, j) = State_Diag%BudgetWetDepTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%WetDepId)
+                    grid%gcwetdep_pbl_n0(i, j)  = State_Diag%BudgetWetDepPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%WetDepId)
+                    grid%wetlscnvfrc_n0(i, k, j) = State_Diag%WetLossConvFrac(II, JJ, k, &
+                                                   State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%WetDepId)
+                    grid%wetlscnv_n0(i, k, j) = State_Diag%WetLossConv(II, JJ, k, &
+                                                   State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%WetDepId)
+
+                    grid%wetlossls_n0(i, k, j) = State_Diag%WetLossLS(II, JJ, k, &
+                                                   State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%WetDepId)
+                endif
+            endif
+
+            if(config_flags%gc_diagn_spc_n1 .ne. 0 .and. config_flags%gc_diagn_spc_n1 .le. State_Chm%nSpecies) then
+                !grid%pblflux_n1(i, k, j) = State_Diag%PBLFlux(II, JJ, k, config_flags%gc_diagn_spc_n1)
+                grid%cldcnvflx_n1(i, k, j) = State_Diag%CloudConvFlux(II, JJ, k, config_flags%gc_diagn_spc_n1)
+                !grid%rainfrcls_n1(i, k, j) = State_Diag%RainFracLS(II, JJ, k, config_flags%gc_diagn_spc_n1)
+                !grid%washfrcls_n1(i, k, j) = State_Diag%WashFracLS(II, JJ, k, config_flags%gc_diagn_spc_n1)
+
+                ! Budget Diagnostics
+                grid%gcemisdrydep_full_n1(i, j) = State_Diag%BudgetEmisDryDepFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%AdvectID)
+                grid%gcemisdrydep_trop_n1(i, j) = State_Diag%BudgetEmisDryDepTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%AdvectID)
+                grid%gcemisdrydep_pbl_n1(i, j)  = State_Diag%BudgetEmisDryDepPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%AdvectID)
+
+                grid%gcmixing_full_n1(i, j) = State_Diag%BudgetMixingFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%AdvectID)
+                grid%gcmixing_trop_n1(i, j) = State_Diag%BudgetMixingTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%AdvectID)
+                grid%gcmixing_pbl_n1(i, j)  = State_Diag%BudgetMixingPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%AdvectID)
+
+                grid%gcconv_full_n1(i, j) = State_Diag%BudgetConvectionFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%AdvectID)
+                grid%gcconv_trop_n1(i, j) = State_Diag%BudgetConvectionTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%AdvectID)
+                grid%gcconv_pbl_n1(i, j)  = State_Diag%BudgetConvectionPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%AdvectID)
+
+                grid%gcchem_full_n1(i, j) = State_Diag%BudgetChemistryFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%AdvectID)
+                grid%gcchem_trop_n1(i, j) = State_Diag%BudgetChemistryTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%AdvectID)
+                grid%gcchem_pbl_n1(i, j)  = State_Diag%BudgetChemistryPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%AdvectID)
+
+
+                if(State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%WetDepId .ne. MISSING_INT) then
+                    grid%gcwetdep_full_n1(i, j) = State_Diag%BudgetWetDepFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%WetDepId)
+                    grid%gcwetdep_trop_n1(i, j) = State_Diag%BudgetWetDepTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%WetDepId)
+                    grid%gcwetdep_pbl_n1(i, j)  = State_Diag%BudgetWetDepPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%WetDepId)
+
+                    grid%wetlscnvfrc_n1(i, k, j) = State_Diag%WetLossConvFrac(II, JJ, k, &
+                                                   State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%WetDepId)
+                    grid%wetlscnv_n1(i, k, j) = State_Diag%WetLossConv(II, JJ, k, &
+                                                   State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%WetDepId)
+
+                    grid%wetlossls_n1(i, k, j) = State_Diag%WetLossLS(II, JJ, k, &
+                                                   State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%WetDepId)
+                endif
+            endif
+
+            if(config_flags%gc_diagn_spc_n2 .ne. 0 .and. config_flags%gc_diagn_spc_n2 .le. State_Chm%nSpecies) then
+                !grid%pblflux_n2(i, k, j) = State_Diag%PBLFlux(II, JJ, k, config_flags%gc_diagn_spc_n2)
+                grid%cldcnvflx_n2(i, k, j) = State_Diag%CloudConvFlux(II, JJ, k, config_flags%gc_diagn_spc_n2)
+                !grid%rainfrcls_n2(i, k, j) = State_Diag%RainFracLS(II, JJ, k, config_flags%gc_diagn_spc_n2)
+                !grid%washfrcls_n2(i, k, j) = State_Diag%WashFracLS(II, JJ, k, config_flags%gc_diagn_spc_n2)
+
+                ! Budget Diagnostics
+                grid%gcemisdrydep_full_n2(i, j) = State_Diag%BudgetEmisDryDepFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%AdvectID)
+                grid%gcemisdrydep_trop_n2(i, j) = State_Diag%BudgetEmisDryDepTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%AdvectID)
+                grid%gcemisdrydep_pbl_n2(i, j)  = State_Diag%BudgetEmisDryDepPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%AdvectID)
+
+                grid%gcmixing_full_n2(i, j) = State_Diag%BudgetMixingFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%AdvectID)
+                grid%gcmixing_trop_n2(i, j) = State_Diag%BudgetMixingTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%AdvectID)
+                grid%gcmixing_pbl_n2(i, j)  = State_Diag%BudgetMixingPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%AdvectID)
+
+                grid%gcconv_full_n2(i, j) = State_Diag%BudgetConvectionFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%AdvectID)
+                grid%gcconv_trop_n2(i, j) = State_Diag%BudgetConvectionTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%AdvectID)
+                grid%gcconv_pbl_n2(i, j)  = State_Diag%BudgetConvectionPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%AdvectID)
+
+                grid%gcchem_full_n2(i, j) = State_Diag%BudgetChemistryFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%AdvectID)
+                grid%gcchem_trop_n2(i, j) = State_Diag%BudgetChemistryTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%AdvectID)
+                grid%gcchem_pbl_n2(i, j)  = State_Diag%BudgetChemistryPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%AdvectID)
+
+                if(State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%WetDepId .ne. MISSING_INT) then
+                    grid%gcwetdep_full_n2(i, j) = State_Diag%BudgetWetDepFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%WetDepId)
+                    grid%gcwetdep_trop_n2(i, j) = State_Diag%BudgetWetDepTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%WetDepId)
+                    grid%gcwetdep_pbl_n2(i, j)  = State_Diag%BudgetWetDepPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%WetDepId)
+
+                    grid%wetlscnvfrc_n2(i, k, j) = State_Diag%WetLossConvFrac(II, JJ, k, &
+                                                   State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%WetDepId)
+                    grid%wetlscnv_n2(i, k, j) = State_Diag%WetLossConv(II, JJ, k, &
+                                                   State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%WetDepId)
+
+                    grid%wetlossls_n2(i, k, j) = State_Diag%WetLossLS(II, JJ, k, &
+                                                   State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%WetDepId)
+                endif
+            endif
+
+            if(config_flags%gc_diagn_spc_n3 .ne. 0 .and. config_flags%gc_diagn_spc_n3 .le. State_Chm%nSpecies) then
+                !grid%pblflux_n3(i, k, j) = State_Diag%PBLFlux(II, JJ, k, config_flags%gc_diagn_spc_n3)
+                grid%cldcnvflx_n3(i, k, j) = State_Diag%CloudConvFlux(II, JJ, k, config_flags%gc_diagn_spc_n3)
+                !grid%rainfrcls_n3(i, k, j) = State_Diag%RainFracLS(II, JJ, k, config_flags%gc_diagn_spc_n3)
+                !grid%washfrcls_n3(i, k, j) = State_Diag%WashFracLS(II, JJ, k, config_flags%gc_diagn_spc_n3)
+
+                ! Budget Diagnostics
+                grid%gcemisdrydep_full_n3(i, j) = State_Diag%BudgetEmisDryDepFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%AdvectID)
+                grid%gcemisdrydep_trop_n3(i, j) = State_Diag%BudgetEmisDryDepTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%AdvectID)
+                grid%gcemisdrydep_pbl_n3(i, j)  = State_Diag%BudgetEmisDryDepPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%AdvectID)
+
+                grid%gcmixing_full_n3(i, j) = State_Diag%BudgetMixingFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%AdvectID)
+                grid%gcmixing_trop_n3(i, j) = State_Diag%BudgetMixingTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%AdvectID)
+                grid%gcmixing_pbl_n3(i, j)  = State_Diag%BudgetMixingPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%AdvectID)
+
+                grid%gcconv_full_n3(i, j) = State_Diag%BudgetConvectionFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%AdvectID)
+                grid%gcconv_trop_n3(i, j) = State_Diag%BudgetConvectionTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%AdvectID)
+                grid%gcconv_pbl_n3(i, j)  = State_Diag%BudgetConvectionPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%AdvectID)
+
+                grid%gcchem_full_n3(i, j) = State_Diag%BudgetChemistryFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%AdvectID)
+                grid%gcchem_trop_n3(i, j) = State_Diag%BudgetChemistryTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%AdvectID)
+                grid%gcchem_pbl_n3(i, j)  = State_Diag%BudgetChemistryPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%AdvectID)
+
+                if(State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%WetDepId .ne. MISSING_INT) then
+                    grid%gcwetdep_full_n3(i, j) = State_Diag%BudgetWetDepFull(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%WetDepId)
+                    grid%gcwetdep_trop_n3(i, j) = State_Diag%BudgetWetDepTrop(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%WetDepId)
+                    grid%gcwetdep_pbl_n3(i, j)  = State_Diag%BudgetWetDepPBL(II, JJ, &
+                                                  State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%WetDepId)
+
+                    grid%wetlscnvfrc_n3(i, k, j) = State_Diag%WetLossConvFrac(II, JJ, k, &
+                                                   State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%WetDepId)
+                    grid%wetlscnv_n3(i, k, j) = State_Diag%WetLossConv(II, JJ, k, &
+                                                   State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%WetDepId)
+
+                    grid%wetlossls_n3(i, k, j) = State_Diag%WetLossLS(II, JJ, k, &
+                                                   State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%WetDepId)
+                endif
+            endif
+
+            
+            ! ---------------- WRF-GC DUMMY DIAGNOSTICS --------------- !
+            ! Edit here to output internal properties of GEOS-Chem into WRF-GC output.
+            ! The following code simply updates WRF diagnostics data for testing...
+            !grid%diagikj0(i, k, j) = State_Met%CMFMC(II, JJ, k)
+            !grid%diagikj1(i, k, j) = State_Met%PEDGE(II, JJ, k)
+            !grid%diagikj2(i, k, j) = State_Met%PFLCU(II, JJ, k)
+            !grid%diagikj3(i, k, j) = State_Met%TAUCLW(II, JJ, k)
+            !grid%diagikj4(i, k, j) = State_Met%TAUCLI(II, JJ, k)
+            !grid%diagikj5(i, k, j) = State_Met%AD(II, JJ, k)
+            !grid%diagikj6(i, k, j) = State_Met%AIRVOL(II, JJ, k)
+            !grid%diagikj7(i, k, j) = State_Diag%RxnRate(II, JJ, k, 1)
+            !grid%diagikj8(i, k, j) = State_Diag%RxnRate(II, JJ, k, 6)
+            !grid%diagikj9(i, k, j) = 0.0_fp
+
+            if(k .eq. 1) then
+                !grid%diagij0(i, j) = State_Met%PARDR(II, JJ)
+                !grid%diagij1(i, j) = State_Met%PARDF(II, JJ)
+                !grid%diagij2(i, j) = State_Met%CONV_DEPTH(II, JJ)
+                !grid%diagij3(i, j) = State_Met%FLASH_DENS(II, JJ)
+            endif
+        enddo
+        enddo
+        enddo
+
+        !-----------------------------------------------------------------
+        !         *****  D E B U G G I N G   R O U T I N E S  *****
+        !-----------------------------------------------------------------
+
+        ! After conversion if debug level is appropriately high
+        if(debug_level .ge. 100) then
+            ! Debug chemistry state and species information on PET (1, 1, 1) lowest lev.
+            WRITE(6, *) "%%%% REGISTERED STATE_CHM SPECIES DUMP %%%%"
+            do N = 1, MIN(State_Chm%nSpecies, 15)
+                WRITE(6, *) "N:", N, "Name:", State_Chm%SpcData(N)%Info%Name
+                ! WRITE(6, *) "Full Name:", State_Chm%SpcData(N)%Info%FullName
+                WRITE(6, *) "Value at PET (1,1,1):", State_Chm%Species(N)%Conc(1, 1, 1)
+            enddo
+        endif
+
+        ! For hplin debug only...
+        if(debug_level .ge. 5 .and. debug_level .lt. 100) then
+            WRITE(6, *) "%%%% State_Chm IMPORTANT SPECIES DUMP - DEBUG WRF|GC %%%%"
+            WRITE(6, *) "At I = 1, J = 1, L = 1, units: ", State_Chm%Spc_Units
+            WRITE(6, *) "O3:", State_Chm%Species(IND_('O3'))%Conc(1, 1, 1)
+            ! WRITE(6, *) "O2:", State_Chm%Species(1, 1, 1, IND_('O2'))
+            WRITE(6, *) "CO:", State_Chm%Species(IND_('CO'))%Conc(1, 1, 1)
+            WRITE(6, *) "NH3:", State_Chm%Species(IND_('NH3'))%Conc(1, 1, 1)
+            WRITE(6, *) "NO2:", State_Chm%Species(IND_('NO2'))%Conc(1, 1, 1)
+            WRITE(6, *) "HNO3:", State_Chm%Species(IND_('HNO3'))%Conc(1, 1, 1)
+
+            WRITE(6, *) "Sums at L = 1"
+            WRITE(6, *) "O3:", SUM(State_Chm%Species(IND_('O3'))%Conc(:, :, 1))
+            WRITE(6, *) "CO:", SUM(State_Chm%Species(IND_('CO'))%Conc(:, :, 1))
+            WRITE(6, *) "NH3:", SUM(State_Chm%Species(IND_('NH3'))%Conc(:, :, 1))
+            WRITE(6, *) "HNO3:", SUM(State_Chm%Species(IND_('HNO3'))%Conc(:, :, 1))
+
+            WRITE(6, *) "%%%% State_Diag DUMP - DEBUG WRF|GC %%%%"
+            WRITE(6, *) "At I = 1, J = 1 (L = 1) - diagnostic states"
+            WRITE(6, *) "Species#", config_flags%gc_diagn_spc_n0, " ",        &
+                                    config_flags%gc_diagn_spc_n1, " ",        &
+                                    config_flags%gc_diagn_spc_n2, " ",        &
+                                    config_flags%gc_diagn_spc_n3
+            WRITE(6, *) "Species Names -"
+            IF(config_flags%gc_diagn_spc_n0 .ne. 0 .and. config_flags%gc_diagn_spc_n0 .le. State_Chm%nSpecies) THEN
+                WRITE(6, *) "0: ", State_Chm%SpcData(config_flags%gc_diagn_spc_n0)%Info%Name
+            ENDIF
+            IF(config_flags%gc_diagn_spc_n1 .ne. 0 .and. config_flags%gc_diagn_spc_n1 .le. State_Chm%nSpecies) THEN
+                WRITE(6, *) "1: ", State_Chm%SpcData(config_flags%gc_diagn_spc_n1)%Info%Name
+            ENDIF
+            IF(config_flags%gc_diagn_spc_n2 .ne. 0 .and. config_flags%gc_diagn_spc_n2 .le. State_Chm%nSpecies) THEN
+                WRITE(6, *) "2: ", State_Chm%SpcData(config_flags%gc_diagn_spc_n2)%Info%Name
+            ENDIF
+            IF(config_flags%gc_diagn_spc_n3 .ne. 0 .and. config_flags%gc_diagn_spc_n3 .le. State_Chm%nSpecies) THEN
+                WRITE(6, *) "3: ", State_Chm%SpcData(config_flags%gc_diagn_spc_n3)%Info%Name
+            ENDIF
+            WRITE(6, *) "Budget Diags:", State_Diag%Archive_Budget,           &
+                                         State_Diag%Archive_BudgetEmisDryDep, &
+                                         State_Diag%Archive_BudgetMixing,     &
+                                         State_Diag%Archive_BudgetConvection, &
+                                         State_Diag%Archive_BudgetChemistry,  &
+                                         State_Diag%Archive_BudgetWetDep
+            WRITE(6, *) "(Glo|EmisDryDep|Mix|Conv|Chem|WetDep)"
+            WRITE(6, *) "Values - FULL for N0", config_flags%gc_diagn_spc_n0
+            WRITE(6, *) State_Diag%BudgetEmisDryDepFull(1, 1, config_flags%gc_diagn_spc_n0)
+            WRITE(6, *) State_Diag%BudgetMixingFull(1, 1, config_flags%gc_diagn_spc_n0)
+            WRITE(6, *) State_Diag%BudgetConvectionFull(1, 1, config_flags%gc_diagn_spc_n0)
+            WRITE(6, *) State_Diag%BudgetChemistryFull(1, 1, config_flags%gc_diagn_spc_n0)
+            WRITE(6, *) State_Diag%BudgetWetDepFull(1, 1, config_flags%gc_diagn_spc_n0)
+            WRITE(6, *) "-- end of wrf|gc temporary diagnostics debug --"
+        endif
+
+        ! if(IM .ge. 12 .and. JM .ge. 5) then
+        !     WRITE(6, *) "At I = 12, J = 5, L = :"
+        !     WRITE(6, *) "H2O2:", State_Chm%Species(12, 5, :, IND_('H2O2'))
+        !     WRITE(6, *) "SO2:", State_Chm%Species(12, 5, :, IND_('SO2'))
+        ! endif
+
+        ! Cleanup - very important
+        ParaNOxLoss_O3 => NULL()
+        ParaNOxLoss_HNO3 => NULL()
+    end subroutine WRFGC_Set_WRF
+!EOC
+end module WRFGC_Convert_State_Mod

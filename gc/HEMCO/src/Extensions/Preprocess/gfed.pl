@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 #------------------------------------------------------------------------------
-#                  GEOS-Chem Global Chemical Transport Model                  !
+#                   Harmonized Emissions Component (HEMCO)                    !
 #------------------------------------------------------------------------------
 #BOP
 #
@@ -36,7 +36,7 @@ use strict;          # IMPLICIT NONE style syntax
 #  11 Aug 2014 - R. Yantosca - Initial version
 #EOP
 #------------------------------------------------------------------------------
-#                  GEOS-Chem Global Chemical Transport Model                  !
+#                   Harmonized Emissions Component (HEMCO)                    !
 #------------------------------------------------------------------------------
 #BOP
 #
@@ -110,7 +110,7 @@ EOF
 }
 #EOP
 #------------------------------------------------------------------------------
-#                  GEOS-Chem Global Chemical Transport Model                  !
+#                   Harmonized Emissions Component (HEMCO)                    !
 #------------------------------------------------------------------------------
 #BOP
 #
@@ -221,7 +221,7 @@ sub makeGfed3Include($$) {
 }
 #EOP
 #------------------------------------------------------------------------------
-#                  GEOS-Chem Global Chemical Transport Model                  !
+#                   Harmonized Emissions Component (HEMCO)                    !
 #------------------------------------------------------------------------------
 #BOP
 #

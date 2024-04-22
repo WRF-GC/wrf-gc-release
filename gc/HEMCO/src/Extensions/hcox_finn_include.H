@@ -1,6 +1,6 @@
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                  Harmonized Emissions Component (HEMCO)                     !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -30,7 +30,7 @@
 !
 ! !REVISION HISTORY:
 !  11 Aug 2014 - R. Yantosca - Initial version
-!  10 Jul 2015 - R. Yantosca - Fixed minor issues in ProTeX header
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC

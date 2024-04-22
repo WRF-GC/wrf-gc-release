@@ -23,8 +23,6 @@ MODULE Regrid_A2A_Mod
 ! !PUBLIC MEMBER FUNCTIONS:
 !
   PUBLIC  :: Map_A2A
-  PUBLIC  :: Init_Map_A2A
-  PUBLIC  :: Cleanup_Map_A2A
 
   ! Map_A2A overloads these routines
   INTERFACE Map_A2A
@@ -56,37 +54,21 @@ MODULE Regrid_A2A_Mod
 !------------------------------------------------------------------------------
 !BOC
 !
-! !PRIVATE TYPES:
-!
-
-  !---------------------------------------------------------------------------
-  ! These are now kept locally, to "shadow" variables from other parts of
-  ! GEOS-Chem.  This avoids depending on GEOS-Chem code within the core
-  ! HEMCO modules. (bmy, 7/14/14)
-  !---------------------------------------------------------------------------
-  CHARACTER(LEN=255)    :: NC_DIR        ! Directory w/ netCDF files
-  INTEGER               :: OUTNX         ! # of longitudes (x-dimension) in grid
-  INTEGER               :: OUTNY         ! # of latitudes  (y-dimension) in grid
-  REAL(fp), ALLOCATABLE :: OUTLON (:  )  ! Longitude on output grid
-  REAL(fp), ALLOCATABLE :: OUTSIN (:  )  ! Sines of latitudes on output grid
-  REAL(fp), ALLOCATABLE :: OUTAREA(:,:)  ! Surface areas on output grid
-!
 ! !DEFINED PARAMETERS:
 !
   !---------------------------------------------------------------------------
-  ! These were taken from CMN_GCTM_mod.F90.  This helps us to avoid depending
-  ! on GEOS-Chem modules in the core HEMCO modules.  (bmy, 7/14/14)
-  ! NOTE: CMN_GCTM_mod.F90 is now physconstants.F90 (ewl, 1/8/2016)
+  ! Physical constants taken from the GEOS-Chem "physconstants.F90" module,
+  ! which uses values from NIST 2014. (ewl, bmy, 03 Mar 2022)
   !---------------------------------------------------------------------------
-  REAL(fp), PARAMETER :: PI =   3.14159265358979323e+0_fp   ! Pi
-  REAL(fp), PARAMETER :: Re =   6.375d6                 ! Earth radius [m]
+  REAL(fp), PARAMETER :: PI = 3.14159265358979323_fp        ! Pi
+  REAL(fp), PARAMETER :: Re = 6.3710072e+6_fp               ! Earth radius [m]
 
   !---------------------------------------------------------------------------
   ! Tiny numbers for single and double precision. These are being used for
   ! skipping missing values. miss_r4 and miss_r8 are the default missing values
   ! for single and double precision, respectively. (ckeller, 4/8/2017)
   !---------------------------------------------------------------------------
-  REAL*4, PARAMETER   :: tiny_r4 = 1.0e-20
+  REAL*4, PARAMETER   :: tiny_r4 = 1.0e-30  !1.0e-20
   REAL*4, PARAMETER   :: miss_r4 = 0.0e0
   REAL*8, PARAMETER   :: tiny_r8 = 1.0d-40
   REAL*8, PARAMETER   :: miss_r8 = 0.0d0
@@ -772,7 +754,7 @@ CONTAINS
           endif
 100    continue
 !123    q2(i,j) = qsum / ( sin2(j+1) - sin2(j) )
-123    if ( dlat /= 0.0d0 ) q2(i,j) = qsum / dlat
+123    if ( ABS( dlat ) > 0.0d0 ) q2(i,j) = qsum / dlat
 555    continue
 1000 continue
      !$OMP END PARALLEL DO
@@ -969,7 +951,7 @@ CONTAINS
              endif
           endif
 100    continue
-123    if ( dlat /= 0.0d0 ) q2(i,j) = qsum / dlat
+123    if ( ABS( dlat ) > 0.0d0 ) q2(i,j) = qsum / dlat
 555    continue
 1000 continue
      !$OMP END PARALLEL DO
@@ -1167,7 +1149,7 @@ CONTAINS
              endif
           endif
 100    continue
-123    if ( dlat /= 0.0d0 ) q2(i,j) = qsum / dlat
+123    if ( ABS( dlat ) > 0.0d0 ) q2(i,j) = qsum / dlat
 555    continue
 1000 continue
      !$OMP END PARALLEL DO
@@ -1365,7 +1347,7 @@ CONTAINS
           endif
 100    continue
 !123    q2(i,j) = qsum / ( sin2(j+1) - sin2(j) )
-123    if ( dlat /= 0.0 ) q2(i,j) = qsum / dlat
+123    if ( ABS( dlat ) > 0.0e0 ) q2(i,j) = qsum / dlat
 555    continue
 1000 continue
      !$OMP END PARALLEL DO
@@ -1697,7 +1679,7 @@ CONTAINS
              endif
           endif
 100    continue
-123    if ( dlon /= 0.0d0 ) q2(i,j) = qsum / dlon
+123    if ( ABS( dlon ) > 0.0d0 ) q2(i,j) = qsum / dlon
 555    continue
 1000 continue
      !$OMP END PARALLEL DO
@@ -1993,7 +1975,7 @@ CONTAINS
              endif
           endif
 100    continue
-123    if( dlon > 0.0 ) q2(i,j) = qsum / dlon
+123    if( ABS( dlon ) > 0.0e0 ) q2(i,j) = qsum / dlon
 555    continue
 1000 continue
      !$OMP END PARALLEL DO
@@ -2277,7 +2259,7 @@ CONTAINS
              endif
           endif
 100    continue
-123    if ( dlon /= 0.0d0 ) q2(i,j) = qsum / dlon
+123    if ( ABS( dlon ) > 0.0d0 ) q2(i,j) = qsum / dlon
 555    continue
 1000 continue
      !$OMP END PARALLEL DO
@@ -2561,7 +2543,7 @@ CONTAINS
              endif
           endif
 100    continue
-123    if( dlon /= 0.0 ) q2(i,j) = qsum / dlon
+123    if( ABS( dlon ) > 0.0e0 ) q2(i,j) = qsum / dlon
 555    continue
 1000 continue
      !$OMP END PARALLEL DO
@@ -2571,109 +2553,5 @@ CONTAINS
     q2   => NULL()
 
   END SUBROUTINE xmap_r8r4
-!EOC
-!------------------------------------------------------------------------------
-!                  GEOS-Chem Global Chemical Transport Model                  !
-!------------------------------------------------------------------------------
-!BOP
-!
-! !IROUTINE: Init_Map_A2A
-!
-! !DESCRIPTION: Subroutine Init\_Map\_A2A initializes all module variables.
-!  This allows us to keep "shadow" copies of variables that are defined
-!  elsewhere in GEOS-Chem.  This also helps us from having dependencies to
-!  GEOS-Chem modules in the HEMCO core modules.
-!\\
-!\\
-! !INTERFACE:
-!
-  SUBROUTINE Init_Map_A2A( NX, NY, LONS, SINES, AREAS, DIR )
-!
-! !INPUT PARAMETERS:
-!
-    INTEGER,          INTENT(IN) :: NX             ! # of longitudes
-    INTEGER,          INTENT(IN) :: NY             ! # of latitudes
-    REAL(fp),         INTENT(IN) :: LONS (NX+1 )   ! Longitudes
-    REAL(fp),         INTENT(IN) :: SINES(NY+1 )   ! Sines of latitudes
-    REAL(fp),         INTENT(IN) :: AREAS(NX,NY)   ! Surface areas [m2]
-    CHARACTER(LEN=*), INTENT(IN) :: DIR            ! Dir for netCDF files w/
-                                                   !  grid definitions
-!
-! !REVISION HISTORY:
-!  14 Jul 2014 - R. Yantosca - Initial version
-!  See https://github.com/geoschem/geos-chem for complete history
-!EOP
-!------------------------------------------------------------------------------
-!BOC
-!
-! !LOCAL VARIABLES:
-!
-    INTEGER :: AS
-
-    !------------------------------------------
-    ! Allocate module variables
-    !------------------------------------------
-    IF ( .not. ALLOCATED( OUTLON ) ) THEN
-       ALLOCATE( OUTLON( NX+1 ), STAT=AS )
-       IF ( AS /= 0 ) THEN
-          PRINT*, '### Could not allocate OUTLON (regrid_a2a_mod.F90)'
-          STOP
-       ENDIF
-    ENDIF
-
-    IF ( .not. ALLOCATED( OUTSIN ) ) THEN
-       ALLOCATE( OUTSIN( NY+1 ), STAT=AS )
-       IF ( AS /= 0 ) THEN
-          PRINT*, '### Could not allocate OUTSIN (regrid_a2a_mod.F90)'
-          STOP
-       ENDIF
-    ENDIF
-
-    IF ( .not. ALLOCATED( OUTAREA ) ) THEN
-       ALLOCATE( OUTAREA( NX, NY ), STAT=AS )
-       IF ( AS /= 0 ) THEN
-          PRINT*, '### Could not allocate OUTAREA (regrid_a2a_mod.F90)'
-          STOP
-       ENDIF
-    ENDIF
-
-    !------------------------------------------
-    ! Store values in local shadow variables
-    !------------------------------------------
-    OUTNX   = NX
-    OUTNY   = NY
-    OUTLON  = LONS
-    OUTSIN  = SINES
-    OUTAREA = AREAS
-    NC_DIR  = DIR
-
-  END SUBROUTINE Init_Map_A2A
-!EOC
-!------------------------------------------------------------------------------
-!                  GEOS-Chem Global Chemical Transport Model                  !
-!------------------------------------------------------------------------------
-!BOP
-!
-! !IROUTINE: Cleanup_Map_A2A
-!
-! !DESCRIPTION: Subroutine Cleanup\_Map\_A2A deallocates all module variables.
-!\\
-!\\
-! !INTERFACE:
-!
-  SUBROUTINE Cleanup_Map_A2A()
-!
-! !REVISION HISTORY:
-!  14 Jul 2014 - R. Yantosca - Initial version
-!  See https://github.com/geoschem/geos-chem for complete history
-!EOP
-!------------------------------------------------------------------------------
-!BOC
-    ! Cleanup module variables
-    IF ( ALLOCATED( OUTLON  ) ) DEALLOCATE( OUTLON  )
-    IF ( ALLOCATED( OUTSIN  ) ) DEALLOCATE( OUTSIN  )
-    IF ( ALLOCATED( OUTAREA ) ) DEALLOCATE( OUTAREA )
-
-  END SUBROUTINE Cleanup_Map_A2A
 !EOC
 END MODULE Regrid_A2A_Mod

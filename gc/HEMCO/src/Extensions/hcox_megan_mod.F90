@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -122,7 +122,7 @@ MODULE HCOX_MEGAN_MOD
 !  (1 ) Original code (biogen_em_mod.f) by Dorian Abbot (6/2003).  Updated to
 !        latest algorithm and modified for the standard code by May Fu
 !        (11/2004).
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -165,7 +165,7 @@ MODULE HCOX_MEGAN_MOD
 
      ! Pointers to annual emission factor arrays.
      ! These fields are obtained from ext. data (from config file)
-     ! These arrays represent the base emission values in kg(C)/m2/s
+     ! These arrays represent the base emission values in kg/m2/s
      ! that will be scaled based upon meteorological conditions.
      REAL(hp), POINTER       :: AEF_ISOP(:,:)
      REAL(hp), POINTER       :: AEF_MBOX(:,:)
@@ -174,7 +174,6 @@ MODULE HCOX_MEGAN_MOD
      REAL(hp), POINTER       :: AEF_LIMO(:,:)
      REAL(hp), POINTER       :: AEF_OCIM(:,:)
      REAL(hp), POINTER       :: AEF_SABI(:,:)
-     REAL(hp), POINTER       :: GEIA_ORVC(:,:)
 
      ! Annual emission factors arrays
      ! These fields are not read from file, but are computed in CALC_AEF
@@ -196,12 +195,10 @@ MODULE HCOX_MEGAN_MOD
      REAL(hp), POINTER       :: AEF_BCAR(:,:)              ! b-Caryophyllene
      REAL(hp), POINTER       :: AEF_OSQT(:,:)              ! Other sesquiterp.
 
-     ! Emission arrays (kgC/m2/s)
+     ! Emission arrays (kg/m2/s)
      REAL(hp), POINTER       :: FLUXISOP(:,:)
      REAL(hp), POINTER       :: FLUXMONO(:,:)
-     REAL(hp), POINTER       :: FLUXACETmo(:,:)
-     REAL(hp), POINTER       :: FLUXACETmb(:,:)
-     REAL(hp), POINTER       :: FLUXACETbg(:,:)
+     REAL(hp), POINTER       :: FLUXACET(:,:)
      REAL(hp), POINTER       :: FLUXPRPE(:,:)
      REAL(hp), POINTER       :: FLUXC2H4(:,:)
      REAL(hp), POINTER       :: FLUXLIMO(:,:)
@@ -214,31 +211,31 @@ MODULE HCOX_MEGAN_MOD
      REAL(hp), POINTER       :: FLUXMOH(:,:)
      REAL(hp), POINTER       :: FLUXEOH(:,:)
          
-     ! Emission arrays for use in diagnostics only (kgC/m2/s)
-     REAL(hp), POINTER       :: FLUXAPIN(:,:)
-     REAL(hp), POINTER       :: FLUXBPIN(:,:)
-     REAL(hp), POINTER       :: FLUXSABI(:,:)
-     REAL(hp), POINTER       :: FLUXMYRC(:,:)
-     REAL(hp), POINTER       :: FLUXCARE(:,:)
-     REAL(hp), POINTER       :: FLUXOCIM(:,:)
-     REAL(hp), POINTER       :: FLUXOMON(:,:)
-     REAL(hp), POINTER       :: FLUXFARN(:,:)
-     REAL(hp), POINTER       :: FLUXBCAR(:,:)
-     REAL(hp), POINTER       :: FLUXOSQT(:,:)
-     REAL(hp), POINTER       :: FLUXMBOX(:,:)
-     REAL(hp), POINTER       :: FLUXFAXX(:,:)
-     REAL(hp), POINTER       :: FLUXAAXX(:,:)
+     ! Emission arrays for use in diagnostics (kg/m2/s)
+     REAL(sp), POINTER       :: FLUXACETmb(:,:)
+     REAL(sp), POINTER       :: FLUXACETbg(:,:)
+     REAL(sp), POINTER       :: FLUXAPIN(:,:)
+     REAL(sp), POINTER       :: FLUXBPIN(:,:)
+     REAL(sp), POINTER       :: FLUXSABI(:,:)
+     REAL(sp), POINTER       :: FLUXMYRC(:,:)
+     REAL(sp), POINTER       :: FLUXCARE(:,:)
+     REAL(sp), POINTER       :: FLUXOCIM(:,:)
+     REAL(sp), POINTER       :: FLUXOMON(:,:)
+     REAL(sp), POINTER       :: FLUXFARN(:,:)
+     REAL(sp), POINTER       :: FLUXBCAR(:,:)
+     REAL(sp), POINTER       :: FLUXOSQT(:,:)
+     REAL(sp), POINTER       :: FLUXMBOX(:,:)
+     REAL(sp), POINTER       :: FLUXFAXX(:,:)
+     REAL(sp), POINTER       :: FLUXAAXX(:,:)
 
      ! Normalization factor
      REAL(hp), POINTER       :: NORM_FAC(:)
 
-     ! New restart variables (ckeller, 11/05/2015)
+     ! Restart variables
      REAL(sp), POINTER       :: T_LASTXDAYS    (:,:) ! Avg. temp  of last X days
      REAL(sp), POINTER       :: T_LAST24H      (:,:) ! Avg. temp  of last 24 hrs
      REAL(sp), POINTER       :: PARDF_LASTXDAYS(:,:) ! Avg. PARDF of last X days
      REAL(sp), POINTER       :: PARDR_LASTXDAYS(:,:) ! Avg. PARDR of last X days
-
-     ! previous LAI values (ckeller, 10/09/2014)
      REAL(sp), POINTER       :: LAI_PREVDAY(:,:)     ! LAI of prev. day
 
      ! Array for PFT
@@ -269,14 +266,10 @@ MODULE HCOX_MEGAN_MOD
   ! Maximum LAI value [cm2/cm2]
   REAL(hp), PARAMETER  :: LAI_MAX = 6.0_hp
 
-  ! testing only
-  integer, parameter  :: ix = 20 !20 !25 !13 !20
-  integer, parameter  :: iy = 43 !43 !22 !38 !31
-
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -312,7 +305,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  05 Aug 2013 - C. Keller   - Initial version
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -327,13 +320,7 @@ CONTAINS
     REAL(hp)            :: EMIS_ACET, EMIS_PRPE, EMIS_C2H4
     REAL(hp)            :: EMIS_FARN, EMIS_BCAR, EMIS_OSQT
     REAL(hp)            :: EMIS_OTHR
-    REAL(hp)            :: BIOG_ALPH, BIOG_LIMO
-    REAL(hp)            :: BIOG_ALCO
-    REAL(hp)            :: MONO_MOL
-    REAL(hp)            :: MBOX_MOL
-    REAL(hp)            :: X, Y
-    REAL(hp)            :: DIURFACT, DIURORVC
-    REAL(hp)            :: TMP
+    REAL(hp)            :: X, Y, TMP
     REAL(hp)            :: TS_EMIS
     REAL(hp)            :: DNEWFRAC
     REAL(hp)            :: DOLDFRAC
@@ -345,37 +332,31 @@ CONTAINS
     ! For diagnostics
     REAL(hp), POINTER   :: Arr2D(:,:)
     CHARACTER(LEN=63)   :: DiagnName
-    CHARACTER(LEN=255)  :: MSG
-
-    ! Molecules C / kg C
-    REAL(hp), PARAMETER   :: XNUMOL_C = 6.022140857e+23_hp / 12e-3_hp
-    REAL(hp), PARAMETER   :: UNITCONV = 1.0_hp
-
-    ! Fraction of yield of OC (hydrophilic) from terpene emissions
-    REAL(hp), PARAMETER   :: EMMT2OC = 1.0e-1_hp
-
-    ! Conversion factors for OC/BC
-    REAL(hp), PARAMETER   :: FC1 = 136.2364_hp / 120.11_hp
-    REAL(hp), PARAMETER   :: FC2 = 154.2516_hp / 120.11_hp
-    REAL(hp), PARAMETER   :: FC3 = 204.3546_hp / 180.165_hp
-    REAL(hp), PARAMETER   :: FC4 = 152.0_hp    / 120.11_hp
+    CHARACTER(LEN=255)  :: MSG, LOC
 
     ! Conversion factors for acetone calculations
     REAL(hp), PARAMETER   :: YIELD_MO   = 0.116_hp
     REAL(hp), PARAMETER   :: MONO_SCALE = 0.89_hp
     REAL(hp), PARAMETER   :: MB_SCALE1  = 0.6_hp
     REAL(hp), PARAMETER   :: MB_SCALE2  = 0.76_hp
+    REAL(hp), PARAMETER   :: MBOX_MW_g  = 86.13_hp
+
+    ! Conversion facor for SOAP/SOAS calculations
+    REAL(hp), PARAMETER   :: MONOtoC    = ( 12.0 * 10 ) / 136.26
 
     TYPE(MyInst), POINTER :: Inst
 
     !=================================================================
     ! HCOX_Megan_Run begins here!
     !=================================================================
+    LOC = 'HCOX_Megan_Run (HCOX_MEGAN_MOD.F90)'
 
     ! Enter
-    CALL HCO_ENTER( HcoState%Config%Err, &
-                    'HCOX_Megan_Run (hcox_megan_mod.F)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     ERR = .FALSE.
 
     ! Nullify
@@ -386,7 +367,7 @@ CONTAINS
     CALL InstGet ( ExtState%Megan, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        WRITE(MSG,*) 'Cannot find Megan instance Nr. ', ExtState%Megan
-       CALL HCO_ERROR(HcoState%Config%Err,MSG,RC)
+       CALL HCO_ERROR(MSG,RC)
        RETURN
     ENDIF
 
@@ -406,25 +387,25 @@ CONTAINS
     Inst%FLUXOCIM   = 0.0_hp
     Inst%FLUXOMON   = 0.0_hp
     Inst%FLUXMONO   = 0.0_hp
+    Inst%FLUXACET   = 0.0_hp
     Inst%FLUXALD2   = 0.0_hp
     Inst%FLUXMOH    = 0.0_hp
     Inst%FLUXEOH    = 0.0_hp
     Inst%FLUXFAXX   = 0.0_hp
     Inst%FLUXAAXX   = 0.0_hp
-    Inst%FLUXACETmo = 0.0_hp
-    Inst%FLUXACETmb = 0.0_hp
-    Inst%FLUXACETbg = 0.0_hp
-    Inst%FLUXPRPE   = 0.0_hp
-    Inst%FLUXC2H4   = 0.0_hp
-    Inst%FLUXLIMO   = 0.0_hp
-    Inst%FLUXMTPA   = 0.0_hp
-    Inst%FLUXMTPO   = 0.0_hp
-    Inst%FLUXFARN   = 0.0_hp
-    Inst%FLUXBCAR   = 0.0_hp
-    Inst%FLUXOSQT   = 0.0_hp
-    Inst%FLUXSESQ   = 0.0_hp
-    Inst%FLUXSOAP   = 0.0_hp
-    Inst%FLUXSOAS   = 0.0_hp
+    Inst%FLUXACETmb = 0.0_sp
+    Inst%FLUXACETbg = 0.0_sp
+    Inst%FLUXPRPE   = 0.0_sp
+    Inst%FLUXC2H4   = 0.0_sp
+    Inst%FLUXLIMO   = 0.0_sp
+    Inst%FLUXMTPA   = 0.0_sp
+    Inst%FLUXMTPO   = 0.0_sp
+    Inst%FLUXFARN   = 0.0_sp
+    Inst%FLUXBCAR   = 0.0_sp
+    Inst%FLUXOSQT   = 0.0_sp
+    Inst%FLUXSESQ   = 0.0_sp
+    Inst%FLUXSOAP   = 0.0_sp
+    Inst%FLUXSOAS   = 0.0_sp
 
 #if defined( ESMF_ ) || defined( MODEL_GEOS )
 
@@ -437,7 +418,7 @@ CONTAINS
     CALL CALC_AEF( HcoState, ExtState, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        MSG = 'Error encountered in MEGAN routine CALC_AEF!'
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+       CALL HCO_ERROR( MSG, RC )
        RETURN
     ENDIF
 
@@ -445,7 +426,7 @@ CONTAINS
     CALL CALC_NORM_FAC( Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        MSG = 'Error encountered in MEGAN routine CALC_NORM_FAC!'
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+       CALL HCO_ERROR( MSG, RC )
        RETURN
     ENDIF
 
@@ -453,7 +434,7 @@ CONTAINS
     CALL FILL_RESTART_VARS( HcoState, ExtState, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        MSG = 'Error encountered in MEGAN routine FILL_RESTART_VARS!'
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+       CALL HCO_ERROR( MSG, RC )
        RETURN
     ENDIF
 
@@ -469,7 +450,7 @@ CONTAINS
        CALL CALC_AEF( HcoState, ExtState, Inst, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           MSG = 'Error encountered in MEGAN routine CALC_AEF!'
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+          CALL HCO_ERROR( MSG, RC )
           RETURN
        ENDIF
 
@@ -477,7 +458,7 @@ CONTAINS
        CALL CALC_NORM_FAC( Inst, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           MSG = 'Error encountered in MEGAN routine CALC_NORM_FAC!'
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+          CALL HCO_ERROR( MSG, RC )
           RETURN
        ENDIF
 
@@ -485,7 +466,7 @@ CONTAINS
        CALL FILL_RESTART_VARS( HcoState, ExtState, Inst, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           MSG = 'Error encountered in MEGAN routine FILL_RESTART_VARS!'
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+          CALL HCO_ERROR( MSG, RC )
           RETURN
        ENDIF
     ENDIF
@@ -511,11 +492,9 @@ CONTAINS
     !$OMP PRIVATE( I, J,      EMIS_ISOP, EMIS_MBOX, EMIS_APIN, EMIS_BPIN   ) &
     !$OMP PRIVATE( EMIS_LIMO, EMIS_SABI, EMIS_MYRC, EMIS_CARE, EMIS_OCIM   ) &
     !$OMP PRIVATE( EMIS_OMON, EMIS_MONO, EMIS_MOH,  EMIS_EOH,  EMIS_FAXX   ) &
-    !$OMP PRIVATE( EMIS_AAXX, EMIS_ACET, EMIS_PRPE, EMIS_C2H4              ) &
+    !$OMP PRIVATE( EMIS_AAXX, EMIS_ACET, EMIS_PRPE, EMIS_C2H4, TMP         ) &
     !$OMP PRIVATE( EMIS_FARN, EMIS_BCAR, EMIS_OSQT, EMIS_ALD2, EMIS_OTHR   ) &
-    !$OMP PRIVATE( MONO_MOL,  TMP,       MBOX_MOL                          ) &
-    !$OMP PRIVATE( DIURFACT,  DIURORVC,  BIOG_ALPH                         ) &
-    !$OMP PRIVATE( BIOG_LIMO, BIOG_ALCO, X, Y, RC                          )
+    !$OMP PRIVATE( X, Y, RC )
 
     !-----------------------------------------------------------------
     ! Loop over all grid boxes
@@ -553,8 +532,7 @@ CONTAINS
        !
        ! The GET_EMIS*_MEGAN calls now use the annual scale factors
        ! imported through the HEMCO list, which are already in units
-       ! of kg(C)/m2/s. Thus, no further unit conversion is required
-       ! anymore (--> UNITCONV = 1). ckeller, 14/01/25.
+       ! of kg/m2/s. ckeller, 14/01/25.
        !
        ! Updated to new MEGAN routine (dbm, 12/2012)
        !--------------------------------------------------------------
@@ -563,11 +541,11 @@ CONTAINS
        ! MEGAN Isoprene
        !--------------------------------------------------------------------
 
-       ! Isoprene [kg C/m2/s]
+       ! Isoprene [kg/m2/s]
        CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, Inst, &
                                  I, J, 'ISOP', EMIS_ISOP, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'GET_MEGAN_EMISSIONS_ISOP', RC )
           ERR = .TRUE.
           EXIT
@@ -582,11 +560,15 @@ CONTAINS
        ENDIF
 
        ! Biogenic emissions of SOA and SOA-Precursor from isopene
+       ! NOTE: These emission factors appear to be based on emissions
+       !  in kgC/m2/s. Convert from kg/m2/s to kgC/m2/s.
        IF ( (Inst%IDTISOP>0) .AND. (Inst%IDTSOAP>0) ) THEN
-          Inst%FLUXSOAP(I,J) = Inst%FLUXSOAP(I,J) + EMIS_ISOP * Inst%ISOPTOSOAP
+          Inst%FLUXSOAP(I,J) = Inst%FLUXSOAP(I,J) + &
+               ( EMIS_ISOP * MONOtoC ) * Inst%ISOPTOSOAP
        ENDIF
        IF ( (Inst%IDTISOP>0) .AND. (Inst%IDTSOAS>0) ) THEN
-          Inst%FLUXSOAS(I,J) = Inst%FLUXSOAS(I,J) + EMIS_ISOP * Inst%ISOPTOSOAS
+          Inst%FLUXSOAS(I,J) = Inst%FLUXSOAS(I,J) + &
+               ( EMIS_ISOP * MONOtoC ) * Inst%ISOPTOSOAS
        ENDIF
 
        !--------------------------------------------------------------------
@@ -598,7 +580,7 @@ CONTAINS
        CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                  Inst, I, J, 'APIN', EMIS_APIN, RC)
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'GET_MEGAN_EMISSIONS_APIN', RC )
           ERR = .TRUE.
           EXIT
@@ -610,7 +592,7 @@ CONTAINS
        CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                  Inst, I, J, 'BPIN', EMIS_BPIN, RC)
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'GET_MEGAN_EMISSIONS_BPIN', RC )
           ERR = .TRUE.
           EXIT
@@ -622,7 +604,7 @@ CONTAINS
        CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                  Inst, I, J, 'LIMO', EMIS_LIMO, RC)
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'GET_MEGAN_EMISSIONS_LIMO', RC )
           ERR = .TRUE.
           EXIT
@@ -634,7 +616,7 @@ CONTAINS
        CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                  Inst, I, J, 'SABI', EMIS_SABI, RC)
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'GET_MEGAN_EMISSIONS_SABI', RC )
           ERR = .TRUE.
           EXIT
@@ -646,7 +628,7 @@ CONTAINS
        CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                  Inst, I, J, 'MYRC', EMIS_MYRC, RC)
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'GET_MEGAN_EMISSIONS_MYRC', RC )
           ERR = .TRUE.
           EXIT
@@ -658,7 +640,7 @@ CONTAINS
        CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                  Inst, I, J, 'CARE', EMIS_CARE, RC)
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'GET_MEGAN_EMISSIONS_CARE', RC )
           ERR = .TRUE.
           EXIT
@@ -670,7 +652,7 @@ CONTAINS
        CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                  Inst, I, J, 'OCIM', EMIS_OCIM, RC)
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'GET_MEGAN_EMISSIONS_OCIM', RC )
           ERR = .TRUE.
           EXIT
@@ -683,7 +665,7 @@ CONTAINS
        CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                  Inst, I, J, 'OMON', EMIS_OMON, RC)
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'GET_MEGAN_EMISSIONS_OMON', RC )
           ERR = .TRUE.
           EXIT
@@ -696,24 +678,8 @@ CONTAINS
        EMIS_MONO = EMIS_APIN + EMIS_BPIN + EMIS_LIMO + EMIS_SABI + &
                    EMIS_MYRC + EMIS_CARE + EMIS_OCIM + EMIS_OMON
 
-       ! Add to tracer tendency array [kg C/m2/s]
+       ! Add to tracer tendency array [kg/m2/s]
        Inst%FLUXMONO(I,J) = EMIS_MONO
-
-       !! testing only
-       !if ( i == ix .AND. j == iy .and. .FALSE. ) then
-       !        write(*,*) ' '
-       !        write(*,*) 'HEMCO MEGAN (kg/m2/s) @ ', i, j
-       !        write(*,*) 'ISOP: ', EMIS_ISOP
-       !        write(*,*) 'MONO: ', EMIS_MONO
-       !        write(*,*) 'APIN: ', EMIS_APIN
-       !        write(*,*) 'BPIN: ', EMIS_BPIN
-       !        write(*,*) 'LIMO: ', EMIS_LIMO
-       !        write(*,*) 'SABI: ', EMIS_SABI
-       !        write(*,*) 'MYRC: ', EMIS_MYRC
-       !        write(*,*) 'CARE: ', EMIS_CARE
-       !        write(*,*) 'OCIM: ', EMIS_OCIM
-       !        write(*,*) 'OMON: ', EMIS_OMON
-       !endif
 
        !--------------------------------------------------------------------
        ! MEGAN Acetaldehyde
@@ -722,13 +688,13 @@ CONTAINS
           CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                     Inst, I, J, 'ALD2', EMIS_ALD2, RC)
           IF ( RC /= HCO_SUCCESS ) THEN
-             CALL HCO_ERROR( HcoState%Config%Err, &
+             CALL HCO_ERROR( &
                              'GET_MEGAN_EMISSIONS_ALD2', RC )
              ERR = .TRUE.
              EXIT
           ENDIF
 
-          ! Add to tracer tendency array [kg C/m2/s]
+          ! Add to tracer tendency array [kg/m2/s]
           Inst%FLUXALD2(I,J) = EMIS_ALD2
        ENDIF
 
@@ -738,7 +704,7 @@ CONTAINS
           CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                     Inst, I, J, 'MOH', EMIS_MOH, RC)
           IF ( RC /= HCO_SUCCESS ) THEN 
-             CALL HCO_ERROR( HcoState%Config%Err,  &
+             CALL HCO_ERROR(  &
                              'GET_MEGAN_EMISSIONS_MOH', RC )
              ERR = .TRUE.
              EXIT
@@ -754,13 +720,13 @@ CONTAINS
           CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                     Inst, I, J, 'EOH', EMIS_EOH, RC)
           IF ( RC /= HCO_SUCCESS ) THEN
-             CALL HCO_ERROR( HcoState%Config%Err, &
+             CALL HCO_ERROR( &
                              'GET_MEGAN_EMISSIONS_EOH', RC )
              ERR = .TRUE.
              EXIT
           ENDIF
 
-          ! Add to tracer tendency array [kg C/m2/s]
+          ! Add to tracer tendency array [kg/m2/s]
           Inst%FLUXEOH(I,J) = EMIS_EOH
        ENDIF
 
@@ -775,7 +741,7 @@ CONTAINS
        CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                  Inst, I, J, 'MBOX', EMIS_MBOX, RC)
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'GET_MEGAN_EMISSIONS_MBOX', RC )
           ERR = .TRUE.
           EXIT
@@ -787,7 +753,7 @@ CONTAINS
        CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                  Inst, I, J, 'FAXX', EMIS_FAXX, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'GET_MEGAN_EMISSIONS_FAXX', RC )
           ERR = .TRUE.
           EXIT
@@ -799,7 +765,7 @@ CONTAINS
        CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                  Inst, I, J, 'AAXX', EMIS_AAXX, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'GET_MEGAN_EMISSIONS_AAXX', RC )
           ERR = .TRUE.
           EXIT
@@ -812,38 +778,15 @@ CONTAINS
        IF ( Inst%IDTACET > 0 ) THEN
 
           !-----------------------------------------------------------------
-          ! (1) BIOGENIC EMISSIONS OF ACETONE FROM MONOTERPENES
-          ! Monoterpenes has same # molecules/kg of carbon as isoprene
-          ! The yield for monoterpenes is .12 mol/mol from Reisell et.al.
-          ! 1999 (this does not includes direct acetone emissions)
-
-          ! Convert [kg C/m2/s] to [kg MONOTERPENE/m2/s]
-          ! There are 10 C atoms per molecule of MONOTERPENE
-          MONO_MOL = EMIS_MONO / 10.0_hp
-
-          ! Apply yield from monoterpenes to get [kg ACET/m2/s]
-          TMP      = MONO_MOL * YIELD_MO
-
-          ! Convert acetone emissions back into [kg C/m2/s]
-          TMP      = TMP * 3.0_hp
-
-          ! Scale to a posteriori source from Jacob et al 2001 (bdf, 9/5/01)
-          TMP      = TMP * MONO_SCALE
-
-          ! Add to total biogenic acetone emissions
-          Inst%FLUXACETmo(I,J) = TMP
-
-          !-----------------------------------------------------------------
-          ! (2) BIOGENIC ACETONE FROM METHYL BUTENOL -- NORTH AMERICA
+          ! (1) BIOGENIC ACETONE FROM METHYL BUTENOL -- NORTH AMERICA
           !
           ! Methyl Butenol (a.k.a. MBO) produces acetone with a molar yield
           ! of 0.6 [Alvarado (1999)].  The biogenic source of MBO is thought
           ! to be restricted to North America.  According to Guenther (1999)
           ! North america emits 3.2Tg-C of MBO, producing 1.15 Tg-C of
           ! Acetone in North America.
-          !=================================================================
-          TMP = 0.0_hp
-
+          ! 
+          !
           ! Lon and lat of grid box (I,J) in degrees
           X = HcoState%Grid%XMID%Val( I, J )
           IF ( X >= 180.0_hp ) X = X - 360.0_hp
@@ -853,33 +796,23 @@ CONTAINS
           ! ( -167.5 <= lon <= -52.5 ) and ( 16.0 <= lat <= 72.0 )
           IF ( ( X >= -167.5_hp .and. X <= -52.5_hp ) .AND. &
                ( Y >=   16.0_hp .and. Y <=  72.0_hp ) ) THEN
+             !  Apply yield from MBO to get [kg ACET/m2/s]
+             TMP = EMIS_MBOX * MB_SCALE1 
+             TMP = TMP * HcoState%Spc(Inst%IDTACET)%MW_g / MBOX_MW_g
 
-             ! Convert from [kg C/m2/s] to [kg MBO/m2/s]
-             ! There are 5 C atoms per molecule MBO
-             MBOX_MOL = EMIS_MBOX / 5.0_hp
-
-             ! Apply yield from MBO to get [kg ACET/m2/s]
-             TMP      = MBOX_MOL * MB_SCALE1
-
-             ! Convert from [kg ACET/m2/s] to [kg C/m2/s]
-             ! There are 3 C atoms per acetone molecule
-             TMP      = TMP * 3.0_hp
-
-             ! Scale to a posteriori source from Jacob et al 2001 (bdf,
-             ! 9/5/01)
+             ! Scale to a posteriori source from Jacob et al 2001 (bdf, 9/5/01)
              Inst%FLUXACETmb(I,J) = TMP * MB_SCALE2
-
           ENDIF
 
           !-----------------------------------------------------------------
           ! (3) BIOGENIC ACETONE -- DIRECT EMISSION
-          ! evf, removed obsolete code, replaced with MEGAN acetone
-          ! emissions (5/25/2011) Direct Emission now includes emission
+          !
+          ! Direct Emission now includes emission
           ! from grasses and emission from dry leaf matter
           CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                     Inst, I, J, 'ACET', EMIS_ACET, RC)
           IF ( RC /= HCO_SUCCESS ) THEN
-             CALL HCO_ERROR( HcoState%Config%Err, &
+             CALL HCO_ERROR( &
                              'GET_MEGAN_EMISSIONS_ACET', RC )
              ERR = .TRUE.
              EXIT
@@ -892,12 +825,17 @@ CONTAINS
 
        !--------------------------------------------------------------------
        ! Biogenic emissions of SOA and SOA-Precursor from monoterpenes
+       !
+       ! NOTE: These emission factors appear to be based on emissions
+       !  in kgC/m2/s. Convert from kg/m2/s to kgC/m2/s.
        !--------------------------------------------------------------------
        IF ( Inst%IDTSOAP>0 ) THEN
-          Inst%FLUXSOAP(I,J) = Inst%FLUXSOAP(I,J) + EMIS_MONO * Inst%MONOTOSOAP
+          Inst%FLUXSOAP(I,J) = Inst%FLUXSOAP(I,J) + &
+               ( EMIS_MONO * MONOtoC ) * Inst%MONOTOSOAP
        ENDIF
        IF ( Inst%IDTSOAS>0 ) THEN
-          Inst%FLUXSOAS(I,J) = Inst%FLUXSOAS(I,J) + EMIS_MONO * Inst%MONOTOSOAS
+          Inst%FLUXSOAS(I,J) = Inst%FLUXSOAS(I,J) + &
+               ( EMIS_MONO * MONOtoC ) * Inst%MONOTOSOAS
        ENDIF
 
        !--------------------------------------------------------------------
@@ -909,21 +847,14 @@ CONTAINS
           CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                     Inst, I, J, 'PRPE', EMIS_PRPE, RC)
           IF ( RC /= HCO_SUCCESS ) THEN
-             CALL HCO_ERROR( HcoState%Config%Err, &
+             CALL HCO_ERROR( &
                              'GET_MEGAN_EMISSIONS_PRPE', RC )
              ERR = .TRUE.
              EXIT
           ENDIF
 
-          ! Add to tracer tendency array [kg C/m2/s]
+          ! Add to tracer tendency array [kg/m2/s]
           Inst%FLUXPRPE(I,J) = EMIS_PRPE
-
-          !! testing only
-          !if ( i==ix .and. j==iy .and. .FALSE. ) then
-          !   write(*,*) ' '
-          !   write(*,*) 'HEMCO MEGAN @ ', ix, iy
-          !   write(*,*) 'PRPE (kg/m2/s): ', Inst%FLUXPRPE(I,J)
-          !endif
 
        ENDIF
 
@@ -936,13 +867,13 @@ CONTAINS
           CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                     Inst, I, J, 'C2H4', EMIS_C2H4, RC)
           IF ( RC /= HCO_SUCCESS ) THEN
-             CALL HCO_ERROR( HcoState%Config%Err, &
+             CALL HCO_ERROR( &
                              'GET_MEGAN_EMISSIONS_C2H4', RC )
              ERR = .TRUE.
              EXIT
           ENDIF
 
-          ! Add to tracer tendency array [kg C/m2/s]
+          ! Add to tracer tendency array [kg/m2/s]
           Inst%FLUXC2H4(I,J) = EMIS_C2H4
        ENDIF
 
@@ -978,16 +909,15 @@ CONTAINS
        !--------------------------------------------------------------
        ! MTPA=a-,b-pinene,sabinene,carene (hotp 5/20/10)
        IF ( Inst%IDTMTPA > 0 ) THEN
-          Inst%FLUXMTPA(I,J) = ( EMIS_APIN + EMIS_BPIN + &
-                                 EMIS_SABI + EMIS_CARE ) * FC1
+          Inst%FLUXMTPA(I,J) = EMIS_APIN + EMIS_BPIN + EMIS_SABI + EMIS_CARE
        ENDIF
 
        !--------------------------------------------------------------
        ! MEGAN Limonene
        !--------------------------------------------------------------
-       ! [kg C/m2/s]
+       ! [kg/m2/s]
        IF ( Inst%IDTLIMO > 0 ) THEN
-          Inst%FLUXLIMO(I,J) = EMIS_LIMO * FC1
+          Inst%FLUXLIMO(I,J) = EMIS_LIMO
        ENDIF
 
        !--------------------------------------------------------------
@@ -999,7 +929,7 @@ CONTAINS
        ! terpinolene, terpinolene, phellandrene) (hotp 3/10/10)
        ! 14-18% of OMTP is terpinene and terpinolene
        IF ( Inst%IDTMTPO > 0 ) THEN
-          Inst%FLUXMTPO(I,J) = ( EMIS_MYRC + EMIS_OCIM + EMIS_OMON ) * FC1
+          Inst%FLUXMTPO(I,J) = EMIS_MYRC + EMIS_OCIM + EMIS_OMON
        ENDIF
 
        !--------------------------------------------------------------
@@ -1011,7 +941,7 @@ CONTAINS
        CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                  Inst, I, J, 'FARN', EMIS_FARN, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'GET_MEGAN_EMISSIONS_FARN', RC )
           ERR = .TRUE.
           EXIT
@@ -1023,7 +953,7 @@ CONTAINS
        CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                  Inst, I, J, 'BCAR', EMIS_BCAR, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'GET_MEGAN_EMISSIONS_BCAR', RC )
           ERR = .TRUE.
           EXIT
@@ -1035,7 +965,7 @@ CONTAINS
        CALL GET_MEGAN_EMISSIONS( HcoState, ExtState, &
                                  Inst, I, J, 'OSQT', EMIS_OSQT, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'GET_MEGAN_EMISSIONS_OSQT', RC )
           ERR = .TRUE.
           EXIT
@@ -1045,7 +975,7 @@ CONTAINS
        ! ---------------------------------------------------
        ! Total sesquiterpenes from MEGAN (hotp 3/10/10)
        IF ( Inst%IDTSESQ > 0 ) THEN
-          Inst%FLUXSESQ(I,J) = ( EMIS_FARN + EMIS_BCAR + EMIS_OSQT ) * FC3
+          Inst%FLUXSESQ(I,J) = EMIS_FARN + EMIS_BCAR + EMIS_OSQT
        ENDIF
 
        ! Other terpenes
@@ -1053,12 +983,17 @@ CONTAINS
 
        !--------------------------------------------------------------------
        ! Biogenic emissions of SOA and SOA-Precursor from Other terpenes
+       !
+       ! NOTE: These emission factors appear to be based on emissions
+       !  in kgC/m2/s. Convert from kg/m2/s to kgC/m2/s.
        !--------------------------------------------------------------------
        IF ( Inst%IDTSOAP>0 ) THEN
-          Inst%FLUXSOAP(I,J) = Inst%FLUXSOAP(I,J) + EMIS_OTHR * Inst%OTHRTOSOAP
+          Inst%FLUXSOAP(I,J) = Inst%FLUXSOAP(I,J) + &
+               ( EMIS_OTHR * MONOtoC ) * Inst%OTHRTOSOAP
        ENDIF
        IF ( Inst%IDTSOAS>0 ) THEN
-          Inst%FLUXSOAS(I,J) = Inst%FLUXSOAS(I,J) + EMIS_OTHR * Inst%OTHRTOSOAS
+          Inst%FLUXSOAS(I,J) = Inst%FLUXSOAS(I,J) + &
+               ( EMIS_OTHR * MONOtoC ) * Inst%OTHRTOSOAS
        ENDIF
 
        !-----------------------------------------------------------------
@@ -1107,23 +1042,6 @@ CONTAINS
     ! PASS TO HEMCO STATE AND UPDATE DIAGNOSTICS
     !=================================================================
 
-    !! testing only
-    !if( HcoState%amIRoot) then
-    ! write(*,*) 'ISOP emissions instance ',ExtState%Megan
-    ! write(*,*) 'A MGN ',ExtState%Megan,Inst%IDTISOP,SUM(Inst%FLUXISOP)
-    ! write(*,*) 'B MGN ',ExtState%Megan,SUM(Inst%LAI_PREVDAY)
-    ! write(*,*) 'C MGN ',ExtState%Megan,SUM(Inst%T_LAST24H)
-    ! write(*,*) 'D MGN ',ExtState%Megan,SUM(Inst%T_LASTXDAYS)
-    ! write(*,*) 'E MGN ',ExtState%Megan,SUM(Inst%PARDR_LASTXDAYS)
-    ! write(*,*) 'F MGN ',ExtState%Megan,SUM(Inst%PARDF_LASTXDAYS)
-    ! write(*,*) 'G MGN ',ExtState%Megan,SUM(ExtState%T2M%Arr%Val)
-    ! write(*,*) 'H MGN ',ExtState%Megan,SUM(ExtState%SUNCOS%Arr%Val)
-    ! write(*,*) 'I MGN ',ExtState%Megan,SUM(ExtState%PARDR%Arr%Val)
-    ! write(*,*) 'J MGN ',ExtState%Megan,SUM(ExtState%PARDF%Arr%Val)
-    ! write(*,*) 'K MGN ',ExtState%Megan,SUM(ExtState%LAI%Arr%Val)
-    ! write(*,*) 'L MGN ',ExtState%Megan,SUM(ExtState%GWETROOT%Arr%Val)
-    !endif
-
     ! ----------------------------------------------------------------
     ! ISOPRENE
     IF ( Inst%IDTISOP > 0 ) THEN
@@ -1132,7 +1050,7 @@ CONTAINS
        CALL HCO_EmisAdd( HcoState, Inst%FLUXISOP, Inst%IDTISOP, &
                          RC, ExtNr=Inst%ExtNr )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'HCO_EmisAdd error: FLUXISOP', RC )
           RETURN
        ENDIF
@@ -1146,7 +1064,7 @@ CONTAINS
        CALL HCO_EmisAdd( HcoState, Inst%FLUXALD2, Inst%IDTALD2, &
                          RC, ExtNr=Inst%ExtNr )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'HCO_EmisAdd error: FLUXALD2', RC )
           RETURN
        ENDIF
@@ -1160,7 +1078,7 @@ CONTAINS
        CALL HCO_EmisAdd( HcoState, Inst%FLUXMOH, Inst%IDTMOH, &
                          RC, ExtNr=Inst%ExtNr )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'HCO_EmisAdd error: FLUXMOH', RC )
           RETURN 
        ENDIF
@@ -1174,7 +1092,7 @@ CONTAINS
        CALL HCO_EmisAdd( HcoState, Inst%FLUXEOH, Inst%IDTEOH, &
                          RC, ExtNr=Inst%ExtNr )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'HCO_EmisAdd error: FLUXEOH', RC )
           RETURN
        ENDIF
@@ -1184,31 +1102,13 @@ CONTAINS
     ! ACETONE
     IF ( Inst%IDTACET > 0 ) THEN
 
-       ! Eventually add individual diagnostics. These are assumed to
-       ! have names MEGAN_ACET_MONO, MEGAN_ACET_MBO, and
-       ! MEGAN_ACET_DIRECT
-       DiagnName =  'InvMEGAN_ACET_MONO'
-       CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
-                          cName=TRIM(DiagnName), Array2D=Inst%FLUXACETmo, RC=RC)
-       IF ( RC /= HCO_SUCCESS ) RETURN
-
-       DiagnName =  'InvMEGAN_ACET_MBOX'
-       CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
-                          cName=TRIM(DiagnName), Array2D=Inst%FLUXACETmb, RC=RC)
-       IF ( RC /= HCO_SUCCESS ) RETURN
-
-       DiagnName =  'InvMEGAN_ACET_DIRECT'
-       CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
-                          cName=TRIM(DiagnName), Array2D=Inst%FLUXACETbg, RC=RC)
-       IF ( RC /= HCO_SUCCESS ) RETURN
-
        ! Add flux to emission array
-       Inst%FLUXACETbg = Inst%FLUXACETbg + Inst%FLUXACETmo + Inst%FLUXACETmb
-       CALL HCO_EmisAdd( HcoState, Inst%FLUXACETbg, Inst%IDTACET, &
+       Inst%FLUXACET = Inst%FLUXACETbg + Inst%FLUXACETmb
+       CALL HCO_EmisAdd( HcoState, Inst%FLUXACET, Inst%IDTACET, &
                          RC, ExtNr=Inst%ExtNr )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
-                          'HCO_EmisAdd error: FLUXACETbg', RC )
+          CALL HCO_ERROR( &
+                          'HCO_EmisAdd error: FLUXACET', RC )
           RETURN
        ENDIF
     ENDIF
@@ -1221,7 +1121,7 @@ CONTAINS
        CALL HCO_EmisAdd( HcoState, Inst%FLUXSOAP, Inst%IDTSOAP, &
                          RC, ExtNr=Inst%ExtNr )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'HCO_EmisAdd error: FLUXSOAP', RC )
           RETURN
        ENDIF
@@ -1236,7 +1136,7 @@ CONTAINS
        CALL HCO_EmisAdd( HcoState, Inst%FLUXSOAS, Inst%IDTSOAS, &
                          RC, ExtNr=Inst%ExtNr )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'HCO_EmisAdd error: FLUXSOAS', RC )
           RETURN
        ENDIF
@@ -1251,7 +1151,7 @@ CONTAINS
        CALL HCO_EmisAdd( HcoState, Inst%FLUXPRPE, Inst%IDTPRPE, &
                          RC, ExtNr=Inst%ExtNr )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'HCO_EmisAdd error: FLUXPRPE', RC )
           RETURN
        ENDIF
@@ -1266,7 +1166,7 @@ CONTAINS
        CALL HCO_EmisAdd( HcoState, Inst%FLUXC2H4, Inst%IDTC2H4, &
                          RC, ExtNr=Inst%ExtNr )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'HCO_EmisAdd error: FLUXC2H4', RC )
           RETURN
        ENDIF
@@ -1281,7 +1181,7 @@ CONTAINS
        CALL HCO_EmisAdd( HcoState, Inst%FLUXMTPA, Inst%IDTMTPA, &
                          RC, ExtNr=Inst%ExtNr )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'HCO_EmisAdd error: FLUXMTPA', RC )
           RETURN
        ENDIF
@@ -1296,7 +1196,7 @@ CONTAINS
        CALL HCO_EmisAdd( HcoState, Inst%FLUXMTPO, Inst%IDTMTPO, &
                          RC, ExtNr=Inst%ExtNr )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'HCO_EmisAdd error: FLUXMTPO', RC )
           RETURN
        ENDIF
@@ -1311,7 +1211,7 @@ CONTAINS
        CALL HCO_EmisAdd( HcoState, Inst%FLUXLIMO, Inst%IDTLIMO, &
                          RC, ExtNr=Inst%ExtNr )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'HCO_EmisAdd error: FLUXLIMO', RC )
           RETURN
        ENDIF
@@ -1326,114 +1226,12 @@ CONTAINS
        CALL HCO_EmisAdd( HcoState, Inst%FLUXSESQ, Inst%IDTSESQ, &
                          RC, ExtNr=Inst%ExtNr )
        IF ( RC /= HCO_SUCCESS ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, &
+          CALL HCO_ERROR( &
                           'HCO_EmisAdd error: FLUXSESQ', RC )
           RETURN
        ENDIF
 
     ENDIF
-
-    !=================================================================
-    ! Manual diagnostics
-    !=================================================================
-
-    ! -------------------------------------------------------------
-    ! Alpha Pinene
-    DiagnName =  'InvMEGAN_APIN'
-    CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
-                       cName=TRIM(DiagnName), Array2D=Inst%FLUXAPIN, RC=RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    ! -------------------------------------------------------------
-    ! Beta Pinene
-    DiagnName =  'InvMEGAN_BPIN'
-    CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
-                       cName=TRIM(DiagnName), Array2D=Inst%FLUXBPIN, RC=RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    ! -------------------------------------------------------------
-    ! Sabinene
-    DiagnName =  'InvMEGAN_SABI'
-    CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
-                       cName=TRIM(DiagnName), Array2D=Inst%FLUXSABI, RC=RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    ! -------------------------------------------------------------
-    ! Mycrene
-    DiagnName =  'InvMEGAN_MYRC'
-    CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
-                       cName=TRIM(DiagnName), Array2D=Inst%FLUXMYRC, RC=RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    ! -------------------------------------------------------------
-    ! 3-Carene
-    DiagnName =  'InvMEGAN_CARE'
-    CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
-                       cName=TRIM(DiagnName), Array2D=Inst%FLUXCARE, RC=RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    ! -------------------------------------------------------------
-    ! Ocimene
-    DiagnName =  'InvMEGAN_OCIM'
-    CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
-                       cName=TRIM(DiagnName), Array2D=Inst%FLUXOCIM, RC=RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    ! -------------------------------------------------------------
-    ! Other monoterpenes
-    DiagnName =  'InvMEGAN_OMON'
-    CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
-                       cName=TRIM(DiagnName), Array2D=Inst%FLUXOMON, RC=RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    ! -------------------------------------------------------------
-    ! Total monoterpenes
-    DiagnName =  'InvMEGAN_MONX'
-    CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
-                       cName=TRIM(DiagnName), Array2D=Inst%FLUXMONO, RC=RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    ! -------------------------------------------------------------
-    ! a-Farnesene
-    DiagnName =  'InvMEGAN_FARN'
-    CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
-                       cName=TRIM(DiagnName), Array2D=Inst%FLUXFARN, RC=RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    ! -------------------------------------------------------------
-    ! b_Caryophyllene
-    DiagnName =  'InvMEGAN_BCAR'
-    CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
-                       cName=TRIM(DiagnName), Array2D=Inst%FLUXBCAR, RC=RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    ! -------------------------------------------------------------
-    ! Other sesquiterpenes
-    DiagnName =  'InvMEGAN_OSQT'
-    CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
-                       cName=TRIM(DiagnName), Array2D=Inst%FLUXOSQT, RC=RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    ! -------------------------------------------------------------
-    ! Methyl butenol
-    DiagnName =  'InvMEGAN_MBOX'
-    CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
-                       cName=TRIM(DiagnName), Array2D=Inst%FLUXMBOX, RC=RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    ! -------------------------------------------------------------
-    ! Formic acid
-    DiagnName =  'InvMEGAN_FAXX'
-    CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
-                       cName=TRIM(DiagnName), Array2D=Inst%FLUXFAXX, RC=RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    ! ----------------------------------------------------------------
-    ! Acetic acid
-    DiagnName =  'InvMEGAN_AAXX'
-    CALL Diagn_Update( HcoState, ExtNr=Inst%ExtNr, &
-                       cName=TRIM(DiagnName), Array2D=Inst%FLUXAAXX, RC=RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
 
     ! ----------------------------------------------------------------
     ! Eventually copy internal values to ESMF internal state object
@@ -1442,41 +1240,46 @@ CONTAINS
     ! LAI_PREVDAY
     CALL HCO_RestartWrite( HcoState, &
                            'LAI_PREVDAY', Inst%LAI_PREVDAY, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! T_LAST24H
     CALL HCO_RestartWrite( HcoState, &
                            'T_PREVDAY',  Inst%T_LAST24H, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! T_LASTXDAYS
     CALL HCO_RestartWrite( HcoState, &
                            'T_DAVG',     Inst%T_LASTXDAYS, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! PARDR_LASTXDAYS
     CALL HCO_RestartWrite( HcoState, &
                            'PARDR_DAVG', Inst%PARDR_LASTXDAYS, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 4', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! PARDF_LASTXDAYS
     CALL HCO_RestartWrite( HcoState, &
                            'PARDF_DAVG', Inst%PARDF_LASTXDAYS, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 5', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     !=================================================================
     ! ALL DONE!
     !=================================================================
-
-    !! testing only
-    !write(*,*) ''
-    !write(*,*) 'MEGAN done!'
-    !write(*,*) 'total LAI : ', SUM(ExtState%GC_LAI%Arr%Val)
-    !write(*,*) 'total ISOP: ', SUM(Inst%FLUXISOP)
-    !write(*,*) 'total ACET: ', SUM(Inst%FLUXACETmo)+SUM(Inst%FLUXACETmb)+&
-    !                           SUM(Inst%FLUXACETbg)
-    !write(*,*) 'total PRPE: ', SUM(Inst%FLUXPRPE)
-    !write(*,*) ''
 
     ! Cleanup
     Inst => NULL()
@@ -1490,14 +1293,14 @@ CONTAINS
   END SUBROUTINE HCOX_Megan_Run
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
 ! !IROUTINE: Get_Megan_Emissions
 !
 ! !DESCRIPTION: Subroutine Get\_Megan\_Emissions computes biogenic emissions in
-!  units of [kgC/m2/s] or [kg/m2/s] using the MEGAN inventory. (dbm, 12/2012)
+!  units of kg/m2/s using the MEGAN inventory. (dbm, 12/2012)
 !\\
 !\\
 ! !INTERFACE:
@@ -1515,9 +1318,7 @@ CONTAINS
 !
 ! !OUTPUT PARAMETERS:
 !
-    REAL(hp),         INTENT(OUT) :: MEGAN_EMIS ! VOC emission in kgC/m2/s or
-                                                ! kg/m2/s, depending on units
-                                                ! the compound is carried in
+    REAL(hp),         INTENT(OUT) :: MEGAN_EMIS ! kg/m2/s
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -1535,33 +1336,35 @@ CONTAINS
 ! !REVISION HISTORY:
 !  (1 ) Original code by Dorian Abbot (9/2003).  Updated to the latest
 !        algorithm and modified for the standard code by May Fu (11/20/04)
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
 ! !LOCAL VARIABLES:
 !
-    REAL(hp)  :: GAMMA_LAI
-    REAL(hp)  :: GAMMA_AGE
-    REAL(hp)  :: GAMMA_PAR
-    REAL(hp)  :: GAMMA_T_LD
-    REAL(hp)  :: GAMMA_T_LI
-    REAL(hp)  :: GAMMA_SM
-    REAL(hp)  :: GAMMA_CO2  ! (Tai, Jan 2013)
-    REAL(hp)  :: AEF
-    REAL(hp)  :: D_BTW_M
-    REAL(hp)  :: TS, SUNCOS
-    REAL(hp)  :: Q_DIR_2, Q_DIFF_2
-    REAL(hp)  :: BETA, LDF, CT1, CEO
-    REAL(hp)  :: ANEW, AGRO, AMAT, AOLD
-    REAL(hp)  :: ISOLAI, PMISOLAI, MISOLAI
-    REAL(hp)  :: PFTSUM
-    LOGICAL   :: BIDIR
+    REAL(hp)            :: GAMMA_LAI
+    REAL(hp)            :: GAMMA_AGE
+    REAL(hp)            :: GAMMA_PAR
+    REAL(hp)            :: GAMMA_T_LD
+    REAL(hp)            :: GAMMA_T_LI
+    REAL(hp)            :: GAMMA_SM
+    REAL(hp)            :: GAMMA_CO2  ! (Tai, Jan 2013)
+    REAL(hp)            :: AEF
+    REAL(hp)            :: D_BTW_M
+    REAL(hp)            :: TS, SUNCOS
+    REAL(hp)            :: Q_DIR_2, Q_DIFF_2
+    REAL(hp)            :: BETA, LDF, CT1, CEO
+    REAL(hp)            :: ANEW, AGRO, AMAT, AOLD
+    REAL(hp)            :: ISOLAI, PMISOLAI, MISOLAI
+    REAL(hp)            :: PFTSUM
+    LOGICAL             :: BIDIR
+    CHARACTER(LEN=255)  :: LOC
 
     !=================================================================
     ! GET_MEGAN_EMISSIONS begins here!
     !=================================================================
+    LOC = 'GET_MEGAN_EMISSIONS (HCOX_MEGAN_MOD.F90)'    
 
     ! Initialize parameters, gamma values, and return value
     MEGAN_EMIS = 0.0_hp
@@ -1571,7 +1374,7 @@ CONTAINS
     GAMMA_T_LI = 0.0_hp
     GAMMA_PAR  = 0.0_hp
     GAMMA_SM   = 0.0_hp
-    GAMMA_CO2  = 0.0_hp  ! (Tai, Jan 2013)
+    GAMMA_CO2  = 0.0_hp
     BETA       = 0.0_hp
     AEF        = 0.0_hp
     LDF        = 0.0_hp
@@ -1613,14 +1416,20 @@ CONTAINS
     CALL GET_MEGAN_PARAMS ( HcoState,                         &
                             CMPD, BETA, LDF,  CT1,  CEO,      &
                             ANEW, AGRO, AMAT, AOLD, BIDIR, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 6', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! --------------------------------------------
     ! Get base emission factor for this compound and grid square
-    ! Units: kgC/m2/s or kg/m2/s
+    ! Units: kg/m2/s
     ! --------------------------------------------
     CALL GET_MEGAN_AEF ( HcoState, Inst, I, J, CMPD, AEF, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 7', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     !-----------------------------------------------------
     ! Only interested in terrestrial biosphere
@@ -1692,12 +1501,12 @@ CONTAINS
        GAMMA_LAI  = 0.0_hp
        GAMMA_AGE  = 0.0_hp
        GAMMA_SM   = 0.0_hp
-       GAMMA_CO2  = 0.0_hp  ! (Tai, Jan 2013)
+       GAMMA_CO2  = 0.0_hp
 
     END IF
 
     ! Emission is the product of all of these.
-    ! Units here are kgC/m2/s or kg/m2/s as appropriate for the compound.
+    ! Units here are kg/m2/s.
     ! Normalization factor ensures product of GAMMA values is 1.0 under
     !  standard conditions.
     IF ( CMPD == 'ISOP' ) THEN
@@ -1717,37 +1526,13 @@ CONTAINS
                     (LDF * GAMMA_PAR * GAMMA_T_LD))
     ENDIF
 
-    !! testing only
-    !if ( i==ix .and. j==iy ) then
-    !   write(*,*) ' '
-    !   write(*,*) '--- GET_MEGAN_EMISSIONS --- '
-    !   write(*,*) 'HEMCO MEGAN @    ', i,j
-    !   write(*,*) 'Compound       : ', TRIM(CMPD)
-    !   write(*,*) 'MEGAN_EMIS     : ', MEGAN_EMIS
-    !   write(*,*) 'SUNCOS         : ', SUNCOS
-    !   write(*,*) 'AEF [kgC/m2/s] : ', AEF
-    !   write(*,*) 'GAMMA_LAI      : ', GAMMA_LAI
-    !   write(*,*) 'GAMMA_AGE      : ', GAMMA_AGE
-    !   write(*,*) 'GAMMA_T_LI     : ', GAMMA_T_LI
-    !   write(*,*) 'GAMMA_T_LD     : ', GAMMA_T_LD
-    !   write(*,*) 'GAMMA_PAR      : ', GAMMA_PAR
-    !   write(*,*) 'GAMMA_SM       : ', GAMMA_SM
-    !   write(*,*) 'TS             : ', TS
-    !   write(*,*) 'HCOT_DAILY     : ', HCOT_DAILY(I,J)
-    !   write(*,*) 'ISOLAI         : ', ISOLAI
-    !   write(*,*) 'MISOLAI        : ', MISOLAI
-    !   write(*,*) 'PMISOLAI       : ', PMISOLAI
-    !   write(*,*) 'D_BTW_M        : ', D_BTW_M
-    !   write(*,*) ' '
-    !endif
-
     ! Leave w/ success
     RC = HCO_SUCCESS
 
   END SUBROUTINE GET_MEGAN_EMISSIONS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1793,7 +1578,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  (1 ) Created by dbm 07/2012
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1984,7 +1769,7 @@ CONTAINS
     ELSE
 
        MSG = 'Invalid compound name'
-       CALL HCO_ERROR(HcoState%Config%Err,MSG, RC, &
+       CALL HCO_ERROR(MSG, RC, &
                       THISLOC='GET_MEGAN_PARAMS' )
        RETURN
 
@@ -1996,7 +1781,7 @@ CONTAINS
   END SUBROUTINE GET_MEGAN_PARAMS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2020,8 +1805,7 @@ CONTAINS
 ! !OUTPUT PARAMETERS:
 !
     REAL(hp),          INTENT(OUT) :: EMFAC       ! MEGAN base emission factor
-                                                  ! (kgC/m2/s or kg/m2/s)
-                                                    ! for grid cell (I,J)
+                                                  ! (kg/m2/s) for grid cell I,J
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -2034,7 +1818,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  (1 ) Created 11/2012 by dbm
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2099,7 +1883,7 @@ CONTAINS
        EMFAC = Inst%AEF_OSQT(I,J)
     CASE DEFAULT
        MSG = 'Invalid compound name'
-       CALL HCO_ERROR(HcoState%Config%Err, MSG, &
+       CALL HCO_ERROR(MSG, &
                       RC, THISLOC='GET_MEGAN_AEF' )
        RETURN
     END SELECT
@@ -2110,7 +1894,7 @@ CONTAINS
   END SUBROUTINE GET_MEGAN_AEF
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2155,7 +1939,7 @@ CONTAINS
 ! !REVISION HISTORY:
 !  (1 ) Code was taken & adapted directly from the MEGAN v2.1 source code.
 !      (mpb,2009)
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2231,26 +2015,10 @@ CONTAINS
     ! Prevent negative values
     GAMMA_P_PCEEA = MAX( GAMMA_P_PCEEA , 0.0_hp )
 
-    !! testing only
-    !if ( i==ix .and. j==iy ) then
-    !   write(*,*) ' '
-    !   write(*,*) 'HEMCO GAMMA_PAR_PCEEA: ', GAMMA_P_PCEEA
-    !   write(*,*) 'DOY                  : ', DOY
-    !   write(*,*) 'LAT                  : ', LAT
-    !   write(*,*) 'SINbeta              : ', SINbeta
-    !   write(*,*) 'BETA                 : ', BETA
-    !   write(*,*) 'PTOA                 : ', PTOA
-    !   write(*,*) 'PHI                  : ', PHI
-    !   write(*,*) 'BBB                  : ', BBB
-    !   write(*,*) 'AAA                  : ', AAA
-    !   write(*,*) 'PAC_DAILY            : ', PAC_DAILY
-    !   write(*,*) 'PAC_INSTANT          : ', PAC_INSTANT
-    !endif
-
   END FUNCTION GET_GAMMA_PAR_PCEEA
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2285,7 +2053,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  (1 ) This code was taken directly from the MEGAN v2.1 source code.(mpb,2009)
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2308,7 +2076,7 @@ CONTAINS
   END FUNCTION SOLAR_ANGLE
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2353,7 +2121,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  (1 ) Original code by Michael Barkley (2009).
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2372,7 +2140,7 @@ CONTAINS
   END FUNCTION GET_GAMMA_T_LI
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2420,7 +2188,7 @@ CONTAINS
 ! !REVISION HISTORY:
 !  (1 ) Includes the latest MEGAN v2.1 temperature algorithm (mpb, 2009).
 !       Note, this temp-dependence is the same for the PCEEA & hybrid models.
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2458,7 +2226,7 @@ CONTAINS
   END FUNCTION GET_GAMMA_T_LD
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2494,7 +2262,7 @@ CONTAINS
 ! !REVISION HISTORY:
 !  (1 ) Original code by Dorian Abbot (9/2003).  Modified for the standard
 !        code by May Fu (11/2004)
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2527,7 +2295,7 @@ CONTAINS
   END FUNCTION GET_GAMMA_LAI
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2567,7 +2335,7 @@ CONTAINS
 ! !REVISION HISTORY:
 !  (1 ) Original code by Dorian Abbot (9/2003). Modified for the standard
 !        code by May Fu (11/2004)
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2651,7 +2419,7 @@ CONTAINS
   END FUNCTION GET_GAMMA_AGE
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2686,7 +2454,7 @@ CONTAINS
 !  (1 ) Created by dbm (6/2012). We are not currently using a soil moisture
 !       effect for isoprene. For all compounds other than acetaldehyde and
 !       ethanol, gamma_sm =1 presently.
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2721,7 +2489,7 @@ CONTAINS
   END FUNCTION GET_GAMMA_SM
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2771,7 +2539,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  (1 ) Implemented in the standard code by A. Tai (Jun 2012).
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2853,7 +2621,7 @@ CONTAINS
   END FUNCTION GET_GAMMA_CO2
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2893,7 +2661,7 @@ CONTAINS
 !        conifer tree, etc.) then to be correct we should have a
 !        different CCE for each canopy type for each compound class
 !        (which would be 160 slightly different values of CCE)."
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2999,7 +2767,7 @@ CONTAINS
 !EOC
 
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3029,7 +2797,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2014 - C. Keller    - Initial version
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -3074,19 +2842,19 @@ CONTAINS
 
     ! Temperature over last 24 hours
     CALL HCO_RestartGet( HcoState, 'T_PREVDAY', &
-                         Inst%T_LAST24H, RC, DefVal = 288.15 )
+                         Inst%T_LAST24H, RC, DefVal = 288.15_sp )
 
     ! Temperature over last X days
     CALL HCO_RestartGet( HcoState, 'T_DAVG', &
-                         Inst%T_LASTXDAYS, RC, DefVal = 288.15 )
+                         Inst%T_LASTXDAYS, RC, DefVal = 288.15_sp )
 
     ! Direct radiation (PARDR) over last X days
     CALL HCO_RestartGet( HcoState, 'PARDR_DAVG', &
-                         Inst%PARDR_LASTXDAYS, RC, DefVal = 30.0 )
+                         Inst%PARDR_LASTXDAYS, RC, DefVal = 30.0_sp )
 
     ! Diffuse radiation (PARDF) over last X days
     CALL HCO_RestartGet( HcoState, 'PARDF_DAVG', &
-                         Inst%PARDF_LASTXDAYS, RC, DefVal = 48.0 )
+                         Inst%PARDF_LASTXDAYS, RC, DefVal = 48.0_sp )
 
     ! Return w/ success
     RC = HCO_SUCCESS
@@ -3094,7 +2862,7 @@ CONTAINS
   END SUBROUTINE FILL_RESTART_VARS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3129,7 +2897,7 @@ CONTAINS
 ! !REVISION HISTORY:
 !  (1 ) Original code by Dorian Abbot (9/2003).  Modified for the standard
 !        code by May Fu (11/2004)
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -3137,7 +2905,7 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     INTEGER                 :: I, J, P, ARR_IND
-    REAL(hp)                :: FACTOR, SPECIES2CARBON
+    REAL(hp)                :: FACTOR
     REAL(hp)                :: PFT_EF_OMON(15), PFT_EF_MOH(15)
     REAL(hp)                :: PFT_EF_ACET(15), PFT_EF_BIDR(15)
     REAL(hp)                :: PFT_EF_STRS(15), PFT_EF_OTHR(15)
@@ -3170,6 +2938,8 @@ CONTAINS
     REAL(hp)  :: PFT_C3_NARC_GRSS(HcoState%NX,HcoState%NY)
     REAL(hp)  :: PFT_C4_GRSS(HcoState%NX,HcoState%NY)
     REAL(hp)  :: PFT_CROP(HcoState%NX,HcoState%NY)
+    
+    CHARACTER(LEN=255)      :: LOC
 
     ! Suffix
     CHARACTER(LEN=255)      :: SFX
@@ -3177,6 +2947,7 @@ CONTAINS
     !=================================================================
     ! CALC_AEF begins here!
     !=================================================================
+    LOC = 'CALC_AEF (HCOX_MEGAN_MOD.F90)'
 
     ! Suffix
     SFX = Inst%SUFFIX
@@ -3195,35 +2966,52 @@ CONTAINS
     !-----------------------------------------------------------------
     CALL HCO_EvalFld( HcoState, 'MEGAN_AEF_ISOP'//TRIM(SFX), &
                       Inst%AEF_ISOP, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 8', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, 'MEGAN_AEF_MBOX'//TRIM(SFX), &
                       Inst%AEF_MBOX, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 9', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, 'MEGAN_AEF_BPIN'//TRIM(SFX), &
                       Inst%AEF_BPIN, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 10', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, 'MEGAN_AEF_CARE'//TRIM(SFX), &
                       Inst%AEF_CARE, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 11', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, 'MEGAN_AEF_LIMO'//TRIM(SFX), &
                       Inst%AEF_LIMO, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 12', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, 'MEGAN_AEF_OCIM'//TRIM(SFX), &
                       Inst%AEF_OCIM, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 13', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, 'MEGAN_AEF_SABI'//TRIM(SFX), &
                       Inst%AEF_SABI, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    CALL HCO_EvalFld( HcoState, 'MEGAN_ORVC'//TRIM(SFX), &
-                      Inst%GEIA_ORVC, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 14', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     !-----------------------------------------------------------------
     ! Point to PFT fractions
@@ -3251,82 +3039,130 @@ CONTAINS
     CALL HCO_EvalFld( HcoState, &
                       'CLM4_PFT_BARE'//TRIM(SFX), &
                       PFT_BARE, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 15', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, &
                       'CLM4_PFT_NDLF_EVGN_TMPT_TREE'//TRIM(SFX), &
                       PFT_NDLF_EVGN_TMPT_TREE, RC ) 
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 16', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, &
                       'CLM4_PFT_NDLF_EVGN_BORL_TREE'//TRIM(SFX), &
                       PFT_NDLF_EVGN_BORL_TREE, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 17', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, &
                       'CLM4_PFT_NDLF_DECD_BORL_TREE'//TRIM(SFX), &
                       PFT_NDLF_DECD_BORL_TREE, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 18', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, &
                       'CLM4_PFT_BDLF_EVGN_TROP_TREE'//TRIM(SFX), &
                       PFT_BDLF_EVGN_TROP_TREE, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 19', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, &
                       'CLM4_PFT_BDLF_EVGN_TMPT_TREE'//TRIM(SFX), &
                       PFT_BDLF_EVGN_TMPT_TREE, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 20', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, &
                       'CLM4_PFT_BDLF_DECD_TROP_TREE'//TRIM(SFX), &
                       PFT_BDLF_DECD_TROP_TREE, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 21', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, &
                       'CLM4_PFT_BDLF_DECD_TMPT_TREE'//TRIM(SFX), &
                       PFT_BDLF_DECD_TMPT_TREE, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 22', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, &
                       'CLM4_PFT_BDLF_DECD_BORL_TREE'//TRIM(SFX), &
                       PFT_BDLF_DECD_BORL_TREE, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 23', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, &
                       'CLM4_PFT_BDLF_EVGN_SHRB'//TRIM(SFX), &
                       PFT_BDLF_EVGN_SHRB, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 24', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, &
                       'CLM4_PFT_BDLF_DECD_TMPT_SHRB'//TRIM(SFX), &
                       PFT_BDLF_DECD_TMPT_SHRB, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 25', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, &
                       'CLM4_PFT_BDLF_DECD_BORL_SHRB'//TRIM(SFX), &
                       PFT_BDLF_DECD_BORL_SHRB, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 26', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, &
                       'CLM4_PFT_C3_ARCT_GRSS'//TRIM(SFX), &
                       PFT_C3_ARCT_GRSS, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 27', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, &
                       'CLM4_PFT_C3_NARC_GRSS'//TRIM(SFX), &
                       PFT_C3_NARC_GRSS, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 28', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, &
                       'CLM4_PFT_C4_GRSS'//TRIM(SFX), &
                       PFT_C4_GRSS, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 29', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_EvalFld( HcoState, &
                       'CLM4_PFT_CROP'//TRIM(SFX), &
                       PFT_CROP, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 30', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Copy PFTs into ARRAY_16
     Inst%ARRAY_16(:,:, 1) = PFT_BARE
@@ -3491,6 +3327,25 @@ CONTAINS
                      0.08_hp, 0.08_hp, 0.08_hp, 0.08_hp, 0.08_hp, &
                      0.08_hp, 0.20_hp, 0.20_hp, 0.20_hp, 0.20_hp/)
 
+    ! Set AEF arrays to zero
+    Inst%AEF_APIN(:,:) = 0.0_hp
+    Inst%AEF_MYRC(:,:) = 0.0_hp
+    Inst%AEF_OMON(:,:) = 0.0_hp
+    Inst%AEF_FARN(:,:) = 0.0_hp
+    Inst%AEF_BCAR(:,:) = 0.0_hp
+    Inst%AEF_OSQT(:,:) = 0.0_hp
+    Inst%AEF_MOH (:,:) = 0.0_hp
+    Inst%AEF_ACET(:,:) = 0.0_hp
+    Inst%AEF_EOH (:,:) = 0.0_hp
+    Inst%AEF_CH2O(:,:) = 0.0_hp
+    Inst%AEF_ALD2(:,:) = 0.0_hp
+    Inst%AEF_FAXX(:,:) = 0.0_hp
+    Inst%AEF_AAXX(:,:) = 0.0_hp
+    Inst%AEF_C2H4(:,:) = 0.0_hp
+    Inst%AEF_TOLU(:,:) = 0.0_hp
+    Inst%AEF_HCNX(:,:) = 0.0_hp
+    Inst%AEF_PRPE(:,:) = 0.0_hp
+
     ! Loop through plant types
     DO P = 1, 15
 
@@ -3575,63 +3430,25 @@ CONTAINS
 
     ENDDO
 
-    !! Nullify pointers
-    !PFT_BARE                => NULL()
-    !PFT_NDLF_EVGN_TMPT_TREE => NULL()
-    !PFT_NDLF_EVGN_BORL_TREE => NULL()
-    !PFT_NDLF_DECD_BORL_TREE => NULL()
-    !PFT_BDLF_EVGN_TROP_TREE => NULL()
-    !PFT_BDLF_EVGN_TMPT_TREE => NULL()
-    !PFT_BDLF_DECD_TROP_TREE => NULL()
-    !PFT_BDLF_DECD_TMPT_TREE => NULL()
-    !PFT_BDLF_DECD_BORL_TREE => NULL()
-    !PFT_BDLF_EVGN_SHRB      => NULL()
-    !PFT_BDLF_DECD_TMPT_SHRB => NULL()
-    !PFT_BDLF_DECD_BORL_SHRB => NULL()
-    !PFT_C3_ARCT_GRSS        => NULL()
-    !PFT_C3_NARC_GRSS        => NULL()
-    !PFT_C4_GRSS             => NULL()
-    !PFT_CROP                => NULL()
-
-    ! Conversion factor from [ug compound/m2/hr] to [kg compound/m2/s]
+    ! Convert AEF arrays from [ug/m2/hr] to [kg/m2/s]
     FACTOR = 1.0e-9_hp / 3600.0_hp
-
-    ! Loop over grid boxes
-    DO J = 1, HcoState%NY
-    DO I = 1, HcoState%NX
-
-       ! Convert AEF arrays to [kgC/m2/s]
-       ! Multiply arrays by FACTOR and ratio [g C/g compound]
-       ! NOTE: AEFs for ISOP, MBOX, BPIN, CARE, LIMO, OCIM, SABI
-       ! are read from file in [kgC/m2/s], so no need to convert here
-       Inst%AEF_APIN(I,J) = Inst%AEF_APIN(I,J) * FACTOR * 120.0_hp / 136.234_hp
-       Inst%AEF_MYRC(I,J) = Inst%AEF_MYRC(I,J) * FACTOR * 120.0_hp / 136.234_hp
-       Inst%AEF_OMON(I,J) = Inst%AEF_OMON(I,J) * FACTOR * 120.0_hp / 136.234_hp
-
-       ! Sesquiterpenes
-       SPECIES2CARBON = 15.d0 * 12.01d0 / ( 15.d0 * 12.01d0 + 24.d0 * 1.01d0 )
-       Inst%AEF_FARN(I,J) = Inst%AEF_FARN(I,J) * FACTOR * SPECIES2CARBON
-       Inst%AEF_BCAR(I,J) = Inst%AEF_BCAR(I,J) * FACTOR * SPECIES2CARBON
-       Inst%AEF_OSQT(I,J) = Inst%AEF_OSQT(I,J) * FACTOR * SPECIES2CARBON
-
-       Inst%AEF_ACET(I,J) = Inst%AEF_ACET(I,J) * FACTOR *  36.0_hp /  58.079_hp
-       Inst%AEF_EOH(I,J)  = Inst%AEF_EOH(I,J)  * FACTOR *  24.0_hp /  46.068_hp
-       Inst%AEF_ALD2(I,J) = Inst%AEF_ALD2(I,J) * FACTOR *  24.0_hp /  44.053_hp
-       Inst%AEF_C2H4(I,J) = Inst%AEF_C2H4(I,J) * FACTOR *  24.0_hp /  28.053_hp
-       Inst%AEF_TOLU(I,J) = Inst%AEF_TOLU(I,J) * FACTOR *  84.0_hp /  92.138_hp
-       Inst%AEF_PRPE(I,J) = Inst%AEF_PRPE(I,J) * FACTOR *  36.0_hp /  42.080_hp
-
-       ! Methanol, formaldehyde, formic acid, acetic acid, HCN are
-       ! carried in kg, not kg C
-       ! Convert AEF arrays to [kg/m2/s]
-       Inst%AEF_MOH(I,J)  = Inst%AEF_MOH(I,J)  * FACTOR
-       Inst%AEF_CH2O(I,J) = Inst%AEF_CH2O(I,J) * FACTOR
-       Inst%AEF_FAXX(I,J) = Inst%AEF_FAXX(I,J) * FACTOR
-       Inst%AEF_AAXX(I,J) = Inst%AEF_AAXX(I,J) * FACTOR
-       Inst%AEF_HCNX(I,J) = Inst%AEF_HCNX(I,J) * FACTOR
-
-    ENDDO
-    ENDDO
+    Inst%AEF_APIN = Inst%AEF_APIN * FACTOR
+    Inst%AEF_MYRC = Inst%AEF_MYRC * FACTOR
+    Inst%AEF_OMON = Inst%AEF_OMON * FACTOR
+    Inst%AEF_FARN = Inst%AEF_FARN * FACTOR
+    Inst%AEF_BCAR = Inst%AEF_BCAR * FACTOR
+    Inst%AEF_OSQT = Inst%AEF_OSQT * FACTOR
+    Inst%AEF_ACET = Inst%AEF_ACET * FACTOR
+    Inst%AEF_EOH  = Inst%AEF_EOH  * FACTOR
+    Inst%AEF_ALD2 = Inst%AEF_ALD2 * FACTOR
+    Inst%AEF_C2H4 = Inst%AEF_C2H4 * FACTOR
+    Inst%AEF_TOLU = Inst%AEF_TOLU * FACTOR
+    Inst%AEF_PRPE = Inst%AEF_PRPE * FACTOR
+    Inst%AEF_MOH  = Inst%AEF_MOH  * FACTOR
+    Inst%AEF_CH2O = Inst%AEF_CH2O * FACTOR
+    Inst%AEF_FAXX = Inst%AEF_FAXX * FACTOR
+    Inst%AEF_AAXX = Inst%AEF_AAXX * FACTOR
+    Inst%AEF_HCNX = Inst%AEF_HCNX * FACTOR
 
     ! Return w/ success
     RC = HCO_SUCCESS
@@ -3639,7 +3456,7 @@ CONTAINS
   END SUBROUTINE CALC_AEF
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3672,7 +3489,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  05 Aug 2013 - C. Keller   - Initial version
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -3686,22 +3503,25 @@ CONTAINS
     REAL*8                         :: PI_180
     REAL(hp), POINTER              :: Ptr2D(:,:)
     TYPE(MyInst), POINTER          :: Inst
-    CHARACTER(LEN=255)             :: MSG
+    CHARACTER(LEN=255)             :: MSG, LOC
     CHARACTER(LEN=31), ALLOCATABLE :: SpcNames(:)
     LOGICAL                        :: Optfound
 
     !=================================================================
     ! HCOX_MEGAN_INIT begins here!
     !=================================================================
+    LOC = 'HCOX_MEGAN_INIT (HCOX_MEGAN_MOD.F90)'
 
     ! Extension Nr.
     ExtNr = GetExtNr( HcoState%Config%ExtList, TRIM(ExtName) )
     IF ( ExtNr <= 0 ) RETURN
 
     ! Enter
-    CALL HCO_ENTER( HcoState%Config%Err, &
-                    'HCOX_Megan_Init (hcox_megan_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 31', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Nullify
     Ptr2D => NULL()
@@ -3710,7 +3530,7 @@ CONTAINS
     ! Create an instance for this extension
     CALL InstCreate ( ExtNr, ExtState%Megan, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, &
+       CALL HCO_ERROR ( &
                        'Cannot create MEGAN instance', RC )
        RETURN
     ENDIF
@@ -3720,7 +3540,10 @@ CONTAINS
     Inst%OFFLINE_BIOGENICVOC = .FALSE.
     CALL GetExtOpt( HcoState%Config, 0, 'OFFLINE_BIOGENICVOC', &
                     OptValBool=OptFound, Found=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 32', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( FOUND ) Inst%OFFLINE_BIOGENICVOC = OptFound
 
     ! Verbose mode
@@ -3740,20 +3563,32 @@ CONTAINS
     !       the config. file!
     CALL GetExtOpt( HcoState%Config, ExtNr, 'Isoprene scaling', &
                     OptValHp=Inst%ISOP_SCALING, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 33', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     CALL GetExtOpt( HcoState%Config, ExtNr, 'CO2 inhibition', &
                     OptValBool=Inst%LISOPCO2, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 34', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     CALL GetExtOpt( HcoState%Config, ExtNr, 'CO2 conc (ppmv)', &
                     OptValHp=Inst%GLOBCO2, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 35', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Normalize LAI by PFT? Default setting is 'yes'
     ! ckeller, 7/17/17.
     Inst%NORMLAI = .TRUE.
     CALL GetExtOpt( HcoState%Config, ExtNr, 'Normalize LAI', &
                     OptValBool=OptFound, Found=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 36', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( FOUND ) Inst%NORMLAI = OptFound
 
     ! Check GLOBCO2 if CO2 inhibition is turned on (LISOPCO2 = .TRUE.)
@@ -3763,7 +3598,7 @@ CONTAINS
        IF ( Inst%GLOBCO2 <  150.0_hp .OR. &
             Inst%GLOBCO2 > 1250.0_hp     ) THEN
           MSG = 'Global CO2 outside valid range of 150-1250 ppmv!'
-          CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+          CALL HCO_ERROR(MSG, RC )
           RETURN
        ENDIF
     ENDIF
@@ -3772,7 +3607,10 @@ CONTAINS
     !optional arguments for SOAP
     CALL GetExtOpt ( HcoState%Config, ExtNr, 'Isoprene to SOAP', &
                      OptValHp=Inst%ISOPTOSOAP, FOUND=Optfound, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 37', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( Optfound ) THEN
        !convert from carbon basis to mass basis
        Inst%ISOPTOSOAP = Inst%ISOPTOSOAP * 1.134
@@ -3785,7 +3623,10 @@ CONTAINS
     !optional arguments for SOAS
     CALL GetExtOpt ( HcoState%Config, ExtNr, 'Isoprene to SOAS', &
                      OptValHp=Inst%ISOPTOSOAS, FOUND=Optfound, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 38', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( Optfound ) THEN
        !convert from carbon basis to mass basis
        Inst%ISOPTOSOAS = Inst%ISOPTOSOAS * 1.134
@@ -3797,7 +3638,10 @@ CONTAINS
     Optfound = .FALSE.
     CALL GetExtOpt ( HcoState%Config, Inst%ExtNr, 'Monoterp to SOAP', &
                      OptValHp=Inst%MONOTOSOAP, FOUND=Optfound, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 39', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( Optfound ) THEN
        !convert from carbon basis to mass basis
        Inst%MONOTOSOAP = Inst%MONOTOSOAP ! * 1.134
@@ -3809,7 +3653,10 @@ CONTAINS
     Optfound = .FALSE.
     CALL GetExtOpt ( HcoState%Config, Inst%ExtNr, 'Monoterp to SOAS', &
                      OptValHp=Inst%MONOTOSOAS, FOUND=Optfound, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 40', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( Optfound ) THEN
        !convert from carbon basis to mass basis
        Inst%MONOTOSOAS = Inst%MONOTOSOAS ! * 1.134
@@ -3821,7 +3668,10 @@ CONTAINS
     Optfound = .FALSE.
     CALL GetExtOpt ( HcoState%Config, Inst%ExtNr, 'Othrterp to SOAP', &
                      OptValHp=Inst%OTHRTOSOAP, FOUND=Optfound, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 41', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( Optfound ) THEN
        !convert from carbon basis to mass basis
        Inst%OTHRTOSOAP = Inst%OTHRTOSOAP * 1.134
@@ -3833,7 +3683,10 @@ CONTAINS
     Optfound = .FALSE.
     CALL GetExtOpt ( HcoState%Config, Inst%ExtNr, 'Othrterp to SOAS', &
                      OptValHp=Inst%OTHRTOSOAS, FOUND=Optfound, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 42', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( Optfound ) THEN
        !convert from carbon basis to mass basis
        Inst%OTHRTOSOAS = Inst%OTHRTOSOAS * 1.134
@@ -3856,7 +3709,10 @@ CONTAINS
     ! --> Assume that species are ordered ISOP, ACET, PRPE, C2H4 in
     !     config. file!
     CALL HCO_GetExtHcoID( HcoState, ExtNr, HcoIDs, SpcNames, nSpc, RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 43', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Assign species IDs
     Inst%IDTISOP = -1
@@ -3907,10 +3763,13 @@ CONTAINS
                           'offline biogenic VOC emissions'
           ENDIF
        CASE( 'MOH' )
-          ! No offline biogenic VOC emissions available for MOH as
-          ! of GEOS-Chem 12.7.0 (mps, 12/17/19)
-          Inst%IDTMOH  = HcoIDs(I)
-          WRITE(MSG,*) '   MOH        = ',TRIM(SpcNames(I)),Inst%IDTMOH
+          IF ( .not. Inst%OFFLINE_BIOGENICVOC ) THEN
+             Inst%IDTMOH  = HcoIDs(I)
+             WRITE(MSG,*) '   MOH        = ',TRIM(SpcNames(I)),Inst%IDTMOH
+          ELSE
+             WRITE(MSG,*) '   MOH will be obtained from ' // &
+                          'offline biogenic VOC emissions'
+          ENDIF
        CASE( 'EOH' )
           IF ( .not. Inst%OFFLINE_BIOGENICVOC ) THEN
              Inst%IDTEOH  = HcoIDs(I)
@@ -3977,7 +3836,7 @@ CONTAINS
           ENDIF
        CASE DEFAULT
           MSG = 'Invalid species names: ' // TRIM(SpcNames(I))
-          CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+          CALL HCO_ERROR(MSG, RC )
           RETURN
        END SELECT
 
@@ -4026,7 +3885,10 @@ CONTAINS
 
     CALL GetExtOpt( HcoState%Config, ExtNr, 'MEGAN_SUFFIX', &
                     OptValChar=Inst%SUFFIX, FOUND=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 44', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. FOUND ) Inst%SUFFIX = ''
 
     !-----------------------------------------------------------------
@@ -4039,388 +3901,374 @@ CONTAINS
 
     ALLOCATE( Inst%T_LAST24H( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'T_LAST24H', RC )
+       CALL HCO_ERROR( 'T_LAST24H', RC )
        RETURN
     ENDIF
-    Inst%T_LAST24H = 0.0_hp
+    Inst%T_LAST24H = 0.0_sp
 
     ALLOCATE( Inst%T_LASTXDAYS( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'T_LASTXDAYS', RC )
+       CALL HCO_ERROR( 'T_LASTXDAYS', RC )
        RETURN
     ENDIF
-    Inst%T_LASTXDAYS = 0.0_hp
+    Inst%T_LASTXDAYS = 0.0_sp
 
     ALLOCATE( Inst%PARDR_LASTXDAYS( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'PARDR_LASTXDAYS', RC )
+       CALL HCO_ERROR( 'PARDR_LASTXDAYS', RC )
        RETURN
     ENDIF
-    Inst%PARDR_LASTXDAYS = 0.0_hp
+    Inst%PARDR_LASTXDAYS = 0.0_sp
 
     ALLOCATE( Inst%PARDF_LASTXDAYS( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'PARDF_LASTXDAYS', RC )
+       CALL HCO_ERROR( 'PARDF_LASTXDAYS', RC )
        RETURN
     ENDIF
-    Inst%PARDF_LASTXDAYS = 0.0_hp
+    Inst%PARDF_LASTXDAYS = 0.0_sp
 
     ALLOCATE( Inst%LAI_PREVDAY( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-      CALL HCO_ERROR( HcoState%Config%Err, 'LAI_PREVDAY', RC )
+      CALL HCO_ERROR( 'LAI_PREVDAY', RC )
       RETURN
     ENDIF
     Inst%LAI_PREVDAY = 0.0_sp
-
-    ALLOCATE( Inst%ARRAY_16( NX, NY, 16 ), STAT=AS )
-    IF ( AS /= 0 ) THEN
-      CALL HCO_ERROR( HcoState%Config%Err, 'ARRAY_16', RC )
-      RETURN
-    ENDIF
-    Inst%ARRAY_16 = 0.0_hp
 
     ! Normalization factor
     ! There should be a different normalization factor for each compound, but
     ! we calculate only 1 normalization factor for all compounds (dbm 11/2012)
     ALLOCATE( Inst%NORM_FAC( 1 ), STAT=AS )
     IF ( AS /= 0 ) THEN
-      CALL HCO_ERROR( HcoState%Config%Err, 'NORM_FAC', RC )
+      CALL HCO_ERROR( 'NORM_FAC', RC )
       RETURN
     ENDIF
     Inst%NORM_FAC = -99d0
 
     ALLOCATE( Inst%AEF_APIN( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'AEF_APIN', RC )
+       CALL HCO_ERROR( 'AEF_APIN', RC )
        RETURN
     ENDIF
     Inst%AEF_APIN = 0.0_hp
 
     ALLOCATE( Inst%AEF_MYRC( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'AEF_MYRC', RC )
+       CALL HCO_ERROR( 'AEF_MYRC', RC )
        RETURN
     ENDIF
     Inst%AEF_MYRC = 0.0_hp
 
     ALLOCATE( Inst%AEF_OMON( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'AEF_OMON', RC )
+       CALL HCO_ERROR( 'AEF_OMON', RC )
        RETURN
     ENDIF
     Inst%AEF_OMON = 0.0_hp
 
     ALLOCATE( Inst%AEF_FARN( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'AEF_FARN', RC )
+       CALL HCO_ERROR( 'AEF_FARN', RC )
        RETURN
     ENDIF
     Inst%AEF_FARN = 0.0_hp
 
     ALLOCATE( Inst%AEF_BCAR( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'AEF_BCAR', RC )
+       CALL HCO_ERROR( 'AEF_BCAR', RC )
        RETURN
     ENDIF
     Inst%AEF_BCAR = 0.0_hp
 
     ALLOCATE( Inst%AEF_OSQT( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'AEF_OSQT', RC )
+       CALL HCO_ERROR( 'AEF_OSQT', RC )
        RETURN
     ENDIF
     Inst%AEF_OSQT = 0.0_hp
 
     ALLOCATE( Inst%AEF_MOH( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'AEF_MOH', RC )
+       CALL HCO_ERROR( 'AEF_MOH', RC )
        RETURN
     ENDIF
     Inst%AEF_MOH = 0.0_hp
 
     ALLOCATE( Inst%AEF_ACET( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'AEF_ACET', RC )
+       CALL HCO_ERROR( 'AEF_ACET', RC )
        RETURN
     ENDIF
     Inst%AEF_ACET = 0.0_hp
 
     ALLOCATE( Inst%AEF_EOH( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'AEF_EOH', RC )
+       CALL HCO_ERROR( 'AEF_EOH', RC )
        RETURN
     ENDIF
     Inst%AEF_EOH = 0.0_hp
 
     ALLOCATE( Inst%AEF_CH2O( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'AEF_CH2O', RC )
+       CALL HCO_ERROR( 'AEF_CH2O', RC )
        RETURN
     ENDIF
     Inst%AEF_CH2O = 0.0_hp
 
     ALLOCATE( Inst%AEF_ALD2( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'AEF_ALD2', RC )
+       CALL HCO_ERROR( 'AEF_ALD2', RC )
        RETURN
     ENDIF
     Inst%AEF_ALD2 = 0.0_hp
 
     ALLOCATE( Inst%AEF_FAXX( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'AEF_FAXX', RC )
+       CALL HCO_ERROR( 'AEF_FAXX', RC )
        RETURN
     ENDIF
     Inst%AEF_FAXX = 0.0_hp
 
     ALLOCATE( Inst%AEF_AAXX( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'AEF_AAXX', RC )
+       CALL HCO_ERROR( 'AEF_AAXX', RC )
        RETURN
     ENDIF
     Inst%AEF_AAXX = 0.0_hp
 
     ALLOCATE( Inst%AEF_C2H4( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err,'AEF_C2H4', RC )
+       CALL HCO_ERROR( 'AEF_C2H4', RC )
        RETURN
     ENDIF
     Inst%AEF_C2H4 = 0.0_hp
 
     ALLOCATE( Inst%AEF_TOLU( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'AEF_TOLU', RC )
+       CALL HCO_ERROR( 'AEF_TOLU', RC )
        RETURN
     ENDIF
     Inst%AEF_TOLU = 0.0_hp
 
     ALLOCATE( Inst%AEF_HCNX( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'AEF_HCNX', RC )
+       CALL HCO_ERROR( 'AEF_HCNX', RC )
        RETURN
     ENDIF
     Inst%AEF_HCNX = 0.0_hp
 
     ALLOCATE( Inst%AEF_PRPE( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'AEF_PRPE', RC )
+       CALL HCO_ERROR( 'AEF_PRPE', RC )
        RETURN
     ENDIF
     Inst%AEF_PRPE = 0.0_hp
 
     ALLOCATE( Inst%FLUXISOP( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXISOP', RC )
+       CALL HCO_ERROR( 'FLUXISOP', RC )
        RETURN
     ENDIF
     Inst%FLUXISOP = 0.0_hp
 
     ALLOCATE( Inst%FLUXMONO( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXMONO', RC )
+       CALL HCO_ERROR( 'FLUXMONO', RC )
        RETURN
     ENDIF
     Inst%FLUXMONO = 0.0_hp
 
-    ALLOCATE( Inst%FLUXACETmo( NX, NY ), STAT=AS )
+    ALLOCATE( Inst%FLUXACET( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXACETmo', RC )
+       CALL HCO_ERROR( 'FLUXACET', RC )
        RETURN
     ENDIF
-    Inst%FLUXACETmo = 0.0_hp
+    Inst%FLUXACET = 0.0_hp
 
     ALLOCATE( Inst%FLUXACETmb( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err,'FLUXACETmb', RC )
+       CALL HCO_ERROR( 'FLUXACETmb', RC )
        RETURN
     ENDIF
-    Inst%FLUXACETmb = 0.0_hp
+    Inst%FLUXACETmb = 0.0_sp
 
     ALLOCATE( Inst%FLUXACETbg( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err,'FLUXACETbg', RC )
+       CALL HCO_ERROR( 'FLUXACETbg', RC )
        RETURN
     ENDIF
-    Inst%FLUXACETbg = 0.0_hp
+    Inst%FLUXACETbg = 0.0_sp
 
     ALLOCATE( Inst%FLUXPRPE( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXPRPE', RC )
+       CALL HCO_ERROR( 'FLUXPRPE', RC )
        RETURN
     ENDIF
     Inst%FLUXPRPE = 0.0_hp
 
     ALLOCATE( Inst%FLUXC2H4( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXC2H4', RC )
+       CALL HCO_ERROR( 'FLUXC2H4', RC )
        RETURN
     ENDIF
     Inst%FLUXC2H4 = 0.0_hp
 
     ALLOCATE( Inst%FLUXLIMO( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXLIMO', RC )
+       CALL HCO_ERROR( 'FLUXLIMO', RC )
        RETURN
     ENDIF
     Inst%FLUXLIMO = 0.0_hp
 
     ALLOCATE( Inst%FLUXMTPA( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXMTPA', RC )
+       CALL HCO_ERROR( 'FLUXMTPA', RC )
        RETURN
     ENDIF
     Inst%FLUXMTPA = 0.0_hp
 
     ALLOCATE( Inst%FLUXMTPO( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXMTPO', RC )
+       CALL HCO_ERROR( 'FLUXMTPO', RC )
        RETURN
     ENDIF
     Inst%FLUXMTPO = 0.0_hp
 
     ALLOCATE( Inst%FLUXSESQ( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXSESQ', RC )
+       CALL HCO_ERROR( 'FLUXSESQ', RC )
        RETURN
     ENDIF
     Inst%FLUXSESQ = 0.0_hp
 
     ALLOCATE( Inst%FLUXSOAP( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXSOAP', RC )
+       CALL HCO_ERROR( 'FLUXSOAP', RC )
        RETURN
     ENDIF
     Inst%FLUXSOAP = 0.0_hp
 
     ALLOCATE( Inst%FLUXSOAS( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXSOAS', RC )
+       CALL HCO_ERROR( 'FLUXSOAS', RC )
        RETURN
     ENDIF
     Inst%FLUXSOAS = 0.0_hp
 
     ALLOCATE( Inst%FLUXALD2( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXALD2', RC )
+       CALL HCO_ERROR( 'FLUXALD2', RC )
        RETURN
     ENDIF
     Inst%FLUXALD2 = 0.0_hp
 
     ALLOCATE( Inst%FLUXMOH( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXMOH', RC )
+       CALL HCO_ERROR( 'FLUXMOH', RC )
        RETURN
     ENDIF
     Inst%FLUXMOH = 0.0_hp
 
     ALLOCATE( Inst%FLUXEOH( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXEOH', RC )
+       CALL HCO_ERROR( 'FLUXEOH', RC )
        RETURN
     ENDIF
     Inst%FLUXEOH = 0.0_hp
 
     ALLOCATE( Inst%FLUXAPIN( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXAPIN', RC )
+       CALL HCO_ERROR( 'FLUXAPIN', RC )
        RETURN
     ENDIF
-    Inst%FLUXAPIN = 0.0_hp
+    Inst%FLUXAPIN = 0.0_sp
 
     ALLOCATE( Inst%FLUXBPIN( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXBPIN', RC )
+       CALL HCO_ERROR( 'FLUXBPIN', RC )
        RETURN
     ENDIF
-    Inst%FLUXBPIN = 0.0_hp
+    Inst%FLUXBPIN = 0.0_sp
 
     ALLOCATE( Inst%FLUXSABI( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXBPIN', RC )
+       CALL HCO_ERROR( 'FLUXSABI', RC )
        RETURN
     ENDIF
-    Inst%FLUXBPIN = 0.0_hp
-
-    ALLOCATE( Inst%FLUXSABI( NX, NY ), STAT=AS )
-    IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXSABI', RC )
-       RETURN
-    ENDIF
-    Inst%FLUXSABI = 0.0_hp
+    Inst%FLUXSABI = 0.0_sp
 
     ALLOCATE( Inst%FLUXMYRC( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXMYRC', RC )
+       CALL HCO_ERROR( 'FLUXMYRC', RC )
        RETURN
     ENDIF
-    Inst%FLUXMYRC = 0.0_hp
+    Inst%FLUXMYRC = 0.0_sp
 
     ALLOCATE( Inst%FLUXCARE( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXCARE', RC )
+       CALL HCO_ERROR( 'FLUXCARE', RC )
        RETURN
     ENDIF
-    Inst%FLUXCARE = 0.0_hp
+    Inst%FLUXCARE = 0.0_sp
 
     ALLOCATE( Inst%FLUXOCIM( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXOCIM', RC )
+       CALL HCO_ERROR( 'FLUXOCIM', RC )
        RETURN
     ENDIF
-    Inst%FLUXOCIM = 0.0_hp
+    Inst%FLUXOCIM = 0.0_sp
 
     ALLOCATE( Inst%FLUXOMON( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err,  'FLUXOMON', RC )
+       CALL HCO_ERROR(  'FLUXOMON', RC )
        RETURN
     ENDIF
-    Inst%FLUXOMON = 0.0_hp
+    Inst%FLUXOMON = 0.0_sp
 
     ALLOCATE( Inst%FLUXFARN( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXFARN', RC )
+       CALL HCO_ERROR( 'FLUXFARN', RC )
        RETURN
     ENDIF
-    Inst%FLUXFARN = 0.0_hp
+    Inst%FLUXFARN = 0.0_sp
 
     ALLOCATE( Inst%FLUXBCAR( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXBCAR', RC )
+       CALL HCO_ERROR( 'FLUXBCAR', RC )
        RETURN
     ENDIF
-    Inst%FLUXBCAR = 0.0_hp
+    Inst%FLUXBCAR = 0.0_sp
 
     ALLOCATE( Inst%FLUXOSQT( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXOSQT', RC )
+       CALL HCO_ERROR( 'FLUXOSQT', RC )
        RETURN
     ENDIF
-    Inst%FLUXOSQT = 0.0_hp
+    Inst%FLUXOSQT = 0.0_sp
 
     ALLOCATE( Inst%FLUXMBOX( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXMBOX', RC )
+       CALL HCO_ERROR( 'FLUXMBOX', RC )
        RETURN
     ENDIF
-    Inst%FLUXMBOX = 0.0_hp
+    Inst%FLUXMBOX = 0.0_sp
 
     ALLOCATE( Inst%FLUXFAXX( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXFAXX', RC )
+       CALL HCO_ERROR( 'FLUXFAXX', RC )
        RETURN
     ENDIF
-    Inst%FLUXFAXX = 0.0_hp
+    Inst%FLUXFAXX = 0.0_sp
 
     ALLOCATE( Inst%FLUXAAXX( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'FLUXAAXX', RC )
+       CALL HCO_ERROR( 'FLUXAAXX', RC )
        RETURN
     ENDIF
-    Inst%FLUXAAXX = 0.0_hp
+    Inst%FLUXAAXX = 0.0_sp
 
     ALLOCATE( Inst%ARRAY_16( NX, NY, 16 ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'ARRAY_16', RC )
+       CALL HCO_ERROR( 'ARRAY_16', RC )
        RETURN
     ENDIF
     Inst%ARRAY_16 = 0.0_hp
@@ -4431,10 +4279,9 @@ CONTAINS
                Inst%AEF_CARE ( NX, NY ), &
                Inst%AEF_LIMO ( NX, NY ), &
                Inst%AEF_OCIM ( NX, NY ), &
-               Inst%AEF_SABI ( NX, NY ), &
-               Inst%GEIA_ORVC( NX, NY ), STAT=AS )
+               Inst%AEF_SABI ( NX, NY ), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoState%Config%Err, 'AEF allocation error', RC )
+       CALL HCO_ERROR( 'AEF allocation error', RC )
        RETURN
     ENDIF
     Inst%AEF_ISOP  = 0.0_hp
@@ -4444,25 +4291,10 @@ CONTAINS
     Inst%AEF_LIMO  = 0.0_hp
     Inst%AEF_OCIM  = 0.0_hp
     Inst%AEF_SABI  = 0.0_hp
-    Inst%GEIA_ORVC = 0.0_hp
 
     !=================================================================
     ! Create manual diagnostics
     !=================================================================
-    CALL Diagn_Create( HcoState  = HcoState,              &
-                       cName     = 'InvMEGAN_ACET_MONO',  &
-                       ExtNr     = ExtNr,                 &
-                       Cat       = -1,                    &
-                       Hier      = -1,                    &
-                       HcoID     = -1,                    &
-                       SpaceDim  = 2,                     &
-                       OutUnit   = 'kg/m2/s',             &
-                       OutOper   = 'Mean',                &
-                       AutoFill  = 1,                     &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual, &
-                       RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
     CALL Diagn_Create( HcoState  = HcoState,              &
                        cName     = 'InvMEGAN_ACET_MBOX',  &
                        ExtNr     = ExtNr,                 &
@@ -4471,11 +4303,13 @@ CONTAINS
                        HcoID     = -1,                    &
                        SpaceDim  = 2,                     &
                        OutUnit   = 'kg/m2/s',             &
-                       OutOper   = 'Mean',                &
-                       AutoFill  = 1,                     &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual, &
+                       AutoFill  = 0,                     &
+                       Trgt2D    = Inst%FLUXACETmb,       &
                        RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 45', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL Diagn_Create( HcoState  = HcoState,              &
                        cName     = 'InvMEGAN_ACET_DIRECT',&
@@ -4485,11 +4319,13 @@ CONTAINS
                        HcoID     = -1,                    &
                        SpaceDim  = 2,                     &
                        OutUnit   = 'kg/m2/s',             &
-                       OutOper   = 'Mean',                &
-                       AutoFill  = 1,                     &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual, &
+                       AutoFill  = 0,                     &
+                       Trgt2D    = Inst%FLUXACETbg,       &
                        RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 46', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL Diagn_Create( HcoState  = HcoState,              &
                        cName     = 'InvMEGAN_APIN',       &
@@ -4499,11 +4335,13 @@ CONTAINS
                        HcoID     = -1,                    &
                        SpaceDim  = 2,                     &
                        OutUnit   = 'kg/m2/s',             &
-                       OutOper   = 'Mean',                &
-                       AutoFill  = 1,                     &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual, &
+                       AutoFill  = 0,                     &
+                       Trgt2D    = Inst%FLUXAPIN,         &
                        RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 47', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL Diagn_Create( HcoState  = HcoState,              &
                        cName     = 'InvMEGAN_BPIN',       &
@@ -4513,11 +4351,13 @@ CONTAINS
                        HcoID     = -1,                    &
                        SpaceDim  = 2,                     &
                        OutUnit   = 'kg/m2/s',             &
-                       OutOper   = 'Mean',                &
-                       AutoFill  = 1,                     &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual, &
+                       AutoFill  = 0,                     &
+                       Trgt2D    = Inst%FLUXBPIN,         &
                        RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 48', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL Diagn_Create( HcoState  = HcoState,              &
                        cName     = 'InvMEGAN_SABI',       &
@@ -4527,11 +4367,13 @@ CONTAINS
                        HcoID     = -1,                    &
                        SpaceDim  = 2,                     &
                        OutUnit   = 'kg/m2/s',             &
-                       OutOper   = 'Mean',                &
-                       AutoFill  = 1,                     &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual, &
+                       AutoFill  = 0,                     &
+                       Trgt2D    = Inst%FLUXSABI,         &
                        RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 49', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL Diagn_Create( HcoState  = HcoState,              &
                        cName     = 'InvMEGAN_MYRC',       &
@@ -4541,11 +4383,13 @@ CONTAINS
                        HcoID     = -1,                    &
                        SpaceDim  = 2,                     &
                        OutUnit   = 'kg/m2/s',             &
-                       OutOper   = 'Mean',                &
-                       AutoFill  = 1,                     &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual, &
+                       AutoFill  = 0,                     &
+                       Trgt2D    = Inst%FLUXMYRC,         &
                        RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 50', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL Diagn_Create( HcoState  = HcoState,              &
                        cName     = 'InvMEGAN_CARE',       &
@@ -4555,11 +4399,13 @@ CONTAINS
                        HcoID     = -1,                    &
                        SpaceDim  = 2,                     &
                        OutUnit   = 'kg/m2/s',             &
-                       OutOper   = 'Mean',                &
-                       AutoFill  = 1,                     &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual, &
+                       AutoFill  = 0,                     &
+                       Trgt2D    = Inst%FLUXCARE,         &
                        RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 51', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL Diagn_Create( HcoState  = HcoState,              &
                        cName     = 'InvMEGAN_OCIM',       &
@@ -4569,11 +4415,13 @@ CONTAINS
                        HcoID     = -1,                    &
                        SpaceDim  = 2,                     &
                        OutUnit   = 'kg/m2/s',             &
-                       OutOper   = 'Mean',                &
-                       AutoFill  = 1,                     &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual, &
+                       AutoFill  = 0,                     &
+                       Trgt2D    = Inst%FLUXOCIM,         &
                        RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 52', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL Diagn_Create( HcoState  = HcoState,              &
                        cName     = 'InvMEGAN_OMON',       &
@@ -4583,25 +4431,13 @@ CONTAINS
                        HcoID     = -1,                    &
                        SpaceDim  = 2,                     &
                        OutUnit   = 'kg/m2/s',             &
-                       OutOper   = 'Mean',                &
-                       AutoFill  = 1,                     &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual, &
+                       AutoFill  = 0,                     &
+                       Trgt2D    = Inst%FLUXOMON,         &
                        RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
-
-    CALL Diagn_Create( HcoState  = HcoState,              &
-                       cName     = 'InvMEGAN_MONX',       &
-                       ExtNr     = ExtNr,                 &
-                       Cat       = -1,                    &
-                       Hier      = -1,                    &
-                       HcoID     = -1,                    &
-                       SpaceDim  = 2,                     &
-                       OutUnit   = 'kg/m2/s',             &
-                       OutOper   = 'Mean',                &
-                       AutoFill  = 1,                     &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual, &
-                       RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 53', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL Diagn_Create( HcoState  = HcoState,              &
                        cName     = 'InvMEGAN_FARN',       &
@@ -4611,11 +4447,13 @@ CONTAINS
                        HcoID     = -1,                    &
                        SpaceDim  = 2,                     &
                        OutUnit   = 'kg/m2/s',             &
-                       OutOper   = 'Mean',                &
-                       AutoFill  = 1,                     &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual, &
+                       AutoFill  = 0,                     &
+                       Trgt2D    = Inst%FLUXFARN,         &
                        RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 54', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL Diagn_Create( HcoState  = HcoState,              &
                        cName     = 'InvMEGAN_BCAR',       &
@@ -4625,11 +4463,13 @@ CONTAINS
                        HcoID     = -1,                    &
                        SpaceDim  = 2,                     &
                        OutUnit   = 'kg/m2/s',             &
-                       OutOper   = 'Mean',                &
-                       AutoFill  = 1,                     &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual, &
+                       AutoFill  = 0,                     &
+                       Trgt2D    = Inst%FLUXBCAR,         &
                        RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 55', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL Diagn_Create( HcoState  = HcoState,              &
                        cName     = 'InvMEGAN_OSQT',       &
@@ -4639,11 +4479,13 @@ CONTAINS
                        HcoID     = -1,                    &
                        SpaceDim  = 2,                     &
                        OutUnit   = 'kg/m2/s',             &
-                       OutOper   = 'Mean',                &
-                       AutoFill  = 1,                     &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual, &
+                       AutoFill  = 0,                     &
+                       Trgt2D    = Inst%FLUXOSQT,         &
                        RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 56', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL Diagn_Create( HcoState  = HcoState,              &
                        cName     = 'InvMEGAN_MBOX',       &
@@ -4653,11 +4495,13 @@ CONTAINS
                        HcoID     = -1,                    &
                        SpaceDim  = 2,                     &
                        OutUnit   = 'kg/m2/s',             &
-                       OutOper   = 'Mean',                &
-                       AutoFill  = 1,                     &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual, &
+                       AutoFill  = 0,                     &
+                       Trgt2D    = Inst%FLUXMBOX,         &
                        RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 57', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL Diagn_Create( HcoState  = HcoState,              &
                        cName     = 'InvMEGAN_FAXX',       &
@@ -4667,11 +4511,13 @@ CONTAINS
                        HcoID     = -1,                    &
                        SpaceDim  = 2,                     &
                        OutUnit   = 'kg/m2/s',             &
-                       OutOper   = 'Mean',                &
-                       AutoFill  = 1,                     &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual, &
+                       AutoFill  = 0,                     &
+                       Trgt2D    = Inst%FLUXFAXX,         &
                        RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 58', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL Diagn_Create( HcoState  = HcoState,              &
                        cName     = 'InvMEGAN_AAXX',       &
@@ -4681,11 +4527,13 @@ CONTAINS
                        HcoID     = -1,                    &
                        SpaceDim  = 2,                     &
                        OutUnit   = 'kg/m2/s',             &
-                       OutOper   = 'Mean',                &
-                       AutoFill  = 1,                     &
-                       COL       = HcoState%Diagn%HcoDiagnIDManual, &
+                       AutoFill  = 0,                     &
+                       Trgt2D    = Inst%FLUXAAXX,         &
                        RC        = RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 59', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     !=================================================================
     ! Initialize internal diagnostics. These are the restart variables
@@ -4693,23 +4541,38 @@ CONTAINS
     !=================================================================
     CALL HCO_RestartDefine ( HcoState, 'LAI_PREVDAY', &
                              Inst%LAI_PREVDAY, '1', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 60', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_RestartDefine ( HcoState, 'T_PREVDAY', &
                              Inst%T_LAST24H,   'K', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 61', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_RestartDefine ( HcoState, 'T_DAVG', &
                              Inst%T_LASTXDAYS, 'K', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 62', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_RestartDefine (  HcoState, 'PARDR_DAVG', &
                              Inst%PARDR_LASTXDAYS, 'W/m2', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 63', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL HCO_RestartDefine ( HcoState, 'PARDF_DAVG', &
                              Inst%PARDF_LASTXDAYS, 'W/m2', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 64', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     !=================================================================
     ! The original MEGAN code used to read the emission factors here.
@@ -4741,7 +4604,7 @@ CONTAINS
   END SUBROUTINE HCOX_Megan_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4769,7 +4632,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  05 Aug 2013 - C. Keller   - Initial version
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4781,7 +4644,7 @@ CONTAINS
   END SUBROUTINE HCOX_MEGAN_FINAL
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4803,7 +4666,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4836,7 +4699,7 @@ CONTAINS
   END SUBROUTINE InstGet
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4866,7 +4729,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4914,7 +4777,7 @@ CONTAINS
   END SUBROUTINE InstCreate
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4934,7 +4797,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4954,84 +4817,324 @@ CONTAINS
     ! Instance-specific deallocation
     IF ( ASSOCIATED(Inst) ) THEN
 
-       IF ( ASSOCIATED( Inst%GEIA_ORVC   ) ) DEALLOCATE( Inst%GEIA_ORVC   )
-       IF ( ASSOCIATED( Inst%ARRAY_16    ) ) DEALLOCATE( Inst%ARRAY_16    )
-       IF ( ASSOCIATED( Inst%NORM_FAC    ) ) DEALLOCATE( Inst%NORM_FAC    )
-       IF ( ASSOCIATED( Inst%AEF_ISOP    ) ) DEALLOCATE( Inst%AEF_ISOP    )
-       IF ( ASSOCIATED( Inst%AEF_MBOX    ) ) DEALLOCATE( Inst%AEF_MBOX    )
-       IF ( ASSOCIATED( Inst%AEF_BPIN    ) ) DEALLOCATE( Inst%AEF_BPIN    )
-       IF ( ASSOCIATED( Inst%AEF_CARE    ) ) DEALLOCATE( Inst%AEF_CARE    )
-       IF ( ASSOCIATED( Inst%AEF_LIMO    ) ) DEALLOCATE( Inst%AEF_LIMO    )
-       IF ( ASSOCIATED( Inst%AEF_OCIM    ) ) DEALLOCATE( Inst%AEF_OCIM    )
-       IF ( ASSOCIATED( Inst%AEF_SABI    ) ) DEALLOCATE( Inst%AEF_SABI    )
-       IF ( ASSOCIATED( Inst%AEF_APIN    ) ) DEALLOCATE( Inst%AEF_APIN    )
-       IF ( ASSOCIATED( Inst%AEF_MYRC    ) ) DEALLOCATE( Inst%AEF_MYRC    )
-       IF ( ASSOCIATED( Inst%AEF_OMON    ) ) DEALLOCATE( Inst%AEF_OMON    )
-       IF ( ASSOCIATED( Inst%AEF_ACET    ) ) DEALLOCATE( Inst%AEF_ACET    )
-       IF ( ASSOCIATED( Inst%AEF_MOH     ) ) DEALLOCATE( Inst%AEF_MOH     )
-       IF ( ASSOCIATED( Inst%AEF_EOH     ) ) DEALLOCATE( Inst%AEF_EOH     )
-       IF ( ASSOCIATED( Inst%AEF_CH2O    ) ) DEALLOCATE( Inst%AEF_CH2O    )
-       IF ( ASSOCIATED( Inst%AEF_ALD2    ) ) DEALLOCATE( Inst%AEF_ALD2    )
-       IF ( ASSOCIATED( Inst%AEF_FAXX    ) ) DEALLOCATE( Inst%AEF_FAXX    )
-       IF ( ASSOCIATED( Inst%AEF_AAXX    ) ) DEALLOCATE( Inst%AEF_AAXX    )
-       IF ( ASSOCIATED( Inst%AEF_C2H4    ) ) DEALLOCATE( Inst%AEF_C2H4    )
-       IF ( ASSOCIATED( Inst%AEF_TOLU    ) ) DEALLOCATE( Inst%AEF_TOLU    )
-       IF ( ASSOCIATED( Inst%AEF_HCNX    ) ) DEALLOCATE( Inst%AEF_HCNX    )
-       IF ( ASSOCIATED( Inst%AEF_PRPE    ) ) DEALLOCATE( Inst%AEF_PRPE    )
-       IF ( ASSOCIATED( Inst%AEF_FARN    ) ) DEALLOCATE( Inst%AEF_FARN    )
-       IF ( ASSOCIATED( Inst%AEF_BCAR    ) ) DEALLOCATE( Inst%AEF_BCAR    )
-       IF ( ASSOCIATED( Inst%AEF_OSQT    ) ) DEALLOCATE( Inst%AEF_OSQT    )
-       IF ( ASSOCIATED( Inst%FLUXISOP    ) ) DEALLOCATE( Inst%FLUXISOP    )
-       IF ( ASSOCIATED( Inst%FLUXMONO    ) ) DEALLOCATE( Inst%FLUXMONO    )
-       IF ( ASSOCIATED( Inst%FLUXACETmo  ) ) DEALLOCATE( Inst%FLUXACETmo  )
-       IF ( ASSOCIATED( Inst%FLUXACETmb  ) ) DEALLOCATE( Inst%FLUXACETmb  )
-       IF ( ASSOCIATED( Inst%FLUXACETbg  ) ) DEALLOCATE( Inst%FLUXACETbg  )
-       IF ( ASSOCIATED( Inst%FLUXPRPE    ) ) DEALLOCATE( Inst%FLUXPRPE    )
-       IF ( ASSOCIATED( Inst%FLUXC2H4    ) ) DEALLOCATE( Inst%FLUXC2H4    )
-       IF ( ASSOCIATED( Inst%FLUXLIMO    ) ) DEALLOCATE( Inst%FLUXLIMO    )
-       IF ( ASSOCIATED( Inst%FLUXMTPA    ) ) DEALLOCATE( Inst%FLUXMTPA    )
-       IF ( ASSOCIATED( Inst%FLUXMTPO    ) ) DEALLOCATE( Inst%FLUXMTPO    )
-       IF ( ASSOCIATED( Inst%FLUXSESQ    ) ) DEALLOCATE( Inst%FLUXSESQ    )
-       IF ( ASSOCIATED( Inst%FLUXSOAP    ) ) DEALLOCATE( Inst%FLUXSOAP    )
-       IF ( ASSOCIATED( Inst%FLUXSOAS    ) ) DEALLOCATE( Inst%FLUXSOAS    )
-       IF ( ASSOCIATED( Inst%FLUXALD2    ) ) DEALLOCATE( Inst%FLUXALD2    )
-       IF ( ASSOCIATED( Inst%FLUXMOH     ) ) DEALLOCATE( Inst%FLUXMOH     )
-       IF ( ASSOCIATED( Inst%FLUXEOH     ) ) DEALLOCATE( Inst%FLUXEOH     )
-       IF ( ASSOCIATED( Inst%FLUXAPIN    ) ) DEALLOCATE( Inst%FLUXAPIN    )
-       IF ( ASSOCIATED( Inst%FLUXBPIN    ) ) DEALLOCATE( Inst%FLUXBPIN    )
-       IF ( ASSOCIATED( Inst%FLUXSABI    ) ) DEALLOCATE( Inst%FLUXSABI    )
-       IF ( ASSOCIATED( Inst%FLUXMYRC    ) ) DEALLOCATE( Inst%FLUXMYRC    )
-       IF ( ASSOCIATED( Inst%FLUXCARE    ) ) DEALLOCATE( Inst%FLUXCARE    )
-       IF ( ASSOCIATED( Inst%FLUXOCIM    ) ) DEALLOCATE( Inst%FLUXOCIM    )
-       IF ( ASSOCIATED( Inst%FLUXOMON    ) ) DEALLOCATE( Inst%FLUXOMON    )
-       IF ( ASSOCIATED( Inst%FLUXMBOX    ) ) DEALLOCATE( Inst%FLUXMBOX    )
-       IF ( ASSOCIATED( Inst%FLUXFAXX    ) ) DEALLOCATE( Inst%FLUXFAXX    )
-       IF ( ASSOCIATED( Inst%FLUXAAXX    ) ) DEALLOCATE( Inst%FLUXAAXX    )
-       IF ( ASSOCIATED( Inst%FLUXFARN    ) ) DEALLOCATE( Inst%FLUXFARN    )
-       IF ( ASSOCIATED( Inst%FLUXBCAR    ) ) DEALLOCATE( Inst%FLUXBCAR    )
-       IF ( ASSOCIATED( Inst%FLUXOSQT    ) ) DEALLOCATE( Inst%FLUXOSQT    )
+       !---------------------------------------------------------------------
+       ! Deallocate fields of Inst before popping off from the list
+       ! in order to avoid memory leaks (Bob Yantosca (17 Aug 2022)
+       !---------------------------------------------------------------------
+       IF ( ASSOCIATED( Inst%ARRAY_16 ) ) THEN
+          DEALLOCATE( Inst%ARRAY_16 )
+       ENDIF
+       Inst%ARRAY_16 => NULL()
 
-       IF ( ASSOCIATED( Inst%LAI_PREVDAY ) ) DEALLOCATE( Inst%LAI_PREVDAY )
-       IF ( ASSOCIATED( Inst%T_LASTXDAYS ) ) DEALLOCATE( Inst%T_LASTXDAYS )
-       IF ( ASSOCIATED( Inst%T_LAST24H   ) ) DEALLOCATE( Inst%T_LAST24H   )
+       IF ( ASSOCIATED( Inst%NORM_FAC ) ) THEN
+          DEALLOCATE( Inst%NORM_FAC )
+       ENDIF
+       Inst%NORM_FAC => NULL()
 
-       IF ( ASSOCIATED( Inst%PARDF_LASTXDAYS ) ) &
-            DEALLOCATE( Inst%PARDF_LASTXDAYS )
-       IF ( ASSOCIATED( Inst%PARDR_LASTXDAYS ) ) &
-            DEALLOCATE( Inst%PARDR_LASTXDAYS )
+       IF ( ASSOCIATED( Inst%AEF_ISOP ) ) THEN
+          DEALLOCATE( Inst%AEF_ISOP )
+       ENDIF
+       Inst%AEF_ISOP => NULL()
 
-       ! ----------------------------------------------------------------
+       IF ( ASSOCIATED( Inst%AEF_MBOX ) ) THEN
+          DEALLOCATE( Inst%AEF_MBOX )
+       ENDIF
+       Inst%AEF_MBOX => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_BPIN ) ) THEN
+          DEALLOCATE( Inst%AEF_BPIN )
+       ENDIF
+       Inst%AEF_BPIN => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_CARE ) ) THEN
+          DEALLOCATE( Inst%AEF_CARE )
+       ENDIF
+       Inst%AEF_CARE => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_LIMO ) ) THEN
+          DEALLOCATE( Inst%AEF_LIMO )
+       ENDIF
+       Inst%AEF_LIMO => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_OCIM ) ) THEN
+          DEALLOCATE( Inst%AEF_OCIM )
+       ENDIF
+       Inst%AEF_OCIM => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_SABI ) ) THEN
+          DEALLOCATE( Inst%AEF_SABI )
+       ENDIF
+       Inst%AEF_SABI => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_APIN ) ) THEN
+          DEALLOCATE( Inst%AEF_APIN )
+       ENDIF
+       Inst%AEF_APIN => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_MYRC ) ) THEN
+          DEALLOCATE( Inst%AEF_MYRC )
+       ENDIF
+       Inst%AEF_MYRC => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_OMON ) ) THEN
+          DEALLOCATE( Inst%AEF_OMON )
+       ENDIF
+       Inst%AEF_OMON => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_ACET ) ) THEN
+          DEALLOCATE( Inst%AEF_ACET )
+       ENDIF
+       Inst%AEF_ACET => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_MOH  ) ) THEN
+          DEALLOCATE( Inst%AEF_MOH  )
+       ENDIF
+       Inst%AEF_MOH => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_EOH  ) ) THEN
+          DEALLOCATE( Inst%AEF_EOH  )
+       ENDIF
+       Inst%AEF_EOH  => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_CH2O ) ) THEN
+          DEALLOCATE( Inst%AEF_CH2O )
+       ENDIF
+       Inst%AEF_CH2O => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_ALD2 ) ) THEN
+          DEALLOCATE( Inst%AEF_ALD2 )
+       ENDIF
+       Inst%AEF_ALD2 => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_FAXX ) ) THEN
+          DEALLOCATE( Inst%AEF_FAXX )
+       ENDIF
+       Inst%AEF_FAXX => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_AAXX ) ) THEN
+          DEALLOCATE( Inst%AEF_AAXX )
+       ENDIF
+       Inst%AEF_AAXX => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_C2H4 ) ) THEN
+          DEALLOCATE( Inst%AEF_C2H4 )
+       ENDIF
+       Inst%AEF_C2H4 => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_TOLU ) ) THEN
+          DEALLOCATE( Inst%AEF_TOLU )
+       ENDIF
+       Inst%AEF_TOLU => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_HCNX ) ) THEN
+          DEALLOCATE( Inst%AEF_HCNX )
+       ENDIF
+       Inst%AEF_HCNX => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_PRPE ) ) THEN
+          DEALLOCATE( Inst%AEF_PRPE )
+       ENDIF
+       Inst%AEF_PRPE => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_FARN ) ) THEN
+          DEALLOCATE( Inst%AEF_FARN )
+       ENDIF
+       Inst%AEF_FARN => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_BCAR ) ) THEN
+          DEALLOCATE( Inst%AEF_BCAR )
+       ENDIF
+       Inst%AEF_BCAR => NULL()
+
+       IF ( ASSOCIATED( Inst%AEF_OSQT ) ) THEN
+          DEALLOCATE( Inst%AEF_OSQT )
+       ENDIF
+       Inst%AEF_OSQT => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXISOP ) ) THEN
+          DEALLOCATE( Inst%FLUXISOP )
+       ENDIF
+       Inst%FLUXISOP => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXMONO ) ) THEN
+          DEALLOCATE( Inst%FLUXMONO )
+       ENDIF
+       Inst%FLUXMONO => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXACET ) ) THEN
+          DEALLOCATE( Inst%FLUXACET )
+       ENDIF
+       Inst%FLUXACET => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXACETmb ) ) THEN
+          DEALLOCATE( Inst%FLUXACETmb )
+       ENDIF
+       Inst%FLUXACETmb => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXACETbg ) ) THEN
+          DEALLOCATE( Inst%FLUXACETbg )
+       ENDIF
+       Inst%FLUXACETbg => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXPRPE ) ) THEN
+          DEALLOCATE( Inst%FLUXPRPE )
+       ENDIF
+       Inst%FLUXPRPE => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXC2H4 ) ) THEN
+          DEALLOCATE( Inst%FLUXC2H4 )
+       ENDIF
+       Inst%FLUXC2H4 => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXLIMO ) ) THEN
+          DEALLOCATE( Inst%FLUXLIMO )
+       ENDIF
+       Inst%FLUXLIMO => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXMTPA ) ) THEN
+          DEALLOCATE( Inst%FLUXMTPA )
+       ENDIF
+       Inst%FLUXMTPA => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXMTPO ) ) THEN
+          DEALLOCATE( Inst%FLUXMTPO )
+       ENDIF
+       Inst%FLUXMTPO => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXSESQ ) ) THEN
+          DEALLOCATE( Inst%FLUXSESQ )
+       ENDIF
+       Inst%FLUXSESQ => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXSOAP ) ) THEN
+          DEALLOCATE( Inst%FLUXSOAP )
+       ENDIF
+       Inst%FLUXSOAP => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXSOAS ) ) THEN
+          DEALLOCATE( Inst%FLUXSOAS )
+       ENDIF
+       Inst%FLUXSOAS => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXALD2 ) ) THEN
+          DEALLOCATE( Inst%FLUXALD2 )
+       ENDIF
+       Inst%FLUXALD2 => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXMOH ) ) THEN
+          DEALLOCATE( Inst%FLUXMOH )
+       ENDIF
+       Inst%FLUXMOH => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXEOH ) ) THEN
+          DEALLOCATE( Inst%FLUXEOH )
+       ENDIF
+       Inst%FLUXEOH => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXAPIN ) ) THEN
+          DEALLOCATE( Inst%FLUXAPIN )
+       ENDIF
+       Inst%FLUXAPIN => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXBPIN ) ) THEN
+          DEALLOCATE( Inst%FLUXBPIN )
+       ENDIF
+       Inst%FLUXBPIN => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXSABI ) ) THEN
+          DEALLOCATE( Inst%FLUXSABI )
+       ENDIF
+       Inst%FLUXSABI => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXMYRC ) ) THEN
+          DEALLOCATE( Inst%FLUXMYRC )
+       ENDIF
+       Inst%FLUXMYRC => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXCARE ) ) THEN
+          DEALLOCATE( Inst%FLUXCARE )
+       ENDIF
+       Inst%FLUXCARE => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXOCIM ) ) THEN
+          DEALLOCATE( Inst%FLUXOCIM )
+       ENDIF
+       Inst%FLUXOCIM => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXOMON ) ) THEN
+          DEALLOCATE( Inst%FLUXOMON )
+       ENDIF
+       Inst%FLUXOMON => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXMBOX ) ) THEN
+          DEALLOCATE( Inst%FLUXMBOX )
+       ENDIF
+       Inst%FLUXMBOX => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXFAXX ) ) THEN
+          DEALLOCATE( Inst%FLUXFAXX )
+       ENDIF
+       Inst%FLUXFAXX => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXAAXX ) ) THEN
+          DEALLOCATE( Inst%FLUXAAXX )
+       ENDIF
+       Inst%FLUXAAXX => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXFARN ) ) THEN
+          DEALLOCATE( Inst%FLUXFARN )
+       ENDIF
+       Inst%FLUXFARN => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXBCAR ) ) THEN
+          DEALLOCATE( Inst%FLUXBCAR )
+       ENDIF
+       Inst%FLUXBCAR => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUXOSQT ) ) THEN
+          DEALLOCATE( Inst%FLUXOSQT )
+       ENDIF
+       Inst%FLUXOSQT => NULL()
+
+       IF ( ASSOCIATED( Inst%LAI_PREVDAY ) ) THEN
+          DEALLOCATE( Inst%LAI_PREVDAY )
+       ENDIF
+       Inst%LAI_PREVDAY => NULL()
+
+       IF ( ASSOCIATED( Inst%T_LASTXDAYS ) ) THEN
+          DEALLOCATE( Inst%T_LASTXDAYS )
+       ENDIF
+       Inst%T_LASTXDAYS => NULL()
+
+       IF ( ASSOCIATED( Inst%T_LAST24H ) ) THEN
+          DEALLOCATE( Inst%T_LAST24H )
+       ENDIF
+       Inst%T_LAST24H => NULL()
+
+       IF ( ASSOCIATED( Inst%PARDF_LASTXDAYS ) ) THEN
+          DEALLOCATE( Inst%PARDF_LASTXDAYS )
+       ENDIF
+       Inst%PARDF_LASTXDAYS => NULL()
+
+       IF ( ASSOCIATED( Inst%PARDR_LASTXDAYS ) ) THEN
+          DEALLOCATE( Inst%PARDR_LASTXDAYS )
+       ENDIF
+       Inst%PARDR_LASTXDAYS => NULL()  
+
+       !---------------------------------------------------------------------
        ! Pop off instance from list
-       ! ----------------------------------------------------------------
+       !---------------------------------------------------------------------
        IF ( ASSOCIATED(PrevInst) ) THEN
           PrevInst%NextInst => Inst%NextInst
        ELSE
           AllInst => Inst%NextInst
        ENDIF
        DEALLOCATE(Inst)
-       Inst => NULL()
-
     ENDIF
+
+    ! Free pointers before exiting
+    PrevInst => NULL()
+    Inst     => NULL()
 
   END SUBROUTINE InstRemove
 !EOC

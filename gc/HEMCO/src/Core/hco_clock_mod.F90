@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -57,7 +57,7 @@ MODULE HCO_CLOCK_MOD
 ! !USES:
 !
   USE HCO_Error_Mod
-  USE Julday_Mod
+  USE HCO_Julday_Mod
   USE HCO_TYPES_MOD, ONLY : HcoClock
 
   IMPLICIT NONE
@@ -91,15 +91,7 @@ MODULE HCO_CLOCK_MOD
 !
 ! !REVISION HISTORY:
 !  29 Dec 2012 - C. Keller   - Initialization
-!  12 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  12 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
-!  08 Oct 2014 - C. Keller   - Added mid-month day calculation
-!  03 Dec 2014 - C. Keller   - Now use fixed number of time zones (24)
-!  12 Jan 2015 - C. Keller   - Added emission time variables.
-!  02 Feb 2015 - C. Keller   - Added option to get time zones from file
-!  23 Feb 2015 - R. Yantosca - Added routine HcoClock_InitTzPtr
-!  11 Jun 2015 - C. Keller   - Added simulation times and option to fix
-!                              emission year, month, day, and/or hour.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -128,7 +120,7 @@ MODULE HCO_CLOCK_MOD
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -153,8 +145,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Sep 2013 - C. Keller - Initialization
-!  12 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  12 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -162,14 +153,19 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     INTEGER                  :: AS
+    CHARACTER(LEN=255)       :: LOC
 
     !======================================================================
     ! HcoClock_Init begins here!
     !======================================================================
+    LOC = 'HcoClock_Init (HCO_CLOCK_MOD.F90)'
 
     ! Enter
-    CALL HCO_ENTER ( HcoState%Config%Err, 'HcoClock_Init (HCO_CLOCK_MOD.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER ( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Eventually allocate clock object and set all values to -1
     IF ( .NOT. ASSOCIATED ( HcoState%Clock ) ) THEN
@@ -221,35 +217,35 @@ CONTAINS
 
        ALLOCATE ( HcoState%Clock%ThisLocYear(HcoState%Clock%ntz), STAT=AS )
        IF ( AS /= 0 ) THEN
-          CALL HCO_ERROR ( HcoState%Config%Err, 'ThisLocYear', RC )
+          CALL HCO_ERROR ( 'ThisLocYear', RC )
           RETURN
        ENDIF
        HcoState%Clock%ThisLocYear(:) = -1
 
        ALLOCATE ( HcoState%Clock%ThisLocMonth(HcoState%Clock%ntz), STAT=AS )
        IF ( AS /= 0 ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'ThisLocMonth', RC )
+          CALL HCO_ERROR( 'ThisLocMonth', RC )
           RETURN
        ENDIF
        HcoState%Clock%ThisLocMonth(:) = -1
 
        ALLOCATE ( HcoState%Clock%ThisLocDay(HcoState%Clock%ntz), STAT=AS )
        IF ( AS /= 0 ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'ThisLocDay', RC )
+          CALL HCO_ERROR( 'ThisLocDay', RC )
           RETURN
        ENDIF
        HcoState%Clock%ThisLocDay(:) = -1
 
        ALLOCATE ( HcoState%Clock%ThisLocWD(HcoState%Clock%ntz), STAT=AS )
        IF ( AS /= 0 ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'ThisLocWD', RC )
+          CALL HCO_ERROR( 'ThisLocWD', RC )
           RETURN
        ENDIF
        HcoState%Clock%ThisLocWD(:) = -1
 
        ALLOCATE ( HcoState%Clock%ThisLocHour(HcoState%Clock%ntz), STAT=AS )
        IF ( AS /= 0 ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'ThisLocHour', RC )
+          CALL HCO_ERROR( 'ThisLocHour', RC )
           RETURN
        ENDIF
        HcoState%Clock%ThisLocHour(:) = -1.0_sp
@@ -260,7 +256,10 @@ CONTAINS
 
        ! Initialize TIMEZONES array. Initialize as pointer (dims=0)
        CALL HCO_ArrInit( HcoState%Clock%TIMEZONES, 0, 0, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
     ENDIF
 
@@ -270,7 +269,7 @@ CONTAINS
   END SUBROUTINE HcoClock_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -308,7 +307,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  23 Feb 2015 - R. Yantosca - Initial version
-!  See https://github.com/geoschem/geos-chem for complete history
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -343,7 +342,7 @@ CONTAINS
   END SUBROUTINE HcoClock_InitTzPtr
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -384,11 +383,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  29 Dec 2012 - C. Keller   - Initialization
-!  12 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  12 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
-!  08 Jul 2014 - C. Keller   - Now calculate DOY if not provided
-!  12 Jan 2015 - C. Keller   - Added IsEmisTime
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -400,7 +395,7 @@ CONTAINS
     REAL(sp)                 :: UTC
     INTEGER                  :: DUM, DOY
     INTEGER                  :: UseYr, UseMt, UseDy, UseHr
-    CHARACTER(LEN=255)       :: MSG
+    CHARACTER(LEN=255)       :: MSG, ErrMsg
     LOGICAL                  :: FND, NewStep, EmisTime, WasEmisTime
 
     !======================================================================
@@ -421,7 +416,11 @@ CONTAINS
     IF ( Clock%nSteps == 0 ) THEN
        CALL GetExtOpt( CF, CoreNr, 'Emission year', OptValInt=DUM, &
                        FOUND=FND, RC=RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+          ErrMsg = 'Error getting emission year'
+          CALL HCO_Error( ErrMsg, RC )
+          RETURN
+       ENDIF
        IF ( FND ) THEN
           Clock%FixYY = DUM
           WRITE(MSG,*) 'Emission year will be fixed to day ', Clock%FixYY
@@ -430,7 +429,12 @@ CONTAINS
 
        CALL GetExtOpt( CF, CoreNr, 'Emission month', OptValInt=DUM, &
                        FOUND=FND, RC=RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+          ErrMsg = 'Error getting emission month'
+          CALL HCO_Error( ErrMsg, RC )
+          RETURN
+       ENDIF
+
        IF ( FND ) THEN
           Clock%FixMM = DUM
           WRITE(MSG,*) 'Emission month will be fixed to day ', Clock%FixMM
@@ -439,7 +443,12 @@ CONTAINS
 
        CALL GetExtOpt( CF, CoreNr, 'Emission day', OptValInt=DUM, &
                        FOUND=FND, RC=RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+          ErrMsg = 'Error getting emission day'
+          CALL HCO_Error( ErrMsg, RC )
+          RETURN
+       ENDIF
+
        IF ( FND ) THEN
           Clock%Fixdd = DUM
           WRITE(MSG,*) 'Emission day will be fixed to day ', Clock%Fixdd
@@ -448,7 +457,12 @@ CONTAINS
 
        CALL GetExtOpt( CF, CoreNr, 'Emission hour', OptValInt=DUM, &
                        FOUND=FND, RC=RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+          ErrMsg = 'Error getting emission hour'
+          CALL HCO_Error( ErrMsg, RC )
+          RETURN
+       ENDIF
+
        IF ( FND ) THEN
           Clock%Fixhh = DUM
           WRITE(MSG,*) 'Emission hour will be fixed to day ', Clock%Fixhh
@@ -532,7 +546,12 @@ CONTAINS
        ! Set local times
        ! ----------------------------------------------------------------
        CALL Set_LocalTime ( HcoState, Clock, UTC, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+          ErrMsg = 'Error setting local time'
+          CALL HCO_Error( ErrMsg, RC )
+          RETURN
+       ENDIF
+
 
        ! ----------------------------------------------------------------
        ! Update counter
@@ -620,7 +639,7 @@ CONTAINS
   END SUBROUTINE HcoClock_Set
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -685,10 +704,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  29 Dec 2012 - C. Keller - Initialization
-!  12 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  12 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
-!  08 Oct 2014 - C. Keller   - Added mid-month day arguments
-!  12 Jan 2015 - C. Keller   - Added IsEmisTime
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -785,7 +801,7 @@ CONTAINS
   END SUBROUTINE HcoClock_Get
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -849,10 +865,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  29 Dec 2012 - C. Keller   - Initialization
-!  12 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  12 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
-!  23 Feb 2015 - R. Yantosca - Remove call to Hco_GetPtr: this was causing
-!                              errors on runs with OpenMP parallelization
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -917,7 +930,7 @@ CONTAINS
 
     ! Check time zone index
     IF ( IX > HcoState%Clock%ntz ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'time zone index too large!', RC )
+       CALL HCO_ERROR ( 'time zone index too large!', RC )
        RETURN
     ENDIF
 
@@ -934,7 +947,7 @@ CONTAINS
   END SUBROUTINE HcoClock_GetLocal
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -959,10 +972,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  29 Dec 2012 - C. Keller   - Initialization
-!  12 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  12 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
-!  06 Apr 2015 - C. Keller   - Now use nEmisSteps and nSteps instead of
-!                              previous years.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -977,7 +987,7 @@ CONTAINS
   END FUNCTION HcoClock_First
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1002,6 +1012,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  08 May 2015 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1055,7 +1066,7 @@ CONTAINS
   END FUNCTION HcoClock_Rewind
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1080,8 +1091,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  29 Dec 2012 - C. Keller - Initialization
-!  12 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  12 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1095,7 +1105,7 @@ CONTAINS
   END FUNCTION HcoClock_NewYear
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1120,8 +1130,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  29 Dec 2012 - C. Keller - Initialization
-!  12 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  12 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1135,7 +1144,7 @@ CONTAINS
   END FUNCTION HcoClock_NewMonth
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1160,8 +1169,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  29 Dec 2012 - C. Keller - Initialization
-!  12 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  12 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1175,7 +1183,7 @@ CONTAINS
   END FUNCTION HcoClock_NewDay
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1200,8 +1208,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  29 Dec 2012 - C. Keller - Initialization
-!  12 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  12 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1215,7 +1222,7 @@ CONTAINS
   END FUNCTION HcoClock_NewHour
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1240,6 +1247,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  08 Dec 2019 - M. Sulprizio- Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1257,7 +1265,7 @@ CONTAINS
   END FUNCTION HcoClock_New3Hour
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1281,8 +1289,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  29 Dec 2012 - C. Keller - Initialization
-!  12 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  12 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1290,10 +1297,36 @@ CONTAINS
     !======================================================================
     ! HcoClock_Cleanup begins here!
     !======================================================================
-
     IF ( ASSOCIATED( Clock ) ) THEN
-       ! Make sure TIMEZONES array does not point to any content any more.
-       CALL HCO_ArrCleanup( Clock%TIMEZONES, DeepClean=.FALSE.)
+
+       ! Make sure TimeZones does not point to any content any more.
+       CALL HCO_ArrCleanup( Clock%TimeZones, DeepClean=.FALSE. )
+
+       ! We also need to free the pointer fields in the Clock object
+       IF ( ASSOCIATED( Clock%ThisLocYear ) ) THEN
+          DEALLOCATE( Clock%ThisLocYear )
+       ENDIF
+       Clock%ThisLocYear => NULL()
+
+       IF ( ASSOCIATED( Clock%ThisLocMonth ) ) THEN
+          DEALLOCATE( Clock%ThisLocMonth )
+       ENDIF
+       Clock%ThisLocMonth => NULL()
+
+       IF ( ASSOCIATED( Clock%ThisLocDay ) ) THEN
+          DEALLOCATE( Clock%ThisLocDay )
+       ENDIF
+       Clock%ThisLocDay => NULL()
+
+       IF ( ASSOCIATED( Clock%ThisLocWD ) ) THEN
+          DEALLOCATE( Clock%ThisLocWD )
+       ENDIF
+       Clock%ThisLocWD => NULL()
+
+       IF ( ASSOCIATED( Clock%ThisLocHour ) ) THEN
+          DEALLOCATE( Clock%ThisLocHour )
+       ENDIF
+       Clock%ThisLocHour => NULL()
 
        DEALLOCATE ( Clock )
     ENDIF
@@ -1302,7 +1335,7 @@ CONTAINS
   END SUBROUTINE HcoClock_Cleanup
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1333,8 +1366,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Dec 2013 - C. Keller - Initialization
-!  12 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  12 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1359,7 +1391,7 @@ CONTAINS
   END FUNCTION HCO_GetWeekday
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1383,8 +1415,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  13 Jan 2014 - C. Keller - Initial version
-!  12 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  12 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1422,7 +1453,7 @@ CONTAINS
   END FUNCTION Get_LastDayOfMonth
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1453,28 +1484,31 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  13 Jan 2014 - C. Keller   - Initial version
-!  12 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  12 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
-!  03 Dec 2014 - C. Keller   - Now use fixed number of time zones (24)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
 ! !LOCAL VARIABLES:
 !
-    INTEGER  :: I,      MtLastDay
-    REAL(sp) :: LocDt, DECloc
-    REAL(sp) :: ThisLocHour
-    INTEGER  :: ThisLocYear, ThisLocMonth
-    INTEGER  :: ThisLocDay,  ThisLocWD
+    INTEGER             :: I,      MtLastDay
+    REAL(sp)            :: LocDt, DECloc
+    REAL(sp)            :: ThisLocHour
+    INTEGER             :: ThisLocYear, ThisLocMonth
+    INTEGER             :: ThisLocDay,  ThisLocWD
+    CHARACTER(LEN=255)  :: LOC
 
     !-----------------------------------
     ! SET_LOCALTIME begins here!
     !-----------------------------------
+    LOC = 'SET_LOCALTIME (HCO_CLOCK_MOD.F90)'
 
     ! Enter
-    CALL HCO_ENTER ( HcoState%Config%Err, 'SET_LOCALTIME (HCO_CLOCK_MOD.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER ( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Loop over all time zones to account for different local times.
     DO I = 1, Clock%ntz
@@ -1562,7 +1596,7 @@ CONTAINS
   END SUBROUTINE Set_LocalTime
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1588,7 +1622,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  08 Jul 2014 - C. Keller - Initial version
-
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1616,7 +1650,7 @@ CONTAINS
   END FUNCTION HcoClock_CalcDOY
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1646,8 +1680,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  29 Jul 2014 - C. Keller - Initial version
-!  08 Sep 2014 - C. Keller - Bug fix: now calculate UTC as fraction of day.
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1658,10 +1691,12 @@ CONTAINS
     INTEGER                   :: YYYYMMDD, HHMMSS
     INTEGER                   :: Yr, Mt, Dy, Hr, Mn, Sc
     REAL(dp)                  :: DAY, UTC, JD
+    CHARACTER(LEN=255)        :: LOC
 
     !-----------------------------------
     ! HcoClock_Increase begins here!
     !-----------------------------------
+    LOC = 'HcoClock_Increase (HCO_CLOCK_MOD.F90)'
 
     ! Get pointer to HEMCO clock
     Clock => HcoState%Clock
@@ -1689,7 +1724,10 @@ CONTAINS
     ! Update HEMCO clock to new values
     CALL HcoClock_Set ( HcoState, Yr, Mt, Dy, Hr, Mn, Sc, &
                         IsEmisTime=EmisTime, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Cleanup
     Clock => NULL()
@@ -1700,7 +1738,7 @@ CONTAINS
   END SUBROUTINE HcoClock_Increase
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1726,6 +1764,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  13 Jan 2015 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1739,7 +1778,7 @@ CONTAINS
   END SUBROUTINE HcoClock_EmissionsDone
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1763,6 +1802,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 Nov 2016 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC

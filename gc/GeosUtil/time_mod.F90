@@ -416,7 +416,7 @@ CONTAINS
     ENDIF
 
     ! Error check THISNYMDb
-    IF ( THISNYMDb < 19000101 ) THEN
+    IF ( THISNYMDb < 17500101 ) THEN
        ErrMsg = 'NYMDb must be in the format YYYYMMDD!'
        CALL GC_Error( ErrMsg, RC, ThisLoc )
        RETURN
@@ -496,7 +496,7 @@ CONTAINS
     ENDIF
 
     ! Error check THISNYMDe
-    IF ( THISNYMDe < 19000101 ) THEN
+    IF ( THISNYMDe < 17500101 ) THEN
        ErrMsg = 'NYMDe must be in the format YYYYMMDD!'
        CALL GC_Error( ErrMsg, RC, ThisLoc )
        RETURN
@@ -634,15 +634,15 @@ CONTAINS
 
     ! Echo to stdout
     IF ( Input_Opt%amIRoot ) THEN
-       WRITE( 6, '(/,a)' ) 'SET_TIMESTEPS: setting GEOS-Chem timesteps!'
-       WRITE( 6, '(  a)' ) '-------------------------------------------'
-       WRITE( 6, '(''Chemistry  Timestep [sec] : '', i6)' ) TS_CHEM
-       WRITE( 6, '(''Convection Timestep [sec] : '', i6)' ) TS_CONV
-       WRITE( 6, '(''Dynamics   Timestep [sec] : '', i6)' ) TS_DYN
-       WRITE( 6, '(''Emission   Timestep [sec] : '', i6)' ) TS_EMIS
-       WRITE( 6, '(''Unit Conv  Timestep [sec] : '', i6)' ) TS_UNIT
-       WRITE( 6, '(''Diagnostic Timestep [sec] : '', i6)' ) TS_DIAG
-       WRITE( 6, '(''Radiation  Timestep [sec] : '', i6)' ) TS_RAD
+       WRITE( 6, '(/,a)' ) 'TIMESTEPS SETTINGS'
+       WRITE( 6, '(  a)' ) '------------------'
+       WRITE( 6, '(''Chemistry  Timestep [sec]   : '', i6)' ) TS_CHEM
+       WRITE( 6, '(''Convection Timestep [sec]   : '', i6)' ) TS_CONV
+       WRITE( 6, '(''Dynamics   Timestep [sec]   : '', i6)' ) TS_DYN
+       WRITE( 6, '(''Emission   Timestep [sec]   : '', i6)' ) TS_EMIS
+       WRITE( 6, '(''Unit Conv  Timestep [sec]   : '', i6)' ) TS_UNIT
+       WRITE( 6, '(''Diagnostic Timestep [sec]   : '', i6)' ) TS_DIAG
+       WRITE( 6, '(''Radiation  Timestep [sec]   : '', i6)' ) TS_RAD
     ENDIF
 
   END SUBROUTINE SET_TIMESTEPS
@@ -2737,27 +2737,8 @@ CONTAINS
 !EOP
 !------------------------------------------------------------------------------
 !BOC
-!
-! !LOCAL VARIABLES:
-!
-    INTEGER :: M, TMOD, TS
-
-    !=================================================================
-    ! ITS_TIME_FOR_RT begins here!
-    !=================================================================
-
-    ! Get half a time step value
-    M = TS_RAD/2
-
-    ! Elapsed time in this radiation step
-    TMOD =  MOD( ELAPSED_SEC, TS_RAD )
-
-    ! Smallest time step
-    TS = TS_DYN
-
-    ! It's time for radiation, when the current time is greater than
-    ! half step and the previous time was less.
-    FLAG = ( TMOD >= M ) .and. ( TMOD-TS < M )
+    ! Is it time for radiation?
+    FLAG = ( MOD( ELAPSED_SEC, TS_RAD ) == 0 )
 
   END FUNCTION ITS_TIME_FOR_RT
 !EOC
@@ -4034,8 +4015,7 @@ CONTAINS
     CALL YMD_EXTRACT( HHMMSS, HH, II, SS )
 
     ! 2-digit year number (e.g. "97" instead of "1997")
-    YY = YYYY - 1900
-    IF ( YY >= 100 ) YY = YY - 100
+    YY = MODULO( YYYY, 100 )
 
     ! For other platforms, use an F90 internal write (bmy, 9/29/03)
     WRITE( YYYY_STR, '(i4.4)' ) YYYY

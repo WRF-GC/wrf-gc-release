@@ -508,7 +508,7 @@
                     do isize = 1, nsize_aer(itype)
                        vol_h2otmp = 0.0
                        do icomp = 1, ncomp_aer(itype)
-                          vol_h2otmp = vol_h2otmp + chem(i, k, j, massptr_aer(icomp, isize, itype, ai_phase)) * &                                                                                         hygro_aer(icomp, itype) / dens_aer(icomp, itype)
+                          vol_h2otmp = vol_h2otmp + chem(i, k, j, massptr_aer(icomp, isize, itype, ai_phase)) * hygro_aer(icomp, itype) / dens_aer(icomp, itype)
                        end do
                           vol_h2otmp = relh_frc * vol_h2otmp / (1. - relh_frc)
                           chem(i, k, j, waterptr_aer(isize, itype)) = vol_h2otmp * dens_h2o

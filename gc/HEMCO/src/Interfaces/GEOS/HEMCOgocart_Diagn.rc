@@ -1,0 +1,31 @@
+# This file defines the diagnostics to be written
+# out by the HEMCO standalone model
+#
+# Name         Spec   ExtNr Cat Hier Dim Unit
+SU_ANTHROL1    SO2    0      1  -1   2   kg/m2/s
+SU_ANTHROL2    SO2    0      2  -1   2   kg/m2/s
+SU_SHIPSO2     SO2    0      4  -1   2   kg/m2/s
+SU_SHIPSO4     SO4    0      4  -1   2   kg/m2/s
+
+OC_ANTEOC1     OC     0      1  -1   2   kg/m2/s
+OC_ANTEOC2     OC     0      2  -1   2   kg/m2/s
+OC_BIOFUEL     OC     0      3  -1   2   kg/m2/s
+OC_SHIP        OC     0      4  -1   2   kg/m2/s
+OC_TERPENE     MTPA  -1     -1  -1   2   kg/m2/s
+OC_MTPO        MTPO  -1     -1  -1   2   kg/m2/s
+OC_LIMO        LIMO  -1     -1  -1   2   kg/m2/s
+OC_SESQ        SESQ  -1     -1  -1   2   kg/m2/s
+
+BC_ANTEBC1     BC     0      1  -1   2   kg/m2/s
+BC_ANTEBC2     BC     0      2  -1   2   kg/m2/s
+BC_BIOFUEL     BC     0      3  -1   2   kg/m2/s
+BC_SHIP        BC     0      4  -1   2   kg/m2/s
+
+EMI_NH3_EN     NH3    0      1  -1   2   kg/m2/s
+EMI_NH3_IN     NH3    0      2  -1   2   kg/m2/s
+EMI_NH3_RE     NH3    0      3  -1   2   kg/m2/s
+EMI_NH3_TR     NH3    0      4  -1   2   kg/m2/s
+EMI_NH3_AG     NH3    0      5  -1   2   kg/m2/s
+
+CO_FS          CO     0      1  -1   2   kg/m2/s
+CO_BF          CO     0      2  -1   2   kg/m2/s

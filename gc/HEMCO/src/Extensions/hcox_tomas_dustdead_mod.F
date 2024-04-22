@@ -1,6 +1,6 @@
 #if defined( TOMAS )
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -58,26 +58,9 @@
       PUBLIC :: HCOX_TOMAS_DustDead_Run
       PUBLIC :: HCOX_TOMAS_DustDead_Init
       PUBLIC :: HCOX_TOMAS_DustDead_Final
-      PUBLIC :: HCOX_TOMAS_DustDead_GetFluxTun
 !
 ! !REVISION HISTORY:
-!  (1 ) Added parallel DO loop in GET_ORO (bmy, 4/14/04)
-!  (2 ) Now references "directory_mod.f" (bmy, 7/20/04)
-!  (3 ) Fixed typo in ORO_IS_LND for PGI compiler (bmy, 3/1/05)
-!  (4 ) Modified for GEOS-5 and GCAP met fields (swu, bmy, 8/16/05)
-!  (5 ) Now make sure all USE statements are USE, ONLY (bmy, 10/3/05)
-!  (6 ) Now uses GOCART source function (tdf, bmy, 1/25/07)
-!  (7 ) Modifications for 0.5 x 0.667 grid (yxw, dan, bmy, 11/6/08)
-!  (8 ) Updates for nested grids (amv, bmy, 12/18/09)
-!  01 Mar 2012 - R. Yantosca - Now reference new grid_mod.F90
-!  25 Nov 2013 - C. Keller   - Now a HEMCO extension
-!  06 Oct 2014 - C. Keller   - Allow mass flux tuning factor be set in
-!                              configuration file.
-!  07 Jan 2016 - E. Lundgren - Change dry air gas constant and molec wt to
-!                              match GC values and update acc due to gravity
-!                              and universal gas constant to NIST 2014 values
-!  14 Oct 2016 - C. Keller   - Now use HCO_EvalFld instead of HCO_GetPtr.
-!  24 Aug 2017 - M. Sulprizio- Remove support for GEOS-4, GEOS-5, and MERRA
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -113,8 +96,7 @@
        REAL(hp), POINTER          :: MSS_FRC_CLY  (:,:) => NULL()
        REAL(hp), POINTER          :: MSS_FRC_SND  (:,:) => NULL()
        REAL(hp), POINTER          :: SFC_TYP      (:,:) => NULL()
-
-       REAL(hp), POINTER          :: VAI_DST(:,:) => NULL()
+       REAL(hp), POINTER          :: VAI_DST      (:,:) => NULL()
 
        ! Time-varying surface info from CTM
 !       REAL*8,  ALLOCATABLE :: FLX_LW_DWN_SFC(:,:)
@@ -152,11 +134,16 @@
       TYPE(MyInst), POINTER :: AllInst => NULL()
 
       !---------------------------------------
+      ! Number of TOMAS dust bins
+      ! This is now defined in HcoState
+      !---------------------------------------
+      INTEGER               :: NBINS
+
+      !---------------------------------------
       ! MODULE PARAMETER
       !---------------------------------------
       ! JKodros - want to change number of bins, but cant reference
       ! HcoState%MicroPhys?
-      INTEGER, PARAMETER   :: NBINS = 15      ! # of dust bins
       INTEGER, PARAMETER   :: NN_SFCTYP = 28
 
       ! Fundamental physical constants
@@ -187,7 +174,7 @@
       CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -220,25 +207,7 @@
 
 ! !REVISION HISTORY:
 !  08 Apr 2004 - T. D. Fairlie - Initial version
-!  (1 ) Added OpenMP parallelization, added comments (bmy, 4/8/04)
-!  (2 ) Bug fix: DSRC needs to be held PRIVATE (bmy, 4/14/04)
-!  (3 ) Now references DATA_DIR from "directory_mod.f" (bmy, 7/20/04)
-!  (4 ) Now make sure all USE statements are USE, ONLY (bmy, 10/3/05)
-!  (5 ) Bug fix: It should be SNOW/1d3 not SNOW*1d3 (tdf, bmy, 11/18/05)
-!  (6 ) Updated output statement (bmy, 1/23/07)
-!  (7 ) Use SNOMAS (m H2O) for GEOS-5 (bmy, 1/24/07)
-!  25 Aug 2010 - R. Yantosca - Treat MERRA in the same way as for GEOS-5
-!  25 Aug 2010 - R. Yantosca - Added ProTeX headers
-!  03 Sep 2010 - R. Yantosca - Bug fix, SNOMAS was mislabled in GEOS-5
-!                              and has units of mm H2O instead of m H2O
-!                              so we need to convert to m H2O.
-!  08 Feb 2012 - R. Yantosca - Treat GEOS-5.7.x in the same way as MERRA
-!  01 Mar 2012 - R. Yantosca - Now use GET_YMID_R(I,J,L) from grid_mod.F90
-!  09 Nov 2012 - M. Payer    - Replaced all met field arrays with State_Met
-!                              derived type object
-!  25 Nov 2013 - C. Keller   - Now a HEMCO extension
-!  06 Oct 2014 - C. Keller   - Now calculate pressure center from edges.
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -293,7 +262,7 @@
       REAL*8, PARAMETER      :: RGAS    = 8314.3d0 / 28.97d0
       REAL*8, PARAMETER      :: AKAP    = RGAS     / CP
       REAL*8, PARAMETER      :: P1000   = 1000d0
-      CHARACTER(LEN=255)     :: MSG
+      CHARACTER(LEN=255)     :: MSG, LOC
 
       ! temp debugging - jkodros
       INTEGER                :: jj=30, ii=40
@@ -301,14 +270,17 @@
       !=================================================================
       ! HCOX_DUSTDEAD_RUN begins here!
       !=================================================================
+      LOC = 'HCOX_DUSTDEAD_RUN (HCOX_TOMAS_DUSTDEAD_MOD.F)'
 
       ! Return if extension disabled
       IF ( ExtState%TOMAS_DustDead <= 0 ) RETURN
 
       ! Enter
-      CALL HCO_ENTER( HcoState%Config%Err, 'HCOX_TOMAS_DustDead_Run
-     & (hcox_tomas_dustdead_mod.F)', RC )
-      IF ( RC /= HCO_SUCCESS ) RETURN
+      CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+      IF ( RC /= HCO_SUCCESS ) THEN
+          CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+          RETURN
+      ENDIF
 
       ! Get instance
       Inst => NULL()
@@ -316,7 +288,7 @@
       IF ( RC /= HCO_SUCCESS ) THEN
        WRITE(MSG,*) 'Cannot find TOMAS DEAD instance Nr. ',
      &               ExtState%TOMAS_DustDead
-       CALL HCO_ERROR(HcoState%Config%Err,MSG,RC)
+       CALL HCO_ERROR(MSG,RC)
        RETURN
       ENDIF
 
@@ -343,35 +315,59 @@
       !IF ( HcoClock_First(HcoState%Clock,.TRUE.) ) THEN
          CALL HCO_EvalFld( HcoState, 'DEAD_EF_GEO',
      &                     Inst%ERD_FCT_GEO, RC)
-         IF ( RC /= HCO_SUCCESS ) RETURN
+         IF ( RC /= HCO_SUCCESS ) THEN
+             CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+             RETURN
+         ENDIF
 
          CALL HCO_EvalFld( HcoState, 'DEAD_LF_DRY',
      &                     Inst%LND_FRC_DRY, RC)
-         IF ( RC /= HCO_SUCCESS ) RETURN
+         IF ( RC /= HCO_SUCCESS ) THEN
+             CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+             RETURN
+         ENDIF
 
          CALL HCO_EvalFld( HcoState, 'DEAD_MF_CACO3',
      &                     Inst%MSS_FRC_CACO3,  RC )
-         IF ( RC /= HCO_SUCCESS ) RETURN
+         IF ( RC /= HCO_SUCCESS ) THEN
+             CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+             RETURN
+         ENDIF
 
          CALL HCO_EvalFld( HcoState, 'DEAD_MF_CLY',
      &                     Inst%MSS_FRC_CLY, RC)
-         IF ( RC /= HCO_SUCCESS ) RETURN
+         IF ( RC /= HCO_SUCCESS ) THEN
+             CALL HCO_ERROR( 'ERROR 4', RC, THISLOC=LOC )
+             RETURN
+         ENDIF
 
          CALL HCO_EvalFld( HcoState, 'DEAD_MF_SND',
      &                     Inst%MSS_FRC_SND, RC)
-         IF ( RC /= HCO_SUCCESS ) RETURN
+         IF ( RC /= HCO_SUCCESS ) THEN
+             CALL HCO_ERROR( 'ERROR 5', RC, THISLOC=LOC )
+             RETURN
+         ENDIF
 
          CALL HCO_EvalFld( HcoState, 'DEAD_SFC_TYP',
      &                     Inst%SFC_TYP, RC )
-         IF ( RC /= HCO_SUCCESS ) RETURN
+         IF ( RC /= HCO_SUCCESS ) THEN
+             CALL HCO_ERROR( 'ERROR 6', RC, THISLOC=LOC )
+             RETURN
+         ENDIF
 
          CALL HCO_EvalFld( HcoState, 'DEAD_GOC_SRC',
      &                     Inst%SRCE_FUNC, RC )
-         IF ( RC /= HCO_SUCCESS ) RETURN
+         IF ( RC /= HCO_SUCCESS ) THEN
+             CALL HCO_ERROR( 'ERROR 7', RC, THISLOC=LOC )
+             RETURN
+         ENDIF
 
          CALL HCO_EvalFld( HcoState, 'DEAD_VAI',
      &                     Inst%VAI_DST, RC )
-         IF ( RC /= HCO_SUCCESS ) RETURN
+         IF ( RC /= HCO_SUCCESS ) THEN
+             CALL HCO_ERROR( 'ERROR 8', RC, THISLOC=LOC )
+             RETURN
+         ENDIF
 
 !         FIRST = .FALSE.
       !ENDIF
@@ -380,16 +376,22 @@
       ! CALL DUST MOBILIZATION SCHEME
       !=================================================================
 
-      ! Make OROGRAPHY array from GEOS-CHEM LWI
+      ! Make OROGRAPHY array (0=Ocean; 1=Land; 2=Ice)
       CALL GET_ORO( HcoState, ExtState, OROGRAPHY, RC )
-      IF ( RC /= HCO_SUCCESS ) RETURN
+      IF ( RC /= HCO_SUCCESS ) THEN
+          CALL HCO_ERROR( 'ERROR 9', RC, THISLOC=LOC )
+          RETURN
+      ENDIF
 
       ! Get emissions time step
       DTSRCE = HcoState%TS_EMIS
 
       ! Get day of year, convert to real!!
       CALL HcoClock_Get( HcoState%Clock, cDOY = intDOY, RC=RC )
-      IF ( RC /= HCO_SUCCESS ) RETURN
+      IF ( RC /= HCO_SUCCESS ) THEN
+          CALL HCO_ERROR( 'ERROR 10', RC, THISLOC=LOC )
+          RETURN
+      ENDIF
       DOY = intDOY
 
       ! Init
@@ -509,7 +511,7 @@
      &                        Inst%HcoIDs(N), RC,  ExtNr=Inst%ExtNr )
             IF ( RC /= HCO_SUCCESS ) THEN
                WRITE(MSG,*) 'HCO_EmisAdd error: dust bin ', N
-               CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+               CALL HCO_ERROR(MSG, RC )
                RETURN
             ENDIF
 
@@ -563,7 +565,7 @@
             CALL HCO_EmisAdd( HcoState, FLUXN(:,:,N), HcoID,
      &                        RC)
             IF ( RC /= HCO_SUCCESS ) THEN
-               CALL HCO_ERROR( HcoState%Config%Err,
+               CALL HCO_ERROR( 
      &                        'HCO_EmisAdd error: FLUXNDUST', RC )
                RETURN
             ENDIF
@@ -578,7 +580,7 @@
       END SUBROUTINE HCOX_TOMAS_DustDead_Run
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -610,15 +612,14 @@
 
 ! !REVISION HISTORY:
 !  25 Nov 2013 - C. Keller   - Now a HEMCO extension
-!  14 Aug 2014 - R. Yantosca - Now always print out extension info
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
 ! !LOCAL VARIABLES:
 !
-      CHARACTER(LEN=255)             :: MSG
+      CHARACTER(LEN=255)             :: MSG, LOC
       INTEGER                        :: I, J, N, AS, k
       INTEGER                        :: ExtNr, nSpc
       CHARACTER(LEN=31), ALLOCATABLE :: SpcNames(:)
@@ -629,21 +630,24 @@
       !=================================================================
       ! HCOX_DUST_DEAD_INIT begins here!
       !=================================================================
+      LOC = 'HCOX_DUST_DEAD_INIT (HCOX_TOMAS_DUSTDEAD_MOD.F)'
 
       ! Extension Nr.
       ExtNr = GetExtNr( HcoState%Config%ExtList, TRIM(ExtName) )
       IF ( ExtNr <= 0 ) RETURN
 
       ! Enter
-      CALL HCO_ENTER(HcoState%Config%Err,'HCOX_TOMAS_DustDead_Init
-     & (hcox_tomas_dustdead_mod.F)', RC )
-      IF ( RC /= HCO_SUCCESS ) RETURN
+      CALL HCO_ENTER(HcoState%Config%Err, LOC, RC )
+      IF ( RC /= HCO_SUCCESS ) THEN
+          CALL HCO_ERROR( 'ERROR 11', RC, THISLOC=LOC )
+          RETURN
+      ENDIF
 
       ! Create AeroCom instance for this simulation
       Inst => NULL()
       CALL InstCreate ( ExtNr, ExtState%TOMAS_DustDead, Inst, RC )
       IF ( RC /= HCO_SUCCESS ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err,
+       CALL HCO_ERROR ( 
      &                 'Cannot create TOMAS DEAD instance', RC )
        RETURN
       ENDIF
@@ -652,18 +656,24 @@
       I = HcoState%NX
       J = HcoState%NY
 
+      ! Set the global NBINS variable with the # of bins from HcoState
+      NBINS = HcoState%MicroPhys%nBins
+
       !-----------------------------------------------------------------
       ! Get species IDs
       !-----------------------------------------------------------------
 
       CALL HCO_GetExtHcoID( HcoState, ExtNr, Inst%HcoIDs,
      &                      SpcNames, nSpc, RC)
-      IF ( RC /= HCO_SUCCESS ) RETURN
+      IF ( RC /= HCO_SUCCESS ) THEN
+          CALL HCO_ERROR( 'ERROR 12', RC, THISLOC=LOC )
+          RETURN
+      ENDIF
 
       ! Sanity check
       IF ( nSpc /= NBINS ) THEN
-         MSG = 'Dust DEAD model does not have four species!'
-         CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+         MSG = 'Number of dust species do not match number of bins!'
+         CALL HCO_ERROR(MSG, RC )
          RETURN
       ENDIF
 
@@ -673,20 +683,27 @@
       CALL GetExtOpt( HcoState%Config, ExtNr,
      &                 'Mass tuning factor',
      &                 OptValDp=TmpScal, Found=FOUND, RC=RC )
-      IF ( RC /= HCO_SUCCESS ) RETURN
+      IF ( RC /= HCO_SUCCESS ) THEN
+          CALL HCO_ERROR( 'ERROR 13', RC, THISLOC=LOC )
+          RETURN
+      ENDIF
 
-      ! Set parameter FLX_MSS_FDG_FCT to specified tuning factor. Get from
-      ! wrapper routine if not defined in configuration file
+      ! Set parameter FLX_MSS_FDG_FCT to specified tuning factor as
+      ! defined in configuration file
       IF ( FOUND ) THEN
          Inst%FLX_MSS_FDG_FCT = TmpScal
       ELSE
-         Inst%FLX_MSS_FDG_FCT =
-     &      HCOX_TOMAS_DustDead_GetFluxTun( HcoState )
-         IF ( Inst%FLX_MSS_FDG_FCT < 0.0_dp ) THEN
-            MSG = 'Error in getting TOMAS dust DEAD mass tuning factor'
-            CALL HCO_ERROR(HcoState%Config%Err,MSG,RC)
-            RETURN
-         ENDIF
+         Inst%FLX_MSS_FDG_FCT = -999.0e0
+      ENDIF
+
+      ! Error
+      IF ( Inst%FLX_MSS_FDG_FCT == -999.0e0 ) THEN
+         MSG = 'Mass flux tuning factor not defined. ' //
+     &         'Please explicitly set it by modifying the line ' //
+     &         '` --> Mass tuning factor: XX.X` in HEMCO_Config.rc. '
+            CALL HCO_ERROR(MSG,
+     &                     RC, THISLOC='HCOX_DustDead_Init')
+         RETURN
       ENDIF
 
       ! Verbose mode
@@ -711,123 +728,236 @@
       ! Init module arrays
       !-----------------------------------------------------------------
 
-      ALLOCATE ( Inst%ERD_FCT_GEO   ( HcoState%NX, HcoState%NY),
-     &           Inst%SRCE_FUNC     ( HcoState%NX, HcoState%NY),
-     &           Inst%LND_FRC_DRY   ( HcoState%NX, HcoState%NY),
-     &           Inst%MSS_FRC_CACO3 ( HcoState%NX, HcoState%NY),
-     &           Inst%MSS_FRC_CLY   ( HcoState%NX, HcoState%NY),
-     &           Inst%MSS_FRC_SND   ( HcoState%NX, HcoState%NY),
-     &           Inst%SFC_TYP       ( HcoState%NX, HcoState%NY),
-     &           Inst%VAI_DST       ( HcoState%NX, HcoState%NY),
-     &           STAT=AS )
+      !-----------------------------------------------------------------
+      ! Init module arrays
+      !-----------------------------------------------------------------
+
+      ALLOCATE( Inst%ERD_FCT_GEO( HcoState%NX, HcoState%NY), STAT=AS )
       IF ( AS /= 0 ) THEN
-        CALL HCO_ERROR ( HcoState%Config%Err, 'Allocation error', RC )
-        RETURN
+         msg = 'Could not allocate Inst%ERD_FCT_GEO!'
+         CALL HCO_ERROR( msg, RC, thisLoc=loc )
+         RETURN
       ENDIF
-      Inst%ERD_FCT_GEO    = 0.0_hp
-      Inst%SRCE_FUNC      = 0.0_hp
-      Inst%LND_FRC_DRY    = 0.0_hp
-      Inst%MSS_FRC_CACO3  = 0.0_hp
-      Inst%MSS_FRC_CLY    = 0.0_hp
-      Inst%MSS_FRC_SND    = 0.0_hp
-      Inst%SFC_TYP        = 0.0_hp
-      Inst%VAI_DST        = 0.0_hp
+      Inst%ERD_FCT_GEO = 0.0_hp
+
+      ALLOCATE( Inst%SRCE_FUNC( HcoState%NX, HcoState%NY), STAT=AS )
+      IF ( AS /= 0 ) THEN
+         msg = 'Could not allocate Inst%SRCE_FUNC!'
+         CALL HCO_ERROR( msg, RC, thisLoc=loc )
+         RETURN
+      ENDIF
+      Inst%SRCE_FUNC = 0.0_hp
+
+      ALLOCATE( Inst%LND_FRC_DRY( HcoState%NX, HcoState%NY), STAT=AS )
+      IF ( AS /= 0 ) THEN
+         msg = 'Could not allocate Inst%LND_FRC_DRY!'
+         CALL HCO_ERROR( msg, RC, thisLoc=loc )
+         RETURN
+      ENDIF
+      Inst%LND_FRC_DRY = 0.0_hp
+
+      ALLOCATE( Inst%MSS_FRC_CACO3( HcoState%NX, HcoState%NY), STAT=AS )
+      IF ( AS /= 0 ) THEN
+         msg = 'Could not allocate Inst%MSS_FRC_CACO3!'
+         CALL HCO_ERROR( msg, RC, thisLoc=loc )
+         RETURN
+      ENDIF
+      Inst%MSS_FRC_CACO3 = 0.0_hp
+
+      ALLOCATE( Inst%MSS_FRC_CLY( HcoState%NX, HcoState%NY), STAT=AS )
+      IF ( AS /= 0 ) THEN
+         msg = 'Could not allocate Inst%MSS_FRC_CLY!'
+         CALL HCO_ERROR( msg, RC, thisLoc=loc )
+         RETURN
+      ENDIF
+      Inst%MSS_FRC_CLY = 0.0_hp
+
+      ALLOCATE( Inst%MSS_FRC_SND( HcoState%NX, HcoState%NY), STAT=AS )
+      IF ( AS /= 0 ) THEN
+         msg = 'Could not allocate Inst%MSS_FRC_SND!'
+         CALL HCO_ERROR( msg, RC, thisLoc=loc )
+         RETURN
+      ENDIF
+      Inst%MSS_FRC_SND = 0.0_hp
+
+      ALLOCATE( Inst%SFC_TYP( HcoState%NX, HcoState%NY), STAT=AS )
+      IF ( AS /= 0 ) THEN
+         msg = 'Could not allocate Inst%SFC_TYP!'
+         CALL HCO_ERROR( msg, RC, thisLoc=loc )
+         RETURN
+      ENDIF
+      Inst%SFC_TYP = 0.0_hp
+
+      ALLOCATE( Inst%VAI_DST( HcoState%NX, HcoState%NY), STAT=AS )
+      IF ( AS /= 0 ) THEN
+         msg = 'Could not allocate Inst%VAI_DST!'
+      !-----------------------------------------------------------------
+      ! Init module arrays
+      !-----------------------------------------------------------------
+
+      ALLOCATE( Inst%ERD_FCT_GEO( HcoState%NX, HcoState%NY), STAT=AS )
+      IF ( AS /= 0 ) THEN
+         msg = 'Could not allocate Inst%ERD_FCT_GEO!'
+         CALL HCO_ERROR( msg, RC, thisLoc=loc )
+         RETURN
+      ENDIF
+      Inst%ERD_FCT_GEO = 0.0_hp
+
+      ALLOCATE( Inst%SRCE_FUNC( HcoState%NX, HcoState%NY), STAT=AS )
+      IF ( AS /= 0 ) THEN
+         msg = 'Could not allocate Inst%SRCE_FUNC!'
+         CALL HCO_ERROR( msg, RC, thisLoc=loc )
+         RETURN
+      ENDIF
+      Inst%SRCE_FUNC = 0.0_hp
+
+      ALLOCATE( Inst%LND_FRC_DRY( HcoState%NX, HcoState%NY), STAT=AS )
+      IF ( AS /= 0 ) THEN
+         msg = 'Could not allocate Inst%LND_FRC_DRY!'
+         CALL HCO_ERROR( msg, RC, thisLoc=loc )
+         RETURN
+      ENDIF
+      Inst%LND_FRC_DRY = 0.0_hp
+
+      ALLOCATE( Inst%MSS_FRC_CACO3( HcoState%NX, HcoState%NY), STAT=AS )
+      IF ( AS /= 0 ) THEN
+         msg = 'Could not allocate Inst%MSS_FRC_CACO3!'
+         CALL HCO_ERROR( msg, RC, thisLoc=loc )
+         RETURN
+      ENDIF
+      Inst%MSS_FRC_CACO3 = 0.0_hp
+
+      ALLOCATE( Inst%MSS_FRC_CLY( HcoState%NX, HcoState%NY), STAT=AS )
+      IF ( AS /= 0 ) THEN
+         msg = 'Could not allocate Inst%MSS_FRC_CLY!'
+         CALL HCO_ERROR( msg, RC, thisLoc=loc )
+         RETURN
+      ENDIF
+      Inst%MSS_FRC_CLY = 0.0_hp
+
+      ALLOCATE( Inst%MSS_FRC_SND( HcoState%NX, HcoState%NY), STAT=AS )
+      IF ( AS /= 0 ) THEN
+         msg = 'Could not allocate Inst%MSS_FRC_SND!'
+         CALL HCO_ERROR( msg, RC, thisLoc=loc )
+         RETURN
+      ENDIF
+      Inst%MSS_FRC_SND = 0.0_hp
+
+      ALLOCATE( Inst%SFC_TYP( HcoState%NX, HcoState%NY), STAT=AS ) 
+      IF ( AS /= 0 ) THEN
+         msg = 'Could not allocate Inst%SFC_TYP!'
+         CALL HCO_ERROR( msg, RC, thisLoc=loc )
+         RETURN
+      ENDIF
+      Inst%SFC_TYP = 0.0_hp
+      
+      ALLOCATE( Inst%VAI_DST( HcoState%NX, HcoState%NY), STAT=AS )
+      IF ( AS /= 0 ) THEN
+         msg = 'Could not allocate Inst%VAI_DST!'
+         CALL HCO_ERROR( msg, RC, thisLoc=loc )
+         RETURN
+      ENDIF
+      Inst%VAI_DST = 0.0_hp
+         CALL HCO_ERROR( msg, RC, thisLoc=loc )
+         RETURN
+      ENDIF
+      Inst%VAI_DST = 0.0_hp
 
 !      ! Allocate arrays
 !      ALLOCATE( Inst%FLX_LW_DWN_SFC( I, J ), STAT=AS )
 !      IF ( AS /= 0 ) THEN
-!        CALL HCO_ERROR ( HcoState%Config%Err, 'FLX_LW_DWN_SFC', RC )
+!        CALL HCO_ERROR ( 'FLX_LW_DWN_SFC', RC )
 !        RETURN
 !      ENDIF
 !      Inst%FLX_LW_DWN_SFC = 0d0
 
 !      ALLOCATE( Inst%FLX_SW_ABS_SFC( I, J ), STAT=AS )
 !      IF ( AS /= 0 ) THEN
-!        CALL HCO_ERROR ( HcoState%Config%Err, 'FLX_SW_ABS_SFC', RC )
+!        CALL HCO_ERROR ( 'FLX_SW_ABS_SFC', RC )
 !        RETURN
 !      ENDIF
 !      Inst%FLX_SW_ABS_SFC = 0d0
 
 !      ALLOCATE( Inst%TPT_GND( I, J ), STAT=AS )
 !      IF ( AS /= 0 ) THEN
-!        CALL HCO_ERROR ( HcoState%Config%Err, 'TPT_GND', RC )
+!        CALL HCO_ERROR ( 'TPT_GND', RC )
 !        RETURN
 !      ENDIF
 !      Inst%TPT_GND = 0d0
 
 !      ALLOCATE( Inst%TPT_SOI( I, J ), STAT=AS )
 !      IF ( AS /= 0 ) THEN
-!        CALL HCO_ERROR ( HcoState%Config%Err, 'TPT_SOI', RC )
+!        CALL HCO_ERROR ( 'TPT_SOI', RC )
 !        RETURN
 !      ENDIF
 !      Inst%TPT_SOI = 0d0
 
 !      ALLOCATE( Inst%VWC_SFC( I, J ), STAT=AS )
 !      IF ( AS /= 0 ) THEN
-!        CALL HCO_ERROR ( HcoState%Config%Err, 'VWC_SFC', RC )
+!        CALL HCO_ERROR ( 'VWC_SFC', RC )
 !        RETURN
 !      ENDIF
 !      Inst%VWC_SFC = 0d0
 
 !      ALLOCATE( Inst%SRC_STR( I, J ), STAT=AS )
 !      IF ( AS /= 0 ) THEN
-!        CALL HCO_ERROR ( HcoState%Config%Err, 'SRC_STR', RC )
+!        CALL HCO_ERROR ( 'SRC_STR', RC )
 !        RETURN
 !      ENDIF
 !      Inst%SRC_STR = 0d0
 
       ALLOCATE( Inst%PLN_TYP( 0:28, 3 ), STAT=AS )
       IF ( AS /= 0 ) THEN
-        CALL HCO_ERROR ( HcoState%Config%Err, 'PLN_TYP', RC )
+        CALL HCO_ERROR ( 'PLN_TYP', RC )
         RETURN
       ENDIF
       Inst%PLN_TYP = 0
 
       ALLOCATE( Inst%PLN_FRC( 0:28, 3 ), STAT=AS )
       IF ( AS /= 0 ) THEN
-        CALL HCO_ERROR ( HcoState%Config%Err, 'PLN_FRC', RC )
+        CALL HCO_ERROR ( 'PLN_FRC', RC )
         RETURN
       ENDIF
       Inst%PLN_FRC = 0d0
 
       ALLOCATE( Inst%TAI( MVT, 12 ), STAT=AS )
       IF ( AS /= 0 ) THEN
-        CALL HCO_ERROR ( HcoState%Config%Err, 'TAI', RC )
+        CALL HCO_ERROR ( 'TAI', RC )
         RETURN
       ENDIF
       Inst%TAI = 0d0
 
       ALLOCATE( Inst%DMT_VWR( NBINS ), STAT=AS )
       IF ( AS /= 0 ) THEN
-        CALL HCO_ERROR ( HcoState%Config%Err, 'DMT_VWR', RC )
+        CALL HCO_ERROR ( 'DMT_VWR', RC )
         RETURN
       ENDIF
       Inst%DMT_VWR = 0d0
 
 !      ALLOCATE( Inst%DNS_AER( NBINS ), STAT=AS )
 !      IF ( AS /= 0 ) THEN
-!        CALL HCO_ERROR ( HcoState%Config%Err, 'DNS_AER', RC )
+!        CALL HCO_ERROR ( 'DNS_AER', RC )
 !        RETURN
 !      ENDIF
 !      Inst%DNS_AER = 0d0
 
       ALLOCATE( Inst%OVR_SRC_SNK_FRC( DST_SRC_NBR, NBINS ), STAT=AS )
       IF ( AS /= 0 ) THEN
-        CALL HCO_ERROR ( HcoState%Config%Err, 'OVR_SRC_SNK_FRC', RC )
+        CALL HCO_ERROR ( 'OVR_SRC_SNK_FRC', RC )
         RETURN
       ENDIF
       Inst%OVR_SRC_SNK_FRC = 0d0
 
       ALLOCATE( Inst%OVR_SRC_SNK_MSS( DST_SRC_NBR, NBINS ), STAT=AS )
       IF ( AS /= 0 ) THEN
-        CALL HCO_ERROR ( HcoState%Config%Err, 'OVR_SRC_SNK_MSS', RC )
+        CALL HCO_ERROR ( 'OVR_SRC_SNK_MSS', RC )
         RETURN
       ENDIF
       Inst%OVR_SRC_SNK_MSS = 0d0
 
 !      ALLOCATE( Inst%OROGRAPHY( I, J ), STAT=AS )
 !      IF ( AS /= 0 ) THEN
-!        CALL HCO_ERROR ( HcoState%Config%Err, 'OROGRAPHY', RC )
+!        CALL HCO_ERROR ( 'OROGRAPHY', RC )
 !        RETURN
 !      ENDIF
 !      Inst%OROGRAPHY = 0
@@ -838,7 +968,7 @@
       ! Bin size min diameter [m]
       ALLOCATE( Inst%DMT_MIN( NBINS ), STAT=AS )
       IF ( AS /= 0 ) THEN
-        CALL HCO_ERROR ( HcoState%Config%Err, 'DMT_MIN', RC )
+        CALL HCO_ERROR ( 'DMT_MIN', RC )
         RETURN
       ENDIF
 
@@ -851,7 +981,7 @@
       ! Bin size max diameter [m]
       ALLOCATE( Inst%DMT_MAX( NBINS ), STAT=AS )
       IF ( AS /= 0 ) THEN
-        CALL HCO_ERROR ( HcoState%Config%Err, 'DMT_MAX', RC )
+        CALL HCO_ERROR ( 'DMT_MAX', RC )
         RETURN
       ENDIF
 
@@ -867,7 +997,7 @@
       ! Bin size min diameter [m]
 !      ALLOCATE( Inst%DMT_MIN( NBINS ), STAT=AS )
 !      IF ( AS /= 0 ) THEN
-!        CALL HCO_ERROR ( HcoState%Config%Err, 'DMT_MIN', RC )
+!        CALL HCO_ERROR ( 'DMT_MIN', RC )
 !        RETURN
 !      ENDIF
 !      Inst%DMT_MIN(1) = 0.2d-6
@@ -878,7 +1008,7 @@
       ! Bin size max diameter [m]
 !      ALLOCATE( Inst%DMT_MAX( NBINS ), STAT=AS )
 !      IF ( AS /= 0 ) THEN
-!        CALL HCO_ERROR ( HcoState%Config%Err, 'DMT_MAX', RC )
+!        CALL HCO_ERROR ( 'DMT_MAX', RC )
 !        RETURN
 !      ENDIF
 !      Inst%DMT_MAX(1) = 2.0d-6
@@ -892,7 +1022,7 @@
       ! Mass median diameter BSM96 p. 73 Table 2
       ALLOCATE( Inst%DMT_VMA_SRC( DST_SRC_NBR ), STAT=AS )
       IF ( AS /= 0 ) THEN
-        CALL HCO_ERROR ( HcoState%Config%Err, 'DMT_VMA_SRC', RC )
+        CALL HCO_ERROR ( 'DMT_VMA_SRC', RC )
         RETURN
       ENDIF
       Inst%DMT_VMA_SRC(1) = 0.832d-6
@@ -903,7 +1033,7 @@
       ! BSM96 p. 73 Table 2
       ALLOCATE( Inst%GSD_ANL_SRC( DST_SRC_NBR ), STAT=AS )
       IF ( AS /= 0 ) THEN
-        CALL HCO_ERROR ( HcoState%Config%Err, 'GSD_ANL_SRC', RC )
+        CALL HCO_ERROR ( 'GSD_ANL_SRC', RC )
         RETURN
       ENDIF
       Inst%GSD_ANL_SRC(1) = 2.10d0
@@ -913,7 +1043,7 @@
       ! MSS_FRC_SRC:  Mass fraction BSM96 p. 73 Table 2
       ALLOCATE( Inst%MSS_FRC_SRC( DST_SRC_NBR ), STAT=AS )
       IF ( AS /= 0 ) THEN
-        CALL HCO_ERROR ( HcoState%Config%Err, 'MSS_FRC_SRC', RC )
+        CALL HCO_ERROR ( 'MSS_FRC_SRC', RC )
         RETURN
       ENDIF
       Inst%MSS_FRC_SRC(1) = 0.036d0
@@ -929,7 +1059,10 @@
      &                          Inst%GSD_ANL_SRC,   NBINS,
      &                          Inst%DMT_MIN,  Inst%DMT_MAX,
      &                          Inst%OVR_SRC_SNK_FRC, RC )
-      IF ( RC /= HCO_SUCCESS ) RETURN
+      IF ( RC /= HCO_SUCCESS ) THEN
+          CALL HCO_ERROR( 'ERROR 14', RC, THISLOC=LOC )
+          RETURN
+      ENDIF
 
       !=================================================================
       ! Compute OVR_SRC_SNK_MSS, the fraction of dust transported, given
@@ -956,8 +1089,11 @@
       ExtState%SNOWHGT%DoUse = .TRUE.
       ExtState%USTAR%DoUse   = .TRUE.
       ExtState%Z0%DoUse      = .TRUE.
-      ExtState%ALBD%DoUse    = .TRUE.
-      ExtState%WLI%DoUse     = .TRUE.
+      ExtState%FRLAND%DoUse  = .TRUE.
+      ExtState%FRLANDIC%DoUse= .TRUE.
+      ExtState%FROCEAN%DoUse = .TRUE.
+      ExtState%FRSEAICE%DoUse= .TRUE.
+      ExtState%FRLAKE%DoUse  = .TRUE.
 
       ! Leave w/ success
       Inst => NULL()
@@ -967,7 +1103,7 @@
       END SUBROUTINE HCOX_TOMAS_DustDead_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -987,8 +1123,7 @@
 !
 ! !REVISION HISTORY:
 !  25 Nov 2013 - C. Keller - Now a HEMCO extension
-!
-! !NOTES:
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1000,7 +1135,7 @@
       END SUBROUTINE HCOX_TOMAS_DustDead_Final
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !
 !******************************************************************************
@@ -1198,11 +1333,12 @@
       REAL(dp) :: TMP
 
       ! For error handling
-      CHARACTER(LEN=255)   :: MSG
+      CHARACTER(LEN=255)   :: MSG, LOC
 
       !=================================================================
       ! DST_MBL begins here!
       !=================================================================
+      LOC = 'DST_MBL (HCOX_TOMAS_DUSTDEAD_MOD.F)'
 
       ! Start
       RC = HCO_SUCCESS
@@ -1236,7 +1372,7 @@
          ! Stop occasional haywire model runs
 !         IF ( TPT_MDP(I) > 350.0d0 ) THEN
 !            MSG = 'TPT_MDP(i) > 350.0'
-!            CALL HCO_ERROR(HcoState%Config%Err,MSG, RC, THISLOC='DST_MBL' )
+!            CALL HCO_ERROR(MSG, RC, THISLOC='DST_MBL' )
 !            RETURN
 !         ENDIF
          ! Now simply restrict to 350K, rather than crashing
@@ -1277,7 +1413,10 @@
       ! Get LSM Surface type (0..28)
       CALL SFC_TYP_GET( HcoState, ExtState, Inst,
      &                  LAT_IDX,  SFC_TYP_SLICE, RC )
-      IF ( RC /= HCO_SUCCESS ) RETURN
+      IF ( RC /= HCO_SUCCESS ) THEN
+          CALL HCO_ERROR( 'ERROR 15', RC, THISLOC=LOC )
+          RETURN
+      ENDIF
 
       ! Get erodability and mass fractions
       CALL SOI_TXT_GET(
@@ -1343,7 +1482,10 @@
      &    TPT_SOI_FRZ,         ! I [K] Temperature of frozen soil
      &    VAI_DST_SLICE,       ! I [m2 m-2] Vegetation area index, one-sided
      &    RC )
-      IF ( RC /= HCO_SUCCESS ) RETURN
+      IF ( RC /= HCO_SUCCESS ) THEN
+          CALL HCO_ERROR( 'ERROR 16', RC, THISLOC=LOC )
+          RETURN
+      ENDIF
 
       ! Much ado about nothing
       if (mbl_nbr == 0) then
@@ -1393,7 +1535,10 @@
      &       SNW_FRC,        ! I [frc] Fraction of surface covered by snow
      &       WND_RFR,
      &       RC )       ! I [m s-1] 10 m wind speed
-      IF ( RC /= HCO_SUCCESS ) RETURN
+      IF ( RC /= HCO_SUCCESS ) THEN
+          CALL HCO_ERROR( 'ERROR 17', RC, THISLOC=LOC )
+          RETURN
+      ENDIF
 
       !=================================================================
       ! Introduce Ustar and Z0 from GEOS data
@@ -1426,7 +1571,10 @@
      &    MNO_LNG,             ! O [m] Monin-Obukhov length
      &    WND_FRC,
      &    RC )                 ! O [m s-1] Surface friction velocity, U*
-      IF ( RC /= HCO_SUCCESS ) RETURN
+      IF ( RC /= HCO_SUCCESS ) THEN
+          CALL HCO_ERROR( 'ERROR 18', RC, THISLOC=LOC )
+          RETURN
+      ENDIF
 
       !=================================================================
       ! Factor by which surface roughness increases threshold friction
@@ -1487,7 +1635,10 @@
      &    DNS_MDP,             ! I [kg m-3] Midlayer density
      &    WND_FRC_THR_SLT,     ! O [m s-1] Threshold friction velocity
      &    RC )
-      IF ( RC /= HCO_SUCCESS ) RETURN
+      IF ( RC /= HCO_SUCCESS ) THEN
+          CALL HCO_ERROR( 'ERROR 19', RC, THISLOC=LOC )
+          RETURN
+      ENDIF
 
       ! Adjust threshold friction velocity to account
       ! for moisture and roughness
@@ -1604,7 +1755,10 @@
      &        MSS_FRC_CLY_SLICE,   ! I [frc] Mass fraction of clay
      &        MSS_FRC_SND_SLICE,   ! I [frc] Mass fraction of sand
      &        RC )
-         IF ( RC /= HCO_SUCCESS ) RETURN
+         IF ( RC /= HCO_SUCCESS ) THEN
+             CALL HCO_ERROR( 'ERROR 20', RC, THISLOC=LOC )
+             RETURN
+         ENDIF
       endif
 
       ! Now, flx_mss_vrt_dst has units of kg/m2/sec
@@ -2119,7 +2273,8 @@
 !
 !******************************************************************************
 !  Subroutine GET_ORO creates a 2D orography array, OROGRAPHY, from the
-!  GMAO LWI fields.  Ocean= 0; Land=1; ice=2. (tdf, bmy, 3/30/04, 8/17/05)
+!  GMAO surface type fraction fields, based on definition of GMAO LWI, with
+!  modification to qualify land ice as ice. Ocean=0 (no ice); Land=1; Ice=2.
 !
 !  Arguments as Output:
 !  ============================================================================
@@ -2155,9 +2310,12 @@
       DO J = 1, HcoState%NY
       DO I = 1, HcoState%NX
 
-         ! Set orography to land type
-         OROGRAPHY (I,J) = HCO_LANDTYPE( ExtState%WLI%Arr%Val(I,J),
-     &                                   ExtState%ALBD%Arr%Val(I,J) )
+         ! Set orography from fraction land types
+         OROGRAPHY (I,J) = HCO_LANDTYPE(ExtState%FRLAND%Arr%Val(I,J),
+     &                                  ExtState%FRLANDIC%Arr%Val(I,J),
+     &                                  ExtState%FROCEAN%Arr%Val(I,J),
+     &                                  ExtState%FRSEAICE%Arr%Val(I,J),
+     &                                  ExtState%FRLAKE%Arr%Val(I,J))
 
       ENDDO
       ENDDO
@@ -2667,7 +2825,7 @@
          ! tdf 10/27/2K3 -- Sanity check
          IF ( RGH_MMN(LON_IDX) <= 0.0 ) THEN
             MSG = 'RGH_MMN <= 0.0'
-            CALL HCO_ERROR(HcoState%Config%Err,MSG,RC,THISLOC='BLM_MBL')
+            CALL HCO_ERROR(MSG,RC,THISLOC='BLM_MBL')
             RETURN
          ENDIF
 
@@ -2681,7 +2839,7 @@
          ! Sanity check
          IF ( WND_FRC_DENOM <= 0.0 ) THEN
             MSG = 'WND_FRC_DENOM <= 0.0'
-            CALL HCO_ERROR(HcoState%Config%Err,MSG,RC,THISLOC='BLM_MBL')
+            CALL HCO_ERROR(MSG,RC,THISLOC='BLM_MBL')
             RETURN
          ENDIF
 
@@ -3122,7 +3280,7 @@
 
               ! Presumably ocean snuck through
               ELSE
-                 CALL HCO_ERROR( HcoState%Config%Err,
+                 CALL HCO_ERROR( 
      &                          'pln_typ_idx == 0', RC,
      &                           THISLOC='RGH_MMN_GET' )
                  RETURN
@@ -3474,7 +3632,7 @@
 
       ! Error check
       IF ( RYN_NBR < 0.03D0 ) THEN
-         CALL HCO_ERROR ( HcoState%Config%Err, 'RYN_NBR < 0.03', RC,
+         CALL HCO_ERROR ( 'RYN_NBR < 0.03', RC,
      &      THISLOC='WND_FRC_THR_SLT_GET' )
          RETURN
 
@@ -3798,7 +3956,7 @@
       ! Error check
       if ( FEFF <= 0.0D0 .OR. FEFF > 1.0D0 ) THEN
          MSG = 'Feff out of range!'
-         CALL HCO_ERROR(HcoState%Config%Err,MSG, RC,
+         CALL HCO_ERROR(MSG, RC,
      &      THISLOC='FRC_THR_NC_DRG_GET' )
          RETURN
       ENDIF
@@ -4103,7 +4261,7 @@
                IF ( MSS_FRC_CACO3_SZ_CRR < 0.0D0  .OR.
      &              MSS_FRC_CACO3_SZ_CRR > 1.0D0 ) THEN
                   MSG = 'mss_frc_CaC_s < 0.0.or.mss_frc_CaC_s > 1.0!'
-                  CALL HCO_ERROR(HcoState%Config%Err,MSG, RC,
+                  CALL HCO_ERROR(MSG, RC,
      &               THISLOC='FLX_MSS_CACO3_MSK' )
                   RETURN
                ENDIF
@@ -4111,7 +4269,7 @@
                IF ( MSS_FRC_CACO3_SLC(LON_IDX) < 0.0D0  .OR.
      &              MSS_FRC_CACO3_SLC(LON_IDX) > 1.0D0 ) THEN
                   MSG = 'mss_frc_CaCO3_s < 0.0.or.mss_frc_CaCO3 > 1.0!'
-                  CALL HCO_ERROR(HcoState%Config%Err,MSG, RC,
+                  CALL HCO_ERROR(MSG, RC,
      &               THISLOC='FLX_MSS_CACO3_MSK' )
                   RETURN
                ENDIF
@@ -4618,7 +4776,7 @@
       ! Error check
       IF ( VAI_MBL_THR <= 0.0d0 ) THEN
          MSG = 'VAI_MBL_THR <= 0.0'
-         CALL HCO_ERROR(HcoState%Config%Err,MSG, RC,
+         CALL HCO_ERROR(MSG, RC,
      &        THISLOC='LND_FRC_MBL_GET' )
          RETURN
       ENDIF
@@ -4745,14 +4903,14 @@
          ! Error check
          IF ( LND_FRC_MBL(lon_idx) > 1.0D0 ) THEN
             MSG = 'LND_FRC_MBL > 1'
-            CALL HCO_ERROR(HcoState%Config%Err,MSG, RC,
+            CALL HCO_ERROR(MSG, RC,
      &         THISLOC='LND_FRC_MBL_GET' )
             RETURN
          ENDIF
 
          IF ( LND_FRC_MBL(LON_IDX) < 0.0D0 )   then
             MSG = 'LND_FRC_MBL < 0'
-            CALL HCO_ERROR(HcoState%Config%Err,MSG, RC,
+            CALL HCO_ERROR(MSG, RC,
      &         THISLOC='LND_FRC_MBL_GET' )
             RETURN
          ENDIF
@@ -4942,7 +5100,7 @@
          ! 19990913: erf() in SGI /usr/lib64/mips4/libftn.so is bogus
          IF ( ABS( 0.8427d0 - ERF(1.0d0) ) / 0.8427d0 > 0.001d0 ) THEN
             MSG = 'ERF error 1 in OVR_SRC_SNK_FRC_GET!'
-            CALL HCO_ERROR(HcoState%Config%Err,MSG, RC,
+            CALL HCO_ERROR(MSG, RC,
      &         THISLOC='OVR_SRC_SNK_FRC_GET' )
             RETURN
          ENDIF
@@ -4950,7 +5108,7 @@
          ! Another ERF check
          IF ( ERF( 0.0D0 ) /= 0.0D0 ) THEN
             MSG = 'ERF error 2 in OVR_SRC_SNK_FRC_GET!'
-            CALL HCO_ERROR(HcoState%Config%Err,MSG, RC,
+            CALL HCO_ERROR(MSG, RC,
      &         THISLOC='OVR_SRC_SNK_FRC_GET' )
             RETURN
          ENDIF
@@ -5454,217 +5612,8 @@ c Fix up for negative argument, erf, etc.
       END SUBROUTINE PLN_TYP_GET
 
 !******************************************************************************
-
-      FUNCTION HCOX_TOMAS_DustDead_GetFluxTun( HcoState )
-     & RESULT( FLX_MSS_FDG_FCT )
-!
-!******************************************************************************
-! Returns global mass flux tuning factor (a posteriori).
-!
-!******************************************************************************
-!
-      ! Input argument
-      TYPE(HCO_State), POINTER :: HcoState    ! Hemco state
-
-      ! Output argument
-      REAL*8  :: FLX_MSS_FDG_FCT
-
-      ! Local variables
-      CHARACTER(LEN=255)  :: MSG
-      INTEGER             :: RC
-
-      !=================================================================
-      ! HCOX_TOMAS_DustDead_GetFluxTun begins here!
-      !=================================================================
-
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-! Prior to 4/13/19:
-! Need to set tuning factor in HEMCO_Config.rc for FlexGrid. Keep factors for
-! 2x2.5 and 4x5 for now. (mps, 4/13/19)
-!      ! Global mass flux tuning factor (a posteriori) [frc]
-!#if   defined( GEOS_FP ) && defined( GRID025x03125 )
-!
-!#if defined(NESTED_CH)
-!
-!      !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-!      !%%%       NOTE: NEED TO SCALE THIS FOR GEOS-FP nested CH!         %%%
-!      !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-!      ! Copy the 05x0666 scale factors for now (skim, 5/20/12)
-!      FLX_MSS_FDG_FCT = 3.23d-4
-!
-!#elif defined(NESTED_NA)
-!
-!      !----------------------------------------------------------------
-!      ! Based on results from GEOS-FP 0.25x0.3125 NA for 08/2012-08/2013
-!      ! compared to 2006 GEOS-5 0.5x0.666 NA
-!      !
-!      !   (GEOS-FP - GEOS-5)/GEOS-5 * 100 is 80.04% in each size bin.
-!      !
-!      ! We need to scale to the parameter FLX_MSS_FDG_FCT to make the
-!      ! dust emissions consistent. Consequently, to bring GEOS-FP nested
-!      ! NA dust emissions down to GEOS-5 nested NA levels, we need use
-!      ! a FLX_MSS_FDG_FCT of:
-!      !
-!      !             1 / (1 + 0.8004) = 0.5554
-!      !
-!      !             2.16d-4 * 0.5554 = 1.20d-4   ( 2.16d-4 is factor for
-!      !                                            GEOS-5 nested NA )
-!      !
-!      !    -- M. Sulprizio, 15 Jan 2014
-!      !----------------------------------------------------------------
-!      FLX_MSS_FDG_FCT = 1.20d-4
-!
-!#endif
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-      IF ( TRIM(HcoState%Config%MetField) == 'GEOSFP'   .and.
-     &     TRIM(HcoState%Config%GridRes)  == '2.0x2.5'  ) THEN
-
-      !----------------------------------------------------------------
-      ! Based on results from GEOS-FP 2x25 for 08/2012-08/2013
-      !
-      !   (GEOS-FP - GEOS-5)/GEOS-5 * 100 is -2.810% in each size bin.
-      !
-      ! We need to scale to the parameter FLX_MSS_FDG_FCT to make the
-      ! dust emissions consistent.  Consequently, to bring GEOS-FP 2x25
-      ! dust emissions up to 2005 GEOS-5 levels, we need to MULTIPLY the
-      ! FLX_MSS_FDG_FCT used for GEOS-5 by:
-      !
-      !             1 / (1. - 0.02810) = 1 / 0.9719 = 1.0289
-      !
-      !    -- M. Sulprizio, 15 Jan 2014
-      !----------------------------------------------------------------
-      FLX_MSS_FDG_FCT = 4.9d-4 * 1.0289d0
-
-      ELSE IF ( TRIM(HcoState%Config%MetField) == 'GEOSFP'   .and.
-     &          TRIM(HcoState%Config%GridRes)  == '4.0x5.0'  ) THEN
-
-      !----------------------------------------------------------------
-      ! Based on results from GEOS-FP 4x5 for 08/2012-08/2013
-      !
-      !   (GEOS-FP - GEOS-5)/GEOS-5 * 100 is -15.95% in each size bin.
-      !
-      ! We need to scale to the parameter FLX_MSS_FDG_FCT to make the
-      ! dust emissions consistent.  Consequently, to bring GEOS-FP 4x5
-      ! dust emissions up to 2005 GEOS-5 levels, we need to MULTIPLY the
-      ! FLX_MSS_FDG_FCT used for GEOS-5 by:
-      !
-      !             1 / (1. - 0.1595) = 1 / 0.8405 = 1.1898
-      !
-      !    -- R. Yantosca, M. Sulprizio, 06 Jan 2014
-      !----------------------------------------------------------------
-      FLX_MSS_FDG_FCT = 7.0d-4 * 1.1898d0
-
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-! Prior to 4/13/19:
-! Need to set tuning factor in HEMCO_Config.rc for FlexGrid. Keep factors for
-! 2x2.5 and 4x5 for now. (mps, 4/13/19)
-!#elif defined( MERRA2 ) && defined( GRID05x0625 )
-!
-!#if defined(NESTED_AS)
-!
-!      !----------------------------------------------------------------
-!      ! Based on results from MERRA2 0.5x0.625 CH for 2011 compared to
-!      ! GEOS-5 0.5x0.666 CH for 2011
-!      !
-!      !   (MERRA2 - GEOS-5)/GEOS-5 * 100 is 5.788% in each size bin.
-!      !
-!      ! We need to scale to the parameter FLX_MSS_FDG_FCT to make the
-!      ! dust emissions consistent. Consequently, to bring MERRA2 nested
-!      ! CH dust emissions down to GEOS-5 nested CH levels, we need use
-!      ! a FLX_MSS_FDG_FCT of:
-!      !
-!      !             1 / (1 + 0.05788) = 0.9453
-!      !
-!      !             3.23d-4 * 0.9453 = 3.05d-4   ( 3.23d-4 is factor for
-!      !                                            GEOS-5 nested CH )
-!      !
-!      ! NOTE: The MERRA2 0.5x0.625 CH grid extends further west (to 60E)
-!      ! than the GEOS-5 0.5x0.666 CH grid (to 70E). For this calculation,
-!      ! any dust emissions in the 60E-70E band in the MERRA2 CH output
-!      ! were ignored.
-!      !
-!      !    -- M. Sulprizio, 22 Feb 2016
-!      !----------------------------------------------------------------
-!      FLX_MSS_FDG_FCT = 3.05d-4
-!
-!#elif defined(NESTED_NA)
-!
-!      !----------------------------------------------------------------
-!      ! Based on results from MERRA2 0.5x0.625 NA for 2012 compared to
-!      ! GEOS-5 0.5x0.666 CH for 2012
-!      !
-!      !   (MERRA2 - GEOS-5)/GEOS-5 * 100 is 25.02% in each size bin.
-!      !
-!      ! We need to scale to the parameter FLX_MSS_FDG_FCT to make the
-!      ! dust emissions consistent. Consequently, to bring MERRA2 nested
-!      ! NA dust emissions down to GEOS-5 nested NA levels, we need use
-!      ! a FLX_MSS_FDG_FCT of:
-!      !
-!      !             1 / (1 + 0.2502) = 0.7999
-!      !
-!      !             2.16d-4 * 0.7999 = 1.73d-4   ( 2.16d-4 is factor for
-!      !                                            GEOS-5 nested NA )
-!      !
-!      !    -- M. Sulprizio, 22 Feb 2016
-!      !----------------------------------------------------------------
-!      FLX_MSS_FDG_FCT = 1.73d-4
-!
-!#endif
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-      ELSE IF ( TRIM(HcoState%Config%MetField) == 'MERRA2'   .and.
-     &          TRIM(HcoState%Config%GridRes)  == '2.0x2.5'  ) THEN
-
-      !----------------------------------------------------------------
-      ! Based on results from MERRA2 2x2.5 for 2012 (Chi Li, 7/8/16)
-      !----------------------------------------------------------------
-      FLX_MSS_FDG_FCT = 4.9d-4 * 0.971141
-
-      ELSE IF ( TRIM(HcoState%Config%MetField) == 'MERRA2'   .and.
-     &          TRIM(HcoState%Config%GridRes)  == '4.0x5.0'    ) THEN
-
-      !----------------------------------------------------------------
-      ! Based on results from MERRA2 4x5 for 2012
-      !
-      !   (MERRA2 - GEOS-5)/GEOS-5 * 100 is -10.86% in each size bin.
-      !
-      ! We need to scale to the parameter FLX_MSS_FDG_FCT to make the
-      ! dust emissions consistent.  Consequently, to bring 2012 MERRA2
-      ! dust emissions up to 2012 GEOS-5 levels, we need to MULTIPLY the
-      ! FLX_MSS_FDG_FCT used for GEOS-5 by:
-      !
-      !             1 / (1. - 0.1086) = 1 / 0.8913 = 1.1219
-      !
-      !    -- M. Sulprizio, 12 Feb 2016
-      !----------------------------------------------------------------
-      FLX_MSS_FDG_FCT = 7.0d-4 * 1.1219d0
-
-      ELSE
-
-      ! Default value
-      ! ==> Don't allow default value anymore. The tuning factor can
-      ! now also be set in the HEMCO configuration file. This should be
-      ! done whenever the compiler combinations above don't apply!
-!      FLX_MSS_FDG_FCT = 7.0d-4
-      FLX_MSS_FDG_FCT = -999.0d0
-
-      ! Error
-      MSG = 'Cannot assign mass flux tuning factor - ' //
-     &      'please explicitly set it by adding ' //
-     &      '` --> Mass tuning factor: XX.X` to the extension ' //
-     &      'options in your config. file.'
-         CALL HCO_ERROR(HcoState%Config%Err,MSG, RC,
-     & THISLOC='HCOX_TOMAS_DustDead_GetFluxTun')
-      RETURN
-
-      ENDIF
-
-      ! Return to calling program
-      END FUNCTION HCOX_TOMAS_DustDead_GetFluxTun
-
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -5686,6 +5635,7 @@ c Fix up for negative argument, erf, etc.
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -5718,7 +5668,7 @@ c Fix up for negative argument, erf, etc.
       END SUBROUTINE InstGet
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -5746,7 +5696,7 @@ c Fix up for negative argument, erf, etc.
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -5801,7 +5751,7 @@ c Fix up for negative argument, erf, etc.
       END SUBROUTINE InstCreate
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -5820,7 +5770,7 @@ c Fix up for negative argument, erf, etc.
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -5840,71 +5790,147 @@ c Fix up for negative argument, erf, etc.
       ! Instance-specific deallocation
       IF ( ASSOCIATED(Inst) ) THEN
 
-      !-----------------------------------------------------------------
-      ! Nullify pointers
-      !-----------------------------------------------------------------
-      IF(ASSOCIATED( Inst%ERD_FCT_GEO  )) DEALLOCATE(Inst%ERD_FCT_GEO  )
-      IF(ASSOCIATED( Inst%SRCE_FUNC    )) DEALLOCATE(Inst%SRCE_FUNC    )
-      IF(ASSOCIATED( Inst%LND_FRC_DRY  )) DEALLOCATE(Inst%LND_FRC_DRY  )
-      IF(ASSOCIATED( Inst%MSS_FRC_CACO3)) DEALLOCATE(Inst%MSS_FRC_CACO3)
-      IF(ASSOCIATED( Inst%MSS_FRC_SND  )) DEALLOCATE(Inst%MSS_FRC_SND  )
-      IF(ASSOCIATED( Inst%SFC_TYP      )) DEALLOCATE(Inst%SFC_TYP      )
-      IF(ASSOCIATED( Inst%VAI_DST      )) DEALLOCATE(Inst%VAI_DST      )
+         !--------------------------------------------------------------
+         ! Deallocate fields of Inst before popping off from the list
+         ! in order to avoid memory leaks (Bob Yantosca (17 Aug 2022)
+         !--------------------------------------------------------------
+         IF ( ASSOCIATED( Inst%ERD_FCT_GEO ) ) THEN
+            DEALLOCATE(Inst%ERD_FCT_GEO  )
+         ENDIF
+         Inst%ERD_FCT_GEO => NULL()
 
-      !-----------------------------------------------------------------
-      ! Cleanup module arrays
-      !-----------------------------------------------------------------
+         IF ( ASSOCIATED( Inst%SRCE_FUNC ) ) THEN
+            DEALLOCATE(Inst%SRCE_FUNC )
+         ENDIF
+         Inst%SRCE_FUNC => NULL()
 
-!      IF ( ALLOCATED( Inst%FLX_LW_DWN_SFC  ) )
-!     &    DEALLOCATE( Inst%FLX_LW_DWN_SFC  )
-!      IF ( ALLOCATED( Inst%FLX_SW_ABS_SFC  ) )
-!     &    DEALLOCATE( Inst%FLX_SW_ABS_SFC  )
-!      IF ( ALLOCATED( Inst%TPT_GND         ) )
-!     &    DEALLOCATE( Inst%TPT_GND         )
-!      IF ( ALLOCATED( Inst%TPT_SOI         ) )
-!     &    DEALLOCATE( Inst%TPT_SOI         )
-!      IF ( ALLOCATED( Inst%VWC_SFC         ) )
-!     &    DEALLOCATE( Inst%VWC_SFC         )
-!      IF ( ALLOCATED( Inst%SRC_STR         ) )
-!     &    DEALLOCATE( Inst%SRC_STR         )
-      IF ( ALLOCATED( Inst%PLN_TYP         ) )
-     &    DEALLOCATE( Inst%PLN_TYP         )
-      IF ( ALLOCATED( Inst%PLN_FRC         ) )
-     &    DEALLOCATE( Inst%PLN_FRC         )
-      IF ( ALLOCATED( Inst%TAI             ) )
-     &    DEALLOCATE( Inst%TAI             )
-      IF ( ALLOCATED( Inst%DMT_VWR         ) )
-     &    DEALLOCATE( Inst%DMT_VWR         )
-!      IF ( ALLOCATED( Inst%DNS_AER         ) )
-!     &    DEALLOCATE( Inst%DNS_AER         )
-      IF ( ALLOCATED( Inst%OVR_SRC_SNK_FRC ) )
-     &    DEALLOCATE( Inst%OVR_SRC_SNK_FRC )
-      IF ( ALLOCATED( Inst%OVR_SRC_SNK_MSS ) )
-     &    DEALLOCATE( Inst%OVR_SRC_SNK_MSS )
-!      IF ( ALLOCATED( Inst%OROGRAPHY       ) )
-!     &    DEALLOCATE( Inst%OROGRAPHY       )
-      IF ( ALLOCATED( Inst%DMT_MIN         ) )
-     &    DEALLOCATE( Inst%DMT_MIN         )
-      IF ( ALLOCATED( Inst%DMT_MAX         ) )
-     &    DEALLOCATE( Inst%DMT_MAX         )
-      IF ( ALLOCATED( Inst%DMT_VMA_SRC     ) )
-     &    DEALLOCATE( Inst%DMT_VMA_SRC     )
-      IF ( ALLOCATED( Inst%GSD_ANL_SRC     ) )
-     &    DEALLOCATE( Inst%GSD_ANL_SRC     )
-      IF ( ALLOCATED( Inst%MSS_FRC_SRC     ) )
-     &    DEALLOCATE( Inst%MSS_FRC_SRC     )
-      IF ( ALLOCATED( Inst%HcoIDs          ) )
-     &    DEALLOCATE( Inst%HcoIDs          )
+         IF ( ASSOCIATED( Inst%LND_FRC_DRY ) ) THEN
+            DEALLOCATE(Inst%LND_FRC_DRY )
+         ENDIF
+         Inst%LND_FRC_DRY   => NULL()
 
-       ! Pop off instance from list
-       IF ( ASSOCIATED(PrevInst) ) THEN
-          PrevInst%NextInst => Inst%NextInst
-       ELSE
-          AllInst => Inst%NextInst
-       ENDIF
-       DEALLOCATE(Inst)
-       Inst => NULL()
+         IF ( ASSOCIATED( Inst%MSS_FRC_CACO3 ) ) THEN
+            DEALLOCATE(Inst%MSS_FRC_CACO3)
+         ENDIF
+         Inst%MSS_FRC_CACO3 => NULL()
+
+         IF ( ASSOCIATED( Inst%MSS_FRC_CLY ) ) THEN
+            DEALLOCATE(Inst%MSS_FRC_CLY)
+         ENDIF
+         Inst%MSS_FRC_CLY => NULL()
+
+         IF ( ASSOCIATED( Inst%MSS_FRC_SND ) ) THEN
+            DEALLOCATE(Inst%MSS_FRC_SND )
+         ENDIF
+         Inst%MSS_FRC_SND => NULL()
+
+         IF ( ASSOCIATED( Inst%SFC_TYP ) ) THEN
+            DEALLOCATE(Inst%SFC_TYP )
+         ENDIF
+         Inst%SFC_TYP => NULL()
+
+         IF ( ASSOCIATED( Inst%VAI_DST ) ) THEN
+            DEALLOCATE(Inst%VAI_DST )
+         ENDIF
+         Inst%VAI_DST => NULL()
+
+! These are not used
+!         IF ( ALLOCATED( Inst%FLX_LW_DWN_SFC  ) ) THEN
+!            DEALLOCATE( Inst%FLX_LW_DWN_SFC )
+!         ENDIF
+!
+!         IF ( ALLOCATED( Inst%FLX_SW_ABS_SFC  ) ) THEN
+!            DEALLOCATE( Inst%FLX_SW_ABS_SFC  )
+!         ENDIF
+!
+!         IF ( ALLOCATED( Inst%TPT_GND ) ) THEN
+!            DEALLOCATE( Inst%TPT_GND )
+!         ENDIF
+!
+!         IF ( ALLOCATED( Inst%TPT_SOI ) ) THEN
+!            DEALLOCATE( Inst%TPT_SOI )
+!         ENDIF
+!
+!         IF ( ALLOCATED( Inst%VWC_SFC ) ) THEN
+!            DEALLOCATE( Inst%VWC_SFC )
+!         ENDIF
+!
+!         IF ( ALLOCATED( Inst%SRC_STR ) ) THEN
+!            DEALLOCATE( Inst%SRC_STR )
+!         ENDIF
+
+         IF ( ALLOCATED( Inst%PLN_TYP ) ) THEN
+            DEALLOCATE( Inst%PLN_TYP )
+         ENDIF
+
+         IF ( ALLOCATED( Inst%PLN_FRC ) ) THEN
+            DEALLOCATE( Inst%PLN_FRC )
+         ENDIF
+
+         IF ( ALLOCATED( Inst%TAI ) ) THEN
+            DEALLOCATE( Inst%TAI )
+         ENDIF
+
+         IF ( ALLOCATED( Inst%DMT_VWR ) ) THEN
+            DEALLOCATE( Inst%DMT_VWR )
+         ENDIF
+
+! This is not used
+!         IF ( ALLOCATED( Inst%DNS_AER ) ) THEN
+!            DEALLOCATE( Inst%DNS_AER  )
+!         ENDIF
+
+         IF ( ALLOCATED( Inst%OVR_SRC_SNK_FRC ) ) THEN
+            DEALLOCATE( Inst%OVR_SRC_SNK_FRC )
+         ENDIF
+
+         IF ( ALLOCATED( Inst%OVR_SRC_SNK_MSS ) ) THEN
+            DEALLOCATE( Inst%OVR_SRC_SNK_MSS )
+         ENDIF
+
+! This is not used
+!         IF ( ALLOCATED( Inst%OROGRAPHY ) )
+!            DEALLOCATE( Inst%OROGRAPHY )
+!         ENDIF
+
+         IF ( ALLOCATED( Inst%DMT_MIN ) ) THEN
+            DEALLOCATE( Inst%DMT_MIN )
+         ENDIF
+
+         IF ( ALLOCATED( Inst%DMT_MAX ) ) THEN
+            DEALLOCATE( Inst%DMT_MAX )
+         ENDIF
+
+         IF ( ALLOCATED( Inst%DMT_VMA_SRC ) ) THEN
+            DEALLOCATE( Inst%DMT_VMA_SRC )
+         ENDIF
+
+         IF ( ALLOCATED( Inst%GSD_ANL_SRC ) ) THEN
+            DEALLOCATE( Inst%GSD_ANL_SRC )
+         ENDIF
+
+         IF ( ALLOCATED( Inst%MSS_FRC_SRC ) ) THEN
+            DEALLOCATE( Inst%MSS_FRC_SRC )
+         ENDIF
+
+         IF ( ALLOCATED( Inst%HcoIDs ) ) THEN
+            DEALLOCATE( Inst%HcoIDs )
+         ENDIF
+
+         !--------------------------------------------------------------
+         ! Pop off instance from list
+         !--------------------------------------------------------------
+         IF ( ASSOCIATED(PrevInst) ) THEN
+            PrevInst%NextInst => Inst%NextInst
+         ELSE
+            AllInst => Inst%NextInst
+         ENDIF
+         DEALLOCATE(Inst)
       ENDIF
+
+      ! Free pointers before exiting
+      PrevInst => NULL()
+      Inst     => NULL()
 
       END SUBROUTINE InstRemove
 !EOC

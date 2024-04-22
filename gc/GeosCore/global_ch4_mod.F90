@@ -15,7 +15,6 @@ MODULE GLOBAL_CH4_MOD
 !
 ! !USES:
 !
-  USE HCO_ERROR_MOD       ! For HEMCO error reporting
   USE PhysConstants, ONLY : AVO, AIRMW
   USE PRECISION_MOD       ! For GEOS-Chem Precision (fp, f4, f8)
 
@@ -27,15 +26,10 @@ MODULE GLOBAL_CH4_MOD
   PUBLIC :: EMISSCH4
   PUBLIC :: CHEMCH4
   PUBLIC :: INIT_GLOBAL_CH4
-  PUBLIC :: CLEANUP_GLOBAL_CH4
 !
 ! !PUBLIC DATA MEMBERS:
 !
   REAL(fp), PARAMETER,   PUBLIC :: XNUMOL_CH4 = AVO / 16d-3 ! hard-coded MW
-
-  ! Make CH4_EMIS now public so that it can be used by vdiff_mod.F90
-  ! Methane emissions units are [kg/m2/s]
-  REAL(fp),  ALLOCATABLE, PUBLIC :: CH4_EMIS(:,:,:)
 !
 ! !REVISION HISTORY:
 !  17 Jan 2001- J. Wang, B. Duncan, R. Yantosca -- Initial version
@@ -47,14 +41,7 @@ MODULE GLOBAL_CH4_MOD
 !
   !========================================================================
   ! Module Variables:
-  ! BAIRDENS   : Array for air density                      [molec/cm3]
-  ! BOH        : Array for OH values                        [kg/m3]
-  ! BCl        : Array for Cl values                        [ppbv]
-  ! COPROD     : Array for zonal mean P(CO)                 [v/v/s]
-  ! CH4LOSS    : Array for monthly average CH4 loss freq    [1/s]
-  ! FMOL_CH4   : Molecular weight of CH4                    [kg/mole]
   ! XNUMOL_CH4 : Molecules CH4 / kg CH4                     [molec/kg]
-  ! CH4_EMIS   : Array for CH4 Emissions                    [kg/m2/s]
   !========================================================================
 
   REAL(fp), PARAMETER   :: XNUMOL_OH = AVO / 17e-3_fp  ! molec OH / kg OH
@@ -63,24 +50,8 @@ MODULE GLOBAL_CH4_MOD
 !
 ! !LOCAL VARIABLES:
 !
-  ! Diagnostic flags
-  LOGICAL               :: Do_ND43
-
-  ! Species ID flag
+  ! Scalars
   INTEGER               :: id_CH4
-
-  ! Various arrays
-  REAL(fp), ALLOCATABLE :: BAIRDENS(:,:,:)
-
-  ! Pointers to fields in the HEMCO data structure.
-  ! These need to be declared as REAL(f4), aka REAL*4.
-  ! NOTE: These are globally SAVEd variables so we can
-  ! nullify these in the declaration statement (bmy, 4/29/16)
-  REAL(f4), POINTER     :: BOH    (:,:,:) => NULL()
-  REAL(f4), POINTER     :: BCl    (:,:,:) => NULL()
-  REAL(f4), POINTER     :: CH4LOSS(:,:,:) => NULL()
-  REAL(f4), POINTER     :: CLUSTERS(:,:)  => NULL()
-
   REAL(fp)              :: TROPOCH4
 
 CONTAINS
@@ -98,18 +69,23 @@ CONTAINS
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE EMISSCH4( Input_Opt, State_Met, RC )
+  SUBROUTINE EMISSCH4( Input_Opt, State_Chm, State_Grid, State_Met, RC )
 !
 ! !USES:
 !
-    USE HCO_INTERFACE_MOD,  ONLY : HcoState, GetHcoDiagn
+    USE HCO_Utilities_GC_Mod, ONLY : HCO_GC_EvalFld
+    USE HCO_Utilities_GC_Mod, ONLY : HCO_GC_GetDiagn
     USE ErrCode_Mod
-    USE Input_Opt_Mod,      ONLY : OptInput
-    USE State_Met_Mod,      ONLY : MetState
+    USE Input_Opt_Mod,        ONLY : OptInput
+    USE State_Chm_Mod,        ONLY : ChmState
+    USE State_Met_Mod,        ONLY : MetState
+    USE State_Grid_Mod,       ONLY : GrdState
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(OptInput), INTENT(IN)    :: Input_Opt   ! Input Options object
+    TYPE(ChmState), INTENT(INOUT) :: State_Chm   ! Chemistry State object
+    TYPE(GrdState), INTENT(IN)    :: State_Grid  ! Grid State object
     TYPE(MetState), INTENT(IN)    :: State_Met   ! Meteorology State object
 !
 ! !OUTPUT PARAMETERS:
@@ -135,21 +111,26 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     ! Scalars
-    INTEGER                  :: I, J, N
-    REAL(fp)                 :: DTSRCE, AREA_M2
+    INTEGER            :: I, J, N
 
     ! Strings
-    CHARACTER(LEN= 63)       :: DgnName
-    CHARACTER(LEN=255)       :: ErrMsg
-    CHARACTER(LEN=255)       :: ThisLoc
+    CHARACTER(LEN= 63) :: DgnName
+    CHARACTER(LEN=255) :: ErrMsg
+    CHARACTER(LEN=255) :: ThisLoc
 
     ! For fields from Input_Opt
-    LOGICAL                  :: ITS_A_CH4_SIM
-    LOGICAL                  :: prtDebug
-    LOGICAL, SAVE            :: FIRST = .TRUE.
+    LOGICAL            :: ITS_A_CH4_SIM
+    LOGICAL            :: prtDebug
+    LOGICAL, SAVE      :: FIRST = .TRUE.
+
+    ! Arrays of state vector elements for applying emissions perturbations
+    REAL(fp)           :: STATE_VECTOR(State_Grid%NX,State_Grid%NY)
+
+    ! Array of scale factors for emissions (from HEMCO)
+    REAL(fp)           :: EMIS_SF(State_Grid%NX,State_Grid%NY)
 
     ! Pointers
-    REAL(f4),        POINTER :: Ptr2D(:,:)
+    REAL(f4), POINTER  :: Ptr2D(:,:)
 
     !=================================================================
     ! EMISSCH4 begins here!
@@ -169,18 +150,36 @@ CONTAINS
     ! Do we have to print debug output?
     prtDebug = ( Input_Opt%LPRT .and. Input_Opt%amIRoot )
 
-    ! Exit with error if we can't find the HEMCO state object
-    IF ( .NOT. ASSOCIATED( HcoState ) ) THEN
-       ErrMsg = 'The HcoState object is undefined!'
-       CALL GC_Error( ErrMsg, RC, ThisLoc )
-       RETURN
-    ENDIF
-
-    ! Emission timestep
-    DTSRCE = HcoState%TS_EMIS
-
     IF ( ITS_A_CH4_SIM .and. prtDebug ) THEN
        print*,'BEGIN SUBROUTINE: EMISSCH4'
+    ENDIF
+
+    ! =================================================================
+    ! Get fields for CH4 analytical inversions if needed
+    ! =================================================================
+    IF ( Input_Opt%AnalyticalInv ) THEN
+
+       ! Evaluate the state vector field from HEMCO
+       CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'CH4_STATE_VECTOR', &
+                         STATE_VECTOR, RC)
+       IF ( RC /= GC_SUCCESS ) THEN
+          ErrMsg = 'CH4_STATE_VECTOR not found in HEMCO data list!'
+          CALL GC_Error( ErrMsg, RC, ThisLoc )
+          RETURN
+       ENDIF
+
+    ENDIF
+
+    IF ( Input_Opt%UseEmisSF ) THEN
+
+       ! Evaluate CH4 emissions scale factors from HEMCO
+       CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'EMIS_SF', EMIS_SF, RC)
+       IF ( RC /= GC_SUCCESS ) THEN
+          ErrMsg = 'EMIS_SF not found in HEMCO data list!'
+          CALL GC_Error( ErrMsg, RC, ThisLoc )
+          RETURN
+       ENDIF
+
     ENDIF
 
     ! =================================================================
@@ -196,34 +195,26 @@ CONTAINS
     ! in a multi-species simulation, species 1 (total CH4) is properly
     ! defined.
     !
-    ! NOTE: the ND60 diagnostics (wetland fraction) is currently not
-    ! written. To support this diagnostics, create a manual diagnostics
-    ! in the wetland extension (HEMCO/Extensions/hcox_ch4wetland_mod.F90),
-    ! activate it in hcoi\_gc\_diagn\_mod.F90 and import it here.
-    !
     !                                              (ckeller, 9/12/2013)
     ! =================================================================
-    CH4_EMIS(:,:,:) = 0e+0_fp
+    State_Chm%CH4_EMIS(:,:,:) = 0e+0_fp
 
     !-------------------
     ! Oil
     !-------------------
     DgnName = 'CH4_OIL'
-    CALL GetHcoDiagn( DgnName, .FALSE., RC, Ptr2D=Ptr2D )
+    CALL HCO_GC_GetDiagn( Input_Opt, State_Grid, DgnName, .FALSE., RC, Ptr2D=Ptr2D )
 
-    ! Trap potential errors
-    IF ( RC /= HCO_SUCCESS ) THEN
+    ! Trap potential errors and assign HEMCO pointer to array
+    IF ( RC /= GC_SUCCESS ) THEN
        ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
        CALL GC_Error( ErrMsg, RC, ThisLoc )
        RETURN
-    ENDIF
-
-    ! Assign HEMCO pointer to array
-    IF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
-       ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
-       CALL HCO_WARNING( ErrMsg, RC, ThisLoc=ThisLoc )
+    ELSEIF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
+       ErrMsg = 'Unassociated pointer to HEMCO field ' // TRIM(DgnName)
+       CALL GC_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
     ELSE
-       CH4_EMIS(:,:,2) =  Ptr2D(:,:)
+       State_Chm%CH4_EMIS(:,:,2) =  Ptr2D(:,:)
     ENDIF
     Ptr2D => NULL()
 
@@ -231,21 +222,18 @@ CONTAINS
     ! Gas
     !-------------------
     DgnName = 'CH4_GAS'
-    CALL GetHcoDiagn( DgnName, .FALSE., RC, Ptr2D=Ptr2D )
+    CALL HCO_GC_GetDiagn( Input_Opt, State_Grid, DgnName, .FALSE., RC, Ptr2D=Ptr2D )
 
-    ! Trap potential errors
-    IF ( RC /= HCO_SUCCESS ) THEN
+    ! Trap potential errors and assign HEMCO pointer to array
+    IF ( RC /= GC_SUCCESS ) THEN
        ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
        CALL GC_Error( ErrMsg, RC, ThisLoc )
        RETURN
-    ENDIF
-
-    ! Assign HEMCO pointer to array
-    IF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
-       ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
-       CALL HCO_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
+    ELSEIF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
+       ErrMsg = 'Unassociated pointer to HEMCO field ' // TRIM(DgnName)
+       CALL GC_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
     ELSE
-       CH4_EMIS(:,:,3) =  Ptr2D(:,:)
+       State_Chm%CH4_EMIS(:,:,3) =  Ptr2D(:,:)
     ENDIF
     Ptr2D => NULL()
 
@@ -253,21 +241,18 @@ CONTAINS
     ! Coal
     !-------------------
     DgnName = 'CH4_COAL'
-    CALL GetHcoDiagn( DgnName, .FALSE., RC, Ptr2D=Ptr2D )
+    CALL HCO_GC_GetDiagn( Input_Opt, State_Grid, DgnName, .FALSE., RC, Ptr2D=Ptr2D )
 
-    ! Trap potential errors
-    IF ( RC /= HCO_SUCCESS ) THEN
+    ! Trap potential errors and assign HEMCO pointer to array
+    IF ( RC /= GC_SUCCESS ) THEN
        ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
        CALL GC_Error( ErrMsg, RC, ThisLoc )
        RETURN
-    ENDIF
-
-    ! Assign HEMCO pointer to array
-    IF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
-       ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
-       CALL HCO_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
+    ELSEIF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
+       ErrMsg = 'Unassociated pointer to HEMCO field ' // TRIM(DgnName)
+       CALL GC_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
     ELSE
-       CH4_EMIS(:,:,4) =  Ptr2D(:,:)
+       State_Chm%CH4_EMIS(:,:,4) =  Ptr2D(:,:)
     ENDIF
     Ptr2D => NULL()
 
@@ -275,21 +260,18 @@ CONTAINS
     ! Livestock
     !-------------------
     DgnName = 'CH4_LIVESTOCK'
-    CALL GetHcoDiagn( DgnName, .FALSE., RC, Ptr2D=Ptr2D )
+    CALL HCO_GC_GetDiagn( Input_Opt, State_Grid, DgnName, .FALSE., RC, Ptr2D=Ptr2D )
 
-    ! Trap potential errors
-    IF ( RC /= HCO_SUCCESS ) THEN
+    ! Trap potential errors and assign HEMCO pointer to array
+    IF ( RC /= GC_SUCCESS ) THEN
        ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
        CALL GC_Error( ErrMsg, RC, ThisLoc )
        RETURN
-    ENDIF
-
-    ! Assign HEMCO pointer to array
-    IF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
-       ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
-       CALL GC_Error( ErrMsg, RC, ThisLoc=ThisLoc )
+    ELSEIF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
+       ErrMsg = 'Unassociated pointer to HEMCO field ' // TRIM(DgnName)
+       CALL GC_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
     ELSE
-       CH4_EMIS(:,:,5) =  Ptr2D(:,:)
+       State_Chm%CH4_EMIS(:,:,5) =  Ptr2D(:,:)
     ENDIF
     Ptr2D => NULL()
 
@@ -297,21 +279,18 @@ CONTAINS
     ! Landfills
     !-------------------
     DgnName = 'CH4_LANDFILLS'
-    CALL GetHcoDiagn( DgnName, .FALSE., RC, Ptr2D=Ptr2D )
+    CALL HCO_GC_GetDiagn( Input_Opt, State_Grid, DgnName, .FALSE., RC, Ptr2D=Ptr2D )
 
-    ! Trap potential errors
-    IF ( RC /= HCO_SUCCESS ) THEN
+    ! Trap potential errors and assign HEMCO pointer to array
+    IF ( RC /= GC_SUCCESS ) THEN
        ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
        CALL GC_Error( ErrMsg, RC, ThisLoc )
        RETURN
-    ENDIF
-
-    ! Assign HEMCO pointer to array
-    IF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
-       ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
-       CALL HCO_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
+    ELSEIF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
+       ErrMsg = 'Unassociated pointer to HEMCO field ' // TRIM(DgnName)
+       CALL GC_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
     ELSE
-       CH4_EMIS(:,:,6) =  Ptr2D(:,:)
+       State_Chm%CH4_EMIS(:,:,6) =  Ptr2D(:,:)
     ENDIF
     Ptr2D => NULL()
 
@@ -319,21 +298,18 @@ CONTAINS
     ! Wastewater
     !-------------------
     DgnName = 'CH4_WASTEWATER'
-    CALL GetHcoDiagn( DgnName, .FALSE., RC, Ptr2D=Ptr2D )
+    CALL HCO_GC_GetDiagn( Input_Opt, State_Grid, DgnName, .FALSE., RC, Ptr2D=Ptr2D )
 
-    ! Trap potential errors
-    IF ( RC /= HCO_SUCCESS ) THEN
+    ! Trap potential errors and assign HEMCO pointer to array
+    IF ( RC /= GC_SUCCESS ) THEN
        ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
        CALL GC_Error( ErrMsg, RC, ThisLoc )
        RETURN
-    ENDIF
-
-    ! Assign HEMCO pointer to array
-    IF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
-       ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
-       CALL HCO_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
+    ELSEIF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
+       ErrMsg = 'Unassociated pointer to HEMCO field ' // TRIM(DgnName)
+       CALL GC_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
     ELSE
-       CH4_EMIS(:,:,7) =  Ptr2D(:,:)
+       State_Chm%CH4_EMIS(:,:,7) =  Ptr2D(:,:)
     ENDIF
     Ptr2D => NULL()
 
@@ -341,21 +317,18 @@ CONTAINS
     ! Rice
     !-------------------
     DgnName = 'CH4_RICE'
-    CALL GetHcoDiagn( DgnName, .FALSE., RC, Ptr2D=Ptr2D )
+    CALL HCO_GC_GetDiagn( Input_Opt, State_Grid, DgnName, .FALSE., RC, Ptr2D=Ptr2D )
 
-    ! Trap potential errors
-    IF ( RC /= HCO_SUCCESS ) THEN
+    ! Trap potential errors and assign HEMCO pointer to array
+    IF ( RC /= GC_SUCCESS ) THEN
        ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
        CALL GC_Error( ErrMsg, RC, ThisLoc )
        RETURN
-    ENDIF
-
-    ! Assign HEMCO pointer to array
-    IF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
-       ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
-       CALL HCO_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
+    ELSEIF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
+       ErrMsg = 'Unassociated pointer to HEMCO field ' // TRIM(DgnName)
+       CALL GC_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
     ELSE
-       CH4_EMIS(:,:,8) =  Ptr2D(:,:)
+       State_Chm%CH4_EMIS(:,:,8) =  Ptr2D(:,:)
     ENDIF
     Ptr2D => NULL()
 
@@ -363,21 +336,18 @@ CONTAINS
     ! Other anthropogenic
     !-------------------
     DgnName = 'CH4_ANTHROTHER'
-    CALL GetHcoDiagn( DgnName, .FALSE., RC, Ptr2D=Ptr2D )
+    CALL HCO_GC_GetDiagn( Input_Opt, State_Grid, DgnName, .FALSE., RC, Ptr2D=Ptr2D )
 
-    ! Trap potential errors
-    IF ( RC /= HCO_SUCCESS ) THEN
+    ! Trap potential errors and assign HEMCO pointer to array
+    IF ( RC /= GC_SUCCESS ) THEN
        ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
        CALL GC_Error( ErrMsg, RC, ThisLoc )
        RETURN
-    ENDIF
-
-    ! Assign HEMCO pointer to array
-    IF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
-       ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
-       CALL HCO_Warning( ErrMsg, RC, ThisLoc = ThisLoc )
+    ELSEIF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
+       ErrMsg = 'Unassociated pointer to HEMCO field ' // TRIM(DgnName)
+       CALL GC_Warning( ErrMsg, RC, ThisLoc = ThisLoc )
     ELSE
-       CH4_EMIS(:,:,9) =  Ptr2D(:,:)
+       State_Chm%CH4_EMIS(:,:,9) =  Ptr2D(:,:)
     ENDIF
     Ptr2D => NULL()
 
@@ -385,21 +355,18 @@ CONTAINS
     ! Biomass burning
     !-------------------
     DgnName = 'CH4_BIOMASS'
-    CALL GetHcoDiagn( DgnName, .FALSE., RC, Ptr2D=Ptr2D )
+    CALL HCO_GC_GetDiagn( Input_Opt, State_Grid, DgnName, .FALSE., RC, Ptr2D=Ptr2D )
 
-    ! Trap potential errors
-    IF ( RC /= HCO_SUCCESS ) THEN
+    ! Trap potential errors and assign HEMCO pointer to array
+    IF ( RC /= GC_SUCCESS ) THEN
        ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
        CALL GC_Error( ErrMsg, RC, ThisLoc )
        RETURN
-    ENDIF
-
-    ! Assign HEMCO pointer to array
-    IF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
-       ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
-       CALL HCO_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
+    ELSEIF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
+       ErrMsg = 'Unassociated pointer to HEMCO field ' // TRIM(DgnName)
+       CALL GC_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
     ELSE
-       CH4_EMIS(:,:,10) =  Ptr2D(:,:)
+       State_Chm%CH4_EMIS(:,:,10) =  Ptr2D(:,:)
     ENDIF
     Ptr2D => NULL()
 
@@ -407,21 +374,18 @@ CONTAINS
     ! Wetland
     !-------------------
     DgnName = 'CH4_WETLAND'
-    CALL GetHcoDiagn( DgnName, .FALSE., RC, Ptr2D=Ptr2D )
+    CALL HCO_GC_GetDiagn( Input_Opt, State_Grid, DgnName, .FALSE., RC, Ptr2D=Ptr2D )
 
-    ! Trap potential errors
-    IF ( RC /= HCO_SUCCESS ) THEN
+    ! Trap potential errors and assign HEMCO pointer to array
+    IF ( RC /= GC_SUCCESS ) THEN
        ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
        CALL GC_Error( ErrMsg, RC, ThisLoc )
        RETURN
-    ENDIF
-
-    ! Assign HEMCO pointer to array
-    IF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
-       ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
-       CALL HCO_WARNING( ErrMsg, RC, ThisLoc=ThisLoc )
+    ELSEIF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
+       ErrMsg = 'Unassociated pointer to HEMCO field ' // TRIM(DgnName)
+       CALL GC_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
     ELSE
-       CH4_EMIS(:,:,11) =  Ptr2D(:,:)
+       State_Chm%CH4_EMIS(:,:,11) =  Ptr2D(:,:)
     ENDIF
     Ptr2D => NULL()
 
@@ -429,21 +393,18 @@ CONTAINS
     ! Global seeps
     !-------------------
     DgnName = 'CH4_SEEPS'
-    CALL GetHcoDiagn( DgnName, .FALSE., RC, Ptr2D=Ptr2D )
+    CALL HCO_GC_GetDiagn( Input_Opt, State_Grid, DgnName, .FALSE., RC, Ptr2D=Ptr2D )
 
-    ! Trap potential errors
-    IF ( RC /= HCO_SUCCESS ) THEN
+    ! Trap potential errors and assign HEMCO pointer to array
+    IF ( RC /= GC_SUCCESS ) THEN
        ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
        CALL GC_Error( ErrMsg, RC, ThisLoc )
        RETURN
-    ENDIF
-
-    ! Assign HEMCO pointer to array
-    IF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
-       ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
-       CALL HCO_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
+    ELSEIF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
+       ErrMsg = 'Unassociated pointer to HEMCO field ' // TRIM(DgnName)
+       CALL GC_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
     ELSE
-       CH4_EMIS(:,:,12) =  Ptr2D(:,:)
+       State_Chm%CH4_EMIS(:,:,12) =  Ptr2D(:,:)
     ENDIF
     Ptr2D => NULL()
 
@@ -451,21 +412,18 @@ CONTAINS
     ! Lakes
     !-------------------
     DgnName = 'CH4_LAKES'
-    CALL GetHcoDiagn( DgnName, .FALSE., RC, Ptr2D=Ptr2D )
+    CALL HCO_GC_GetDiagn( Input_Opt, State_Grid, DgnName, .FALSE., RC, Ptr2D=Ptr2D )
 
-    ! Trap potential errors
-    IF ( RC /= HCO_SUCCESS ) THEN
+    ! Trap potential errors and assign HEMCO pointer to array
+    IF ( RC /= GC_SUCCESS ) THEN
        ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
        CALL GC_Error( ErrMsg, RC, ThisLoc )
        RETURN
-    ENDIF
-
-    ! Assign HEMCO pointer to array
-    IF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
-       ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
-       CALL HCO_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
+    ELSEIF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
+       ErrMsg = 'Unassociated pointer to HEMCO field ' // TRIM(DgnName)
+       CALL GC_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
     ELSE
-       CH4_EMIS(:,:,13) =  Ptr2D(:,:)
+       State_Chm%CH4_EMIS(:,:,13) =  Ptr2D(:,:)
     ENDIF
     Ptr2D => NULL()
 
@@ -473,21 +431,18 @@ CONTAINS
     ! Termites
     !-------------------
     DgnName = 'CH4_TERMITES'
-    CALL GetHcoDiagn( DgnName, .FALSE., RC, Ptr2D=Ptr2D )
+    CALL HCO_GC_GetDiagn( Input_Opt, State_Grid, DgnName, .FALSE., RC, Ptr2D=Ptr2D )
 
-    ! Trap potential errors
-    IF ( RC /= HCO_SUCCESS ) THEN
+    ! Trap potential errors and assign HEMCO pointer to array
+    IF ( RC /= GC_SUCCESS ) THEN
        ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
        CALL GC_Error( ErrMsg, RC, ThisLoc )
        RETURN
-    ENDIF
-
-    ! Assign HEMCO pointer to array
-    IF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
-       ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
-       CALL HCO_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
+    ELSEIF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
+       ErrMsg = 'Unassociated pointer to HEMCO field ' // TRIM(DgnName)
+       CALL GC_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
     ELSE
-       CH4_EMIS(:,:,14) =  Ptr2D(:,:)
+       State_Chm%CH4_EMIS(:,:,14) =  Ptr2D(:,:)
     ENDIF
     Ptr2D => NULL()
 
@@ -495,21 +450,18 @@ CONTAINS
     ! Soil absorption (those are negative!)
     !-------------------
     DgnName = 'CH4_SOILABSORB'
-    CALL GetHcoDiagn( DgnName, .FALSE., RC, Ptr2D=Ptr2D )
+    CALL HCO_GC_GetDiagn( Input_Opt, State_Grid, DgnName, .FALSE., RC, Ptr2D=Ptr2D )
 
-    ! Trap potential errors
-    IF ( RC /= HCO_SUCCESS ) THEN
+    ! Trap potential errors and assign HEMCO pointer to array
+    IF ( RC /= GC_SUCCESS ) THEN
        ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
        CALL GC_Error( ErrMsg, RC, ThisLoc )
        RETURN
-    ENDIF
-
-    ! Assign HEMCO pointer to array
-    IF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
-       ErrMsg = 'Cannot get pointer to HEMCO field ' // TRIM(DgnName)
-       CALL HCO_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
+    ELSEIF ( .NOT. ASSOCIATED(Ptr2D) ) THEN
+       ErrMsg = 'Unassociated pointer to HEMCO field ' // TRIM(DgnName)
+       CALL GC_Warning( ErrMsg, RC, ThisLoc=ThisLoc )
     ELSE
-       CH4_EMIS(:,:,15) =  Ptr2D(:,:) * -1.0_hp
+       State_Chm%CH4_EMIS(:,:,15) =  Ptr2D(:,:) * -1.0_fp
     ENDIF
     Ptr2D => NULL()
 
@@ -518,25 +470,78 @@ CONTAINS
     ! We have to substract soil absorption twice because it is added
     ! to other emissions in the SUM function. (ccc, 7/23/09)
     ! =================================================================
-    CH4_EMIS(:,:,1) = SUM(CH4_EMIS, 3) - (2 * CH4_EMIS(:,:,15))
+    State_Chm%CH4_EMIS(:,:,1) = SUM(State_Chm%CH4_EMIS, 3) - (2 * State_Chm%CH4_EMIS(:,:,15))
 
     IF ( prtDebug ) THEN
        WRITE(*,*) 'CH4_EMIS (kg/m2/s):'
-       WRITE(*,*) 'Total        : ', SUM(CH4_EMIS(:,:,1))
-       WRITE(*,*) 'Oil          : ', SUM(CH4_EMIS(:,:,2))
-       WRITE(*,*) 'Gas          : ', SUM(CH4_EMIS(:,:,3))
-       WRITE(*,*) 'Coal         : ', SUM(CH4_EMIS(:,:,4))
-       WRITE(*,*) 'Livestock    : ', SUM(CH4_EMIS(:,:,5))
-       WRITE(*,*) 'Landfills    : ', SUM(CH4_EMIS(:,:,6))
-       WRITE(*,*) 'Wastewater   : ', SUM(CH4_EMIS(:,:,7))
-       WRITE(*,*) 'Rice         : ', SUM(CH4_EMIS(:,:,8))
-       WRITE(*,*) 'Other anth   : ', SUM(CH4_EMIS(:,:,9))
-       WRITE(*,*) 'Biomass burn : ', SUM(CH4_EMIS(:,:,10))
-       WRITE(*,*) 'Wetlands     : ', SUM(CH4_EMIS(:,:,11))
-       WRITE(*,*) 'Seeps        : ', SUM(CH4_EMIS(:,:,12))
-       WRITE(*,*) 'Lakes        : ', SUM(CH4_EMIS(:,:,13))
-       WRITE(*,*) 'Termites     : ', SUM(CH4_EMIS(:,:,14))
-       WRITE(*,*) 'Soil absorb  : ', SUM(CH4_EMIS(:,:,15))
+       WRITE(*,*) 'Total        : ', SUM(State_Chm%CH4_EMIS(:,:,1))
+       WRITE(*,*) 'Oil          : ', SUM(State_Chm%CH4_EMIS(:,:,2))
+       WRITE(*,*) 'Gas          : ', SUM(State_Chm%CH4_EMIS(:,:,3))
+       WRITE(*,*) 'Coal         : ', SUM(State_Chm%CH4_EMIS(:,:,4))
+       WRITE(*,*) 'Livestock    : ', SUM(State_Chm%CH4_EMIS(:,:,5))
+       WRITE(*,*) 'Landfills    : ', SUM(State_Chm%CH4_EMIS(:,:,6))
+       WRITE(*,*) 'Wastewater   : ', SUM(State_Chm%CH4_EMIS(:,:,7))
+       WRITE(*,*) 'Rice         : ', SUM(State_Chm%CH4_EMIS(:,:,8))
+       WRITE(*,*) 'Other anth   : ', SUM(State_Chm%CH4_EMIS(:,:,9))
+       WRITE(*,*) 'Biomass burn : ', SUM(State_Chm%CH4_EMIS(:,:,10))
+       WRITE(*,*) 'Wetlands     : ', SUM(State_Chm%CH4_EMIS(:,:,11))
+       WRITE(*,*) 'Seeps        : ', SUM(State_Chm%CH4_EMIS(:,:,12))
+       WRITE(*,*) 'Lakes        : ', SUM(State_Chm%CH4_EMIS(:,:,13))
+       WRITE(*,*) 'Termites     : ', SUM(State_Chm%CH4_EMIS(:,:,14))
+       WRITE(*,*) 'Soil absorb  : ', SUM(State_Chm%CH4_EMIS(:,:,15))
+    ENDIF
+
+    ! =================================================================
+    ! Do scaling for analytical inversion
+    ! =================================================================
+    IF ( Input_Opt%AnalyticalInv  .or. &
+         Input_Opt%UseEmisSF      .or. &
+         Input_Opt%UseOHSF        ) THEN
+
+       ! Don't optimize for soil absorption so remove from the total
+       ! emissions array
+       State_Chm%CH4_EMIS(:,:,1) = State_Chm%CH4_EMIS(:,:,1) + State_Chm%CH4_EMIS(:,:,15)
+
+       ! Rescale emissions
+       !$OMP PARALLEL DO       &
+       !$OMP DEFAULT( SHARED ) &
+       !$OMP PRIVATE( I, J)	 
+       DO J = 1, State_Grid%NY
+       DO I = 1, State_Grid%NX
+
+          !------------------------------------------------------------
+          ! For applying scale factors from analytical inversion
+          !------------------------------------------------------------
+          IF ( Input_Opt%UseEmisSF ) THEN
+             ! Scale total emissions
+             State_Chm%CH4_EMIS(I,J,1) = State_Chm%CH4_EMIS(I,J,1) * EMIS_SF(I,J)
+          ENDIF
+
+          !------------------------------------------------------------
+          ! Perturb emissions for analytical inversion
+          !------------------------------------------------------------
+          IF ( Input_Opt%AnalyticalInv ) THEN
+
+             ! Only apply emission perturbation to current state vector
+             ! element number
+             IF ( Input_Opt%StateVectorElement .GT. 0 ) THEN
+                IF ( STATE_VECTOR(I,J) == Input_Opt%StateVectorElement ) THEN
+                   State_Chm%CH4_EMIS(I,J,1) = State_Chm%CH4_EMIS(I,J,1) * Input_Opt%PerturbEmis
+                   !Print*, 'Analytical Inversion: Scaled state vector element ', &
+                   !        Input_Opt%StateVectorElement, ' by ', &
+                   !        Input_Opt%PerturbEmis
+                ENDIF
+             ENDIF
+          ENDIF
+
+       ENDDO
+       ENDDO
+       !$OMP END PARALLEL DO
+
+       ! Now that we've done the emission factor scaling, add soil absorption
+       ! back to the total emissions array
+       State_Chm%CH4_EMIS(:,:,1) = State_Chm%CH4_EMIS(:,:,1) - State_Chm%CH4_EMIS(:,:, 15)
+
     ENDIF
 
     IF ( ITS_A_CH4_SIM .and. prtDebug ) THEN
@@ -564,13 +569,13 @@ CONTAINS
 ! !USES:
 !
     USE ErrCode_Mod
-    USE HCO_INTERFACE_MOD,  ONLY : HcoState
-    USE HCO_EMISLIST_MOD,   ONLY : HCO_GetPtr
-    USE Input_Opt_Mod,      ONLY : OptInput
-    USE State_Chm_Mod,      ONLY : ChmState
-    USE State_Diag_Mod,     ONLY : DgnState
-    USE State_Grid_Mod,     ONLY : GrdState
-    USE State_Met_Mod,      ONLY : MetState
+    USE HCO_Utilities_GC_Mod, ONLY : HCO_GC_EvalFld
+    USE Input_Opt_Mod,        ONLY : OptInput
+    USE Species_Mod,          ONLY : SpcConc
+    USE State_Chm_Mod,        ONLY : ChmState
+    USE State_Diag_Mod,       ONLY : DgnState
+    USE State_Grid_Mod,       ONLY : GrdState
+    USE State_Met_Mod,        ONLY : MetState
 !
 ! !INPUT PARAMETERS:
 !
@@ -619,9 +624,7 @@ CONTAINS
 !
     LOGICAL, SAVE      :: FIRSTCHEM = .TRUE.
     INTEGER            :: I, J, L
-
     REAL(fp)           :: PREVCH4(State_Grid%NX,State_Grid%NY,State_Grid%NZ)
-    REAL(fp)           :: BOXVL
 
     ! Number of days per month
     INTEGER            :: NODAYS(12) = (/ 31, 28, 31, 30, 31, 30, &
@@ -632,7 +635,7 @@ CONTAINS
     LOGICAL            :: prtDebug
 
     ! Pointers
-    REAL(fp), POINTER  :: Spc(:,:,:,:)
+    TYPE(SpcConc), POINTER :: Spc(:)
 
     ! Strings
     CHARACTER(LEN=255) :: ErrMsg
@@ -658,79 +661,32 @@ CONTAINS
        WRITE( 6, '(a)' ) '% --- ENTERING CHEMCH4! ---'
     ENDIF
 
-    !=================================================================
-    ! (0) Calculate each box's air density [molec/cm3]
-    !     Do this for saving mean OH concentrations in CH4_DECAY
-    !     and in CH4_OHSAVE (kjw, 6/12/09)
-    !=================================================================
-    DO L = 1, State_Grid%NZ
-    DO J = 1, State_Grid%NY
-    DO I = 1, State_Grid%NX
-
-       ! Grid box volume [cm3]
-       BOXVL           = State_Met%AIRVOL(I,J,L) * 1e+6_fp
-
-       ! Air density [molec/cm3]
-       BAIRDENS(I,J,L) = State_Met%AD(I,J,L) * 1000e+0_fp / &
-                         BOXVL * AVO / AIRMW
-
-    ENDDO
-    ENDDO
-    ENDDO
-
     !================================================================
-    ! (1) Get CH4 loss rates from HEMCO. the target is automatically
-    ! updated by HEMCO (ckeller, 9/16/2014)
+    ! Evaluate OH and Cl fields from HEMCO. Doing this every call
+    ! allows usage of HEMCO scaling and masking features.
     !================================================================
-    IF ( FIRSTCHEM ) THEN
 
-       ! Import CH4 loss frequencies from HEMCO. The target will be
-       ! updated automatically by HEMCO (ckeller, 9/16/2014)
-       CALL HCO_GetPtr( HcoState, 'CH4_LOSS', CH4LOSS, RC )
-
-       ! Trap potential errors
-       IF ( RC /= HCO_SUCCESS ) THEN
-          ErrMsg = 'Cannot get pointer to HEMCO field CH4_LOSS!'
-          CALL GC_Error( ErrMsg, RC, ThisLoc )
-          RETURN
-       ENDIF
-
+    ! Evalulate the global OH from HEMCO
+    CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'GLOBAL_OH', State_Chm%BOH, RC )
+    IF ( RC /= GC_SUCCESS ) THEN
+       ErrMsg = 'GLOBAL_OH not found in HEMCO data list!'
+       CALL GC_Error( ErrMsg, RC, ThisLoc )
+       RETURN
     ENDIF
 
-    !================================================================
-    ! (2) Get OH and Cl fields from HEMCO. The targets will be
-    ! updated automatically by HEMCO (ckeller, 9/16/2014)
-    !================================================================
-    IF ( FIRSTCHEM ) THEN
-
-       ! Get pointer to GLOBAL_OH
-       CALL HCO_GetPtr( HcoState, 'GLOBAL_OH', BOH, RC )
-
-       ! Trap potential errors
-       IF ( RC /= HCO_SUCCESS ) THEN
-          ErrMsg = 'Cannot get pointer to HEMCO field GLOBAL_OH!'
-          CALL GC_Error( ErrMsg, RC, ThisLoc )
-          RETURN
-       ENDIF
-
-       ! Get pointer to GLOBAL_Cl
-       CALL HCO_GetPtr( HcoState, 'GLOBAL_Cl', BCl, RC )
-
-       ! Trap potential errors
-       IF ( RC /= HCO_SUCCESS ) THEN
-          ErrMsg = 'Cannot get pointer to HEMCO field GLOBAL_Cl!'
-          CALL GC_Error( ErrMsg, RC, ThisLoc )
-          RETURN
-       ENDIF
-
+    ! Evalulate the global Cl from HEMCO
+    CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'GLOBAL_Cl', State_Chm%BCl, RC )
+    IF ( RC /= GC_SUCCESS ) THEN
+       ErrMsg = 'GLOBAL_Cl not found in HEMCO data list!'
+       CALL GC_Error( ErrMsg, RC, ThisLoc )
+       RETURN
     ENDIF
 
     !=================================================================
-    ! (3.1) HISTORY (aka netCDF diagnostics)
-    !       OH concentration in [molec/cm3] after chemistry
+    ! HISTORY (aka netCDF diagnostics)
+    ! OH concentration in [molec/cm3] after chemistry
     !
-    ! BOH is in kg/m3 (from HEMCO), convert to molecules/cm3
-    ! (ckeller, 9/16/2014)
+    ! BOH from HEMCO is in kg/m3, convert to molec/cm3
     !=================================================================
     IF ( State_Diag%Archive_OHconcAfterChem ) THEN
        DO L = 1, State_Grid%NZ
@@ -738,7 +694,7 @@ CONTAINS
        DO I = 1, State_Grid%NX
           IF ( State_Met%InChemGrid(I,J,L) ) THEN
              State_Diag%OHconcAfterChem(I,J,L) = &
-                  ( BOH(I,J,L) * XNUMOL_OH / CM3PERM3 )
+                  ( State_Chm%BOH(I,J,L) * XNUMOL_OH / CM3PERM3 )
           ELSE
              State_Diag%OHconcAfterChem(I,J,L) = 0.0_f4
           ENDIF
@@ -748,14 +704,23 @@ CONTAINS
     ENDIF
 
     !=================================================================
-    ! (4) Save OH concentrations for printing of global mean [OH] and
-    !     CH3CCLl3 at end of simulation.
+    ! HISTORY (aka netCDF diagnostics)
+    ! Archive quantities for computing CH4 metrics such as global
+    ! mean OH, MCF lifetime, and CH4 lifetimes.
     !=================================================================
-    CALL CH4_OHSAVE( State_Chm, State_Grid, State_Met )
+    CALL CH4_Metrics( Input_Opt,  State_Chm, State_Diag,                     &
+                      State_Grid, State_Met, RC                             )
+
+    ! Trap potential errors
+    IF ( RC /= GC_SUCCESS ) THEN
+       ErrMsg = 'Error encountered in routine "CH4_Metrics!"'
+       CALL GC_Error( ErrMsg, RC, ThisLoc )
+       RETURN
+    ENDIF
 
     !=================================================================
-    ! (5) If multi-CH4 species, we store the CH4 total conc. to
-    !     distribute the sink after the chemistry. (ccc, 2/10/09)
+    ! If multi-CH4 species, we store the CH4 total conc. to
+    ! distribute the sink after the chemistry. (ccc, 2/10/09)
     !=================================================================
     IF ( LSPLIT ) THEN
 
@@ -765,7 +730,7 @@ CONTAINS
        DO L = 1, State_Grid%NZ
        DO J = 1, State_Grid%NY
        DO I = 1, State_Grid%NX
-          PREVCH4(I,J,L) = Spc(I,J,L,1)
+          PREVCH4(I,J,L) = Spc(1)%Conc(I,J,L)
        ENDDO
        ENDDO
        ENDDO
@@ -774,19 +739,19 @@ CONTAINS
     ENDIF
 
     !=================================================================
-    ! (6) calculate rate of decay of CH4 by OH oxidation.
+    ! Calculate rate of decay of CH4 by OH oxidation.
     !=================================================================
     CALL CH4_DECAY( Input_Opt,  State_Chm, State_Diag, &
                     State_Grid, State_Met, RC )
 
     !=================================================================
-    ! (7) calculate CH4 chemistry in layers above tropopause.
+    ! Calculate CH4 chemistry in layers above tropopause
     !=================================================================
     CALL CH4_STRAT( Input_Opt,  State_Chm, State_Diag, &
                     State_Grid, State_Met, RC )
 
     !=================================================================
-    ! (8) distribute the chemistry sink from total CH4 to other CH4
+    ! Distribute the chemistry sink from total CH4 to other CH4
     !     species. (ccc, 2/10/09)
     !=================================================================
     IF ( LSPLIT ) THEN
@@ -795,6 +760,7 @@ CONTAINS
 
     ! Free pointer
     Spc => NULL()
+
 
     ! Set FIRSTCHEM to FALSE
     FIRSTCHEM = .FALSE.
@@ -821,13 +787,15 @@ CONTAINS
 ! !USES:
 !
     USE ErrCode_Mod
-    USE Input_Opt_Mod,  ONLY : OptInput
-    USE State_Chm_Mod,  ONLY : ChmState
-    USE State_Diag_Mod, ONLY : DgnState
-    USE State_Grid_Mod, ONLY : GrdState
-    USE State_Met_Mod,  ONLY : MetState
-    USE TIME_MOD,       ONLY : GET_TS_CHEM
-    USE TIME_MOD,       ONLY : GET_MONTH
+    USE HCO_Utilities_GC_Mod, ONLY : HCO_GC_EvalFld
+    USE Input_Opt_Mod,        ONLY : OptInput
+    USE Species_Mod,          ONLY : SpcConc
+    USE State_Chm_Mod,        ONLY : ChmState
+    USE State_Diag_Mod,       ONLY : DgnState
+    USE State_Grid_Mod,       ONLY : GrdState
+    USE State_Met_Mod,        ONLY : MetState
+    USE TIME_MOD,             ONLY : GET_TS_CHEM
+    USE TIME_MOD,             ONLY : GET_MONTH
 !
 ! !INPUT PARAMETERS:
 !
@@ -860,13 +828,17 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     ! Scalars
-    INTEGER           :: I,  J,    L
-    REAL(fp)          :: DT, GCH4, Spc2GCH4
-    REAL(fp)          :: KRATE, C_OH
-    REAL(fp)          :: KRATE_Cl, C_Cl
-
+    INTEGER            :: I,  J,    L
+    REAL(fp)           :: DT, GCH4, Spc2GCH4
+    REAL(fp)           :: KRATE, C_OH
+    REAL(fp)           :: KRATE_Cl, C_Cl
+    CHARACTER(LEN=255) :: ErrMsg
+    CHARACTER(LEN=255) :: ThisLoc
     ! Pointers
-    REAL(fp), POINTER :: Spc(:,:,:,:)
+    TYPE(SpcConc), POINTER :: Spc(:)
+
+    ! Array of scale factors for OH (from HEMCO)
+    REAL(fp)           :: OH_SF(State_Grid%NX,State_Grid%NY)
 
     !=================================================================
     ! CH4_DECAY begins here!
@@ -880,6 +852,21 @@ CONTAINS
 
     ! Point to the chemical species array
     Spc => State_Chm%Species
+
+    ! =================================================================
+    ! Get fields for CH4 analytical inversions if needed
+    ! =================================================================
+    IF ( Input_Opt%UseOHSF ) THEN
+
+       ! Evaluate OH scale factors from HEMCO
+       CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'OH_SF', OH_SF, RC)
+       IF ( RC /= GC_SUCCESS ) THEN
+          ErrMsg = 'OH_SF not found in HEMCO data list!'
+          CALL GC_Error( ErrMsg, RC, ThisLoc )
+          RETURN
+       ENDIF
+
+    ENDIF
 
     !=================================================================
     ! %%%%% HISTORY (aka netCDF diagnostics) %%%%%
@@ -933,20 +920,24 @@ CONTAINS
           Spc2GCH4 = 1e+0_fp / State_Met%AIRVOL(I,J,L) / 1e+6_fp * XNUMOL_CH4
 
           ! CH4 in [molec/cm3]
-          GCH4 = Spc(I,J,L,1) * Spc2GCH4
+          GCH4 = Spc(1)%Conc(I,J,L) * Spc2GCH4
 
           ! OH in [molec/cm3]
-          ! BOH is imported from HEMCO in units of kg/m3, convert
-          !  here to molec/cm3 (ckeller, 9/16/2014)
-          C_OH = BOH(I,J,L) * XNUMOL_OH / CM3PERM3
+          ! BOH from HEMCO in units of kg/m3, convert to molec/cm3
+          C_OH = State_Chm%BOH(I,J,L) * XNUMOL_OH / CM3PERM3
+
+          ! Apply scale factors from analytical inversion
+          IF ( Input_Opt%UseOHSF ) THEN
+             C_OH = C_OH * OH_SF(I,J)
+             !Print*, 'Applying scale factor to OH: ', OH_SF(I,J)
+          ENDIF
 
           ! Cl in [molec/cm3]
-          ! BCl is imported from HEMCO in units of ppbv, convert
-          !  here to molec/cm3 (mps, 6/16/2017)
-          C_Cl = BCl(I,J,L) * BAIRDENS(I,J,L) * 1e-9_fp
+          ! BCl from HEMCO in units of mol/mol, convert to molec/cm3
+          C_Cl = State_Chm%BCl(I,J,L) * State_Met%AIRNUMDEN(I,J,L)
 
-          TROPOCH4=TROPOCH4 + GCH4 * KRATE    * C_OH * DT / Spc2GCH4 &
-                            + GCH4 * KRATE_Cl * C_Cl * DT / Spc2GCH4
+          TROPOCH4 = TROPOCH4 + GCH4 * KRATE    * C_OH * DT / Spc2GCH4 &
+                              + GCH4 * KRATE_Cl * C_Cl * DT / Spc2GCH4
 
           !-----------------------------------------------------------
           ! %%%%% HISTORY (aka netCDF diagnostics) %%%%%
@@ -970,7 +961,7 @@ CONTAINS
           GCH4 = GCH4 * ( 1e+0_fp - KRATE_Cl * C_Cl * DT )
 
           ! Convert back from [molec/cm3] --> [kg/box]
-          Spc(I,J,L,1) = GCH4 / Spc2GCH4
+          Spc(1)%Conc(I,J,L) = GCH4 / Spc2GCH4
 
        ENDIF
     ENDDO
@@ -992,145 +983,288 @@ CONTAINS
 !------------------------------------------------------------------------------
 !BOP
 !
-! !IROUTINE: ch4_ohsave
+! !IROUTINE: ch4_metrics
 !
-! !DESCRIPTION: Subroutine CH4\_OHSAVE archives the CH3CCl3 lifetime from the
-!  OH used in the CH4 simulation. (bnd, jsw, bmy, 1/16/01, 7/20/04)
+! !DESCRIPTION: Computes mass-weighted mean OH columns (full-atmosphere and
+!  trop-only) that are needed to compute the overall mean OH concentration.
+!  This is used as a metric as to how reactive, or "hot" the chemistry
+!  mechanism is.
 !\\
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE CH4_OHSAVE( State_Chm, State_Grid, State_Met )
+  SUBROUTINE CH4_Metrics( Input_Opt,  State_Chm, State_Diag, &
+                          State_Grid, State_Met, RC )
 !
 ! !USES:
 !
-    USE DIAG_OH_MOD,        ONLY : DO_DIAG_OH_CH4
-    USE State_Chm_Mod,      ONLY : ChmState
-    USE State_Grid_Mod,     ONLY : GrdState
-    USE State_Met_Mod,      ONLY : MetState
+    USE ErrCode_Mod
+    USE Input_Opt_Mod,  ONLY : OptInput
+    USE State_Chm_Mod,  ONLY : ChmState
+    USE PhysConstants,  ONLY : AVO
+    USE PhysConstants,  ONLY : XNUMOLAIR
+    USE State_Chm_Mod,  ONLY : Ind_
+    USE State_Diag_Mod, ONLY : DgnState
+    USE State_Grid_Mod, ONLY : GrdState
+    USE State_Met_Mod,  ONLY : MetState
 !
 ! !INPUT PARAMETERS:
 !
-    TYPE(ChmState), INTENT(IN)  :: State_Chm   ! Chemistry State object
-    TYPE(GrdState), INTENT(IN)  :: State_Grid  ! Grid State object
-    TYPE(MetState), INTENT(IN)  :: State_Met   ! Meteorology State object
+    TYPE(OptInput), INTENT(IN)    :: Input_Opt    ! Input Options object
+    TYPE(ChmState), INTENT(IN)    :: State_Chm    ! Chemistry State object
+    TYPE(GrdState), INTENT(IN)    :: State_Grid   ! Grid State object
+    TYPE(MetState), INTENT(IN)    :: State_Met    ! Meteorology State object
+!
+! !INPUT/OUTPUT PARAMETERS:
+!
+    TYPE(DgnState), INTENT(INOUT) :: State_Diag   ! Diagnostics State object
+!
+! !OUTPUT PARAMETERS:
+!
+    INTEGER,        INTENT(OUT)   :: RC           ! Success or failure?
+!
+! !REMARKS:
+!  References:
+!  (1) Prather, M. and C. Spivakovsky, "Tropospheric OH and
+!       the lifetimes of hydrochlorofluorocarbons", JGR,
+!       Vol 95, No. D11, 18723-18729, 1990.
+!  (2) Lawrence, M.G, Joeckel, P, and von Kuhlmann, R., "What
+!       does the global mean OH concentraton tell us?",
+!       Atm. Chem. Phys, 1, 37-49, 2001.
+!  (3) WMO/UNEP Scientific Assessment of Ozone Depletion: 2010
 !
 ! !REVISION HISTORY:
-!  (1 ) Created by Bryan Duncan (1/99).  Adapted for CH4 chemistry by
-!        James Wang (7/00).  Inserted into module "global_ch4_mod.f"
-!        by Bob Yantosca. (bmy, 1/16/01)
+!  18 Aug 2020 - R. Yantosca - Initial version
 !  See https://github.com/geoschem/geos-chem for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
+! !DEFINED PARAMETERS
+!
+    REAL(f8), PARAMETER :: M3toCM3        = 1.0e+6_f8
+    REAL(f8), PARAMETER :: MCM3toKGM3_OH  = M3toCM3 * 17.01e-3_f8 / AVO
+!
 ! !LOCAL VARIABLES:
 !
+    ! SAVEd scalars
+    LOGICAL,  SAVE      :: first          = .TRUE.
+    INTEGER,  SAVE      :: id_CH4         = -1
+    REAL(f8), SAVE      :: MCM3toKGM3_CH4 = -1.0_f8
+
     ! Scalars
-    INTEGER           :: I,       J,           L
-    REAL(fp)          :: MASST,   AREA_M2
-    REAL(fp)          :: KCLO,    LOSS,        OHMASS
-    REAL(fp)          :: KCH4,    CH4LOSE,     CH4MASS
-    REAL(fp)          :: CH4EMIS, CH4TROPMASS, BOXVL
-    REAL(fp)          :: C_OH
+    INTEGER             :: I,           J,            L
+    REAL(f8)            :: airMass_m,   airmass_kg,   airMassFull
+    REAL(f8)            :: airMassTrop, CH4conc_kgm3, CH4conc_mcm3
+    REAL(f8)            :: CH4mass_kg,  CH4mass_m,    CH4massFull
+    REAL(f8)            :: CH4massTrop, OHconc_kgm3,  OHconc_mcm3
+    REAL(f8)            :: OHmassWgt,   OHmassFull,   OHmassTrop
+    REAL(f8)            :: Ktrop,       LossOHbyCH4,  LossOHbyMCF
+    REAL(f8)            :: volume
 
-    ! Pointers
-    REAL(fp), POINTER :: Spc(:,:,:,:)
+    ! Strings
+    CHARACTER(LEN=255)  :: errMsg,      thisLoc
 
-    !=================================================================
-    ! CH4_OHSAVE begins here!
-    !
-    ! (1) Pass OH mass, total air mass, and  to "diag_oh_mod.F90"
-    ! (2) ND59: Diagnostic for CH3CCl3 calculation
-    !=================================================================
+    !========================================================================
+    ! Compute_Mean_OH_and_CH4 begins here!
+    !========================================================================
 
-    ! Point to chemical species array [kg]
-    Spc => State_Chm%Species
+    ! Initialize
+    RC      = GC_SUCCESS
+    errMsg  = ''
+    thisLoc = ' -> at Compute_Mean_OH (in module GeosCore/diagnostics_mod.F90)'
 
-    ! Calculate OH mass and total air mass
-    !$OMP PARALLEL DO       &
-    !$OMP DEFAULT( SHARED ) &
-    !$OMP PRIVATE( I, J, L, BOXVL, C_OH, OHMASS, MASST, KCLO, LOSS, KCH4 ) &
-    !$OMP PRIVATE( CH4TROPMASS, CH4MASS, CH4LOSE, CH4EMIS, AREA_M2 )
-    DO L = 1, State_Grid%NZ
+    ! Exit if we have not turned on the Metrics collection
+    IF ( .not. State_Diag%Archive_Metrics ) RETURN
+
+    !========================================================================
+    ! First-time setup
+    !========================================================================
+    IF ( first ) THEN
+
+       ! Get the species ID for CH4
+       id_CH4 = Ind_('CH4')
+       IF ( id_CH4 < 0 ) THEN
+          errMsg = 'CH4 is not a defined species in this simulation!!!'
+          CALL GC_Error( errMsg, RC, thisLoc )
+          RETURN
+       ENDIF
+
+       ! Convert [molec CH4 cm-3] --> [kg CH4 m-3]
+       MCM3toKGM3_CH4 = M3toCM3                                              &
+                      * ( State_Chm%SpcData(id_CH4)%Info%MW_g * 1.0e-3_f8 )  &
+                      / AVO
+
+       ! Reset first-time flag
+       first  = .FALSE.
+    ENDIF
+
+    !========================================================================
+    ! Loop over surface boxes and compute mean OH in columns
+    !========================================================================
+    !$OMP PARALLEL DO                                                        &
+    !$OMP DEFAULT( SHARED                                                   )&
+    !$OMP PRIVATE( I,            J,           L,           airMass_kg       )&
+    !$OMP PRIVATE( airMass_m,    airMassFull, airMassTrop, CH4conc_kgm3     )&
+    !$OMP PRIVATE( CH4conc_mcm3, CH4mass_kg,  CH4massFull, CH4massTrop      )&
+    !$OMP PRIVATE( Ktrop,        LossOHbyCH4, LossOHbyMCF, OHconc_kgm3      )&
+    !$OMP PRIVATE( OHconc_mcm3,  OHmassWgt,   OHmassFull,  OHmassTrop       )&
+    !$OMP PRIVATE( volume                                                   )&
+    !$OMP SCHEDULE( DYNAMIC, 4                                              )
     DO J = 1, State_Grid%NY
     DO I = 1, State_Grid%NX
 
-       ! Only process tropospheric boxes (bmy, 4/17/00)
-       IF ( State_Met%InChemGrid(I,J,L) ) THEN
+       !--------------------------------------------------------------------
+       ! Zero column-specific quantities
+       !--------------------------------------------------------------------
+       airMass_kg   = 0.0_f8
+       airMass_m    = 0.0_f8
+       airMassFull  = 0.0_f8
+       airMassTrop  = 0.0_f8
+       CH4conc_kgm3 = 0.0_f8
+       CH4conc_mcm3 = 0.0_f8
+       CH4mass_kg   = 0.0_f8
+       CH4massFull  = 0.0_f8
+       CH4massTrop  = 0.0_f8
+       Ktrop        = 0.0_f8
+       LossOHbyCH4  = 0.0_f8
+       LossOHbyMCF  = 0.0_f8
+       OHconc_kgm3  = 0.0_f8
+       OHconc_mcm3  = 0.0_f8
+       OHmassWgt    = 0.0_f8
+       OHmassFull   = 0.0_f8
+       OHmassTrop   = 0.0_f8
+       volume       = 0.0_f8
 
-          ! Grid box volume [cm3]
-          BOXVL  = State_Met%AIRVOL(I,J,L) * 1e+6_fp
+       !--------------------------------------------------------------------
+       ! Loop over the number of levels in the chemistry grid
+       ! (which for CH4 simulations is within the troposphere)
+       !--------------------------------------------------------------------
+       DO L = 1, State_Grid%NZ
 
-          ! OH concentration in molec/cm3. BOH is imported
-          ! from HEMCO in kg/m3 (ckeller, 9/16/2014)
-          C_OH = BOH(I,J,L) * XNUMOL_OH / CM3PERM3
+          ! Compute box volume [cm3], and air mass ([molec] and [kg])
+          ! Note: air mass in [molec] is also the atmospheric burden of
+          ! methyl chloroform (aka MCF, formula=CH3CCl3), since we assume
+          ! a uniform mixing ratio (=1) of MCF in air.
+          volume       = State_Met%AIRVOL(I,J,L)    * M3toCM3
+          airMass_m    = State_Met%AIRNUMDEN(I,J,L) * volume
+          airMass_kg   = airMass_m / XNUMOLAIR
 
-          ! Calculate OH mass [molec / box]
-          OHMASS = C_OH * BAIRDENS(I,J,L) * BOXVL
+          ! CH4 mass [kg]
+          CH4mass_kg   = State_Chm%Species(id_CH4)%Conc(I,J,L)
 
-          ! Calculate total air mass [molec / box]
-          MASST  = BAIRDENS(I,J,L) * BOXVL
+          ! CH4 concentration [kg m-3] and [molec cm-3]
+          CH4conc_kgm3 = CH4mass_kg   / volume
+          CH4conc_mcm3 = CH4conc_kgm3 / MCM3toKGM3_CH4
 
-          ! Calculate CH3CCl3 + OH rate constant from JPL '06
-          ! [cm3 / molec / s]
-          KCLO = 1.64e-12_fp * EXP( -1520.e+0_fp / State_Met%T(I,J,L))
+          ! OH concentration [kg m-3] and [molec cm-3]
+          OHconc_kgm3  = State_Chm%BOH(I,J,L)
+          OHconc_mcm3  = OHconc_kgm3 /  MCM3toKGM3_OH
 
-          ! Calculate Loss term [molec / box / s]
-          LOSS   = KCLO  * C_OH  * BAIRDENS(I,J,L) * BOXVL
+          ! Airmass-weighted OH [kg air * (kg OH  m-3)]
+          OHmassWgt    = airmass_kg * OHconc_kgm3
 
-          ! Calculate CH4 + OH rate constant from JPL '06
-          ! [cm3 / molec / s]
-          KCH4 = 2.45e-12_fp * EXP( -1775e+0_fp / State_Met%T(I,J,L) )
+          ! Sum the air mass, mass-weighted CH4,
+          ! and mass-weighted OH in the full-atm column
+          airMassFull  = airMassFull + airMass_kg
+          CH4massFull  = CH4MassFull + CH4mass_kg
+          OHmassFull   = OHmassFull  + OHmassWgt
 
-          ! Calculate CH4 mass [molec / box] from [kg / box]
-          CH4TROPMASS = Spc(I,J,L,1) * XNUMOL_CH4
-          CH4MASS     = Spc(I,J,L,1) * XNUMOL_CH4
+          !------------------------------------------------------------------
+          ! Only do the following for tropospheric boxes
+          !------------------------------------------------------------------
+          IF ( State_Met%InTroposphere(I,J,L) ) THEN
 
-          ! Calculate loss term  [molec /box / s]
-          CH4LOSE = KCH4 * C_OH * BAIRDENS(I,J,L) * BOXVL
+             ! Sum the air mass, mass-weighted CH4,
+             ! and mass-weighted OH in the trop-only column
+             airMassTrop = airMassTrop + airMass_kg
+             CH4massTrop = CH4MassTrop + CH4mass_kg
+             OHmassTrop  = OHmassTrop  + OHmassWgt
 
-          ! Calculate CH4 emissions [molec / box / s]
-          !   Only for surface level
-          ! Grid box surface area [cm2]
-          ! HEMCO update: CH4_EMIS now in kg/m2/s (ckeller, 9/12/2014)
-          IF ( L .GT. 1 ) THEN
-             CH4EMIS = 0e+0_fp
-          ELSE
-             AREA_M2 = State_Grid%Area_M2(I,J)
+             ! Compute CH4 + OH loss rate in troposphere
+             ! Ktrop (Arrhenius parameter) has units [cm3/molec/s]
+             ! OHconc has units [molec/cm3]
+             ! AirMass has units [molec]
+             ! Resultant units of CH4 loss rate = [molec/s]
+             Ktrop = 2.45e-12_f8 * EXP( -1775.0_f8 / State_Met%T(I,J,L) )
+             LossOHbyCH4 = LossOHbyCH4 + ( Ktrop * OHconc_MCM3 * airMass_m )
 
-             ! [kg/m2/s]  --> [molec/box/s]
-             CH4EMIS  = CH4_EMIS(I,J,1)
-             CH4EMIS  = CH4EMIS * AREA_M2 * XNUMOL_CH4
+             ! Compute MCF + OH loss rate in the troposphere
+             ! Ktrop (Arrhenius parameter) has units [cm3/molec/s]
+             ! OHconc has units [molec/cm3]
+             ! AirMass has units [molec]
+             ! Resultant units of MCF loss rate = [molec/s]
+             Ktrop = 1.64e-12_f8 * EXP( -1520.0_f8 / State_Met%T(I,J,L) )
+             LossOHbyMCF = LossOHbyMCF + ( Ktrop * OHconc_MCM3 * airMass_m )
+
+             !---------------------------------------------------------------
+             ! HISTORY (aka netCDF diagnostics)
+             !
+             ! Keep track of CH4 emisisons [kg/s] for computing
+             ! the various lifetime metrics in post-processing
+             !---------------------------------------------------------------
+             IF ( L == 1 .and. State_Diag%Archive_CH4emission ) THEN
+                State_Diag%CH4emission(I,J) = State_Chm%CH4_EMIS(I,J,id_CH4)           &
+                                            * State_Grid%Area_M2(I,J)
+             ENDIF
           ENDIF
+       ENDDO
 
-       ELSE
-
-          OHMASS      = 0e+0_fp
-          MASST       = 0e+0_fp
-          LOSS        = 0e+0_fp
-          CH4LOSE     = 0e+0_fp
-          CH4TROPMASS = 0e+0_fp
-          CH4EMIS     = 0e+0_fp
-          CH4MASS     = Spc(I,J,L,1) * XNUMOL_CH4
-
+       !---------------------------------------------------------------------
+       ! HISTORY (aka netCDF diagnostics)
+       ! Air mass [kg]
+       !---------------------------------------------------------------------
+       IF ( State_Diag%Archive_AirMassColumnFull ) THEN
+          State_Diag%AirMassColumnFull(I,J) = airMassFull
        ENDIF
 
-       ! Pass OH mass, total mass, and loss to "diag_oh_mod.F90",
-       ! which calculates mass-weighted mean [OH] and CH3CCl3
-       ! lifetime.
-       CALL DO_DIAG_OH_CH4( I, J, L, OHMASS, MASST, LOSS, &
-                            CH4LOSE, CH4TROPMASS, CH4EMIS, CH4MASS )
+       IF ( State_Diag%Archive_AirMassColumnTrop ) THEN
+          State_Diag%AirMassColumnTrop(I,J) = airMassTrop
+       ENDIF
 
-    ENDDO
+       !---------------------------------------------------------------------
+       ! HISTORY (aka netCDF diagnostics)
+       ! CH4 mass [kg], full-atmosphere and trop-only column sums
+       !---------------------------------------------------------------------
+       IF ( State_Diag%Archive_CH4massColumnFull ) THEN
+          State_Diag%CH4massColumnFull(I,J) = CH4massFull
+       ENDIF
+
+       IF ( State_Diag%Archive_CH4massColumnTrop ) THEN
+          State_Diag%CH4massColumnTrop(I,J) = CH4massTrop
+       ENDIF
+
+       !---------------------------------------------------------------------
+       ! HISTORY (aka netCDF diagnostics)
+       ! Mass-weighted mean OH [kg air * (kg OH m-3)]
+       !---------------------------------------------------------------------
+       IF ( State_Diag%Archive_OHwgtByAirMassColumnFull ) THEN
+          State_Diag%OHwgtByAirMassColumnFull(I,J) = OHmassFull
+       ENDIF
+
+       IF ( State_Diag%Archive_OHwgtByAirMassColumnTrop ) THEN
+          State_Diag%OHwgtByAirMassColumnTrop(I,J) = OHmassTrop
+       ENDIF
+
+       !-----------------------------------------------------------------
+       ! HISTORY (aka netCDF diagnostics)
+       !
+       ! OH loss by CH4 + OH loss in troposphere [molec/s] and
+       ! OH loss by MCF + OH loss in troposphere [molec/s]
+       !----------------------------------------------------------------
+       IF ( State_Diag%Archive_LossOHbyCH4columnTrop ) THEN
+          State_Diag%LossOHbyCH4columnTrop(I,J) = LossOHbyCH4
+       ENDIF
+
+       IF ( State_Diag%Archive_LossOHbyMCFcolumnTrop ) THEN
+          State_Diag%LossOHByMCFcolumnTrop(I,J) = LossOHbyMCF
+       ENDIF
+
     ENDDO
     ENDDO
     !$OMP END PARALLEL DO
 
-    ! Free pointer
-    Spc => NULL()
-
-  END SUBROUTINE CH4_OHSAVE
+  END SUBROUTINE CH4_Metrics
 !EOC
 !------------------------------------------------------------------------------
 !                  GEOS-Chem Global Chemical Transport Model                  !
@@ -1141,7 +1275,7 @@ CONTAINS
 !
 ! !DESCRIPTION: Subroutine CH4\_STRAT calculates uses production rates for CH4
 !  to  calculate loss of CH4 in above the tropopause. (jsw, bnd, bmy, 1/16/01,
-!  7/20/04)
+!  7/20/04). This is only done if unified chemistry is not active.
 !\\
 !\\
 ! !INTERFACE:
@@ -1152,12 +1286,14 @@ CONTAINS
 ! !USES:
 !
     USE ErrCode_Mod
-    USE Input_Opt_Mod,  ONLY : OptInput
-    USE State_Chm_Mod,  ONLY : ChmState
-    USE State_Diag_Mod, ONLY : DgnState
-    USE State_Grid_Mod, ONLY : GrdState
-    USE State_Met_Mod,  ONLY : MetState
-    USE TIME_MOD,       ONLY : GET_TS_CHEM
+    USE HCO_Utilities_GC_Mod, ONLY : HCO_GC_EvalFld
+    USE Input_Opt_Mod,        ONLY : OptInput
+    USE Species_Mod,          ONLY : SpcConc
+    USE State_Chm_Mod,        ONLY : ChmState
+    USE State_Diag_Mod,       ONLY : DgnState
+    USE State_Grid_Mod,       ONLY : GrdState
+    USE State_Met_Mod,        ONLY : MetState
+    USE TIME_MOD,             ONLY : GET_TS_CHEM
 !
 ! !INPUT PARAMETERS:
 !
@@ -1191,89 +1327,96 @@ CONTAINS
 !
     ! Scalars
     INTEGER           :: I,  J,    L
-    REAL(fp)          :: DT, GCH4, Spc2GCH4, LRATE,  BOXVL
+    REAL(fp)          :: DT, GCH4, Spc2GCH4, LRATE
 
-    ! Local variables for quantities from Input_Opt
-    LOGICAL           :: LUCX
+    ! Strings
+    CHARACTER(LEN=255)    :: ThisLoc
+    CHARACTER(LEN=255)    :: ErrMsg
 
     ! Pointers
-    REAL(fp), POINTER :: Spc(:,:,:,:)
+    TYPE(SpcConc), POINTER :: Spc(:)
+
+    ! Array for monthly average CH4 loss freq [1/s] (from HEMCO)
+    REAL(fp)          :: CH4LOSS(State_Grid%NX,State_Grid%NY,State_Grid%NZ)
 
     !=================================================================
     ! CH4_STRAT begins here!
     !=================================================================
 
-    ! Assume success
-    RC                  =  GC_SUCCESS
-
-    ! Copy fields from INPUT_OPT
-    LUCX                =  Input_Opt%LUCX
+    ! Initialize
+    RC    =  GC_SUCCESS
+    ErrMsg      = ''
+    ThisLoc     = ' -> at CH4_STRAT (in module GeosCore/global_ch4_mod.F90)'
 
     ! Point to chemical species
-    Spc                 => State_Chm%Species
+    Spc   => State_Chm%Species
 
-    ! If unified chemistry is active, ignore all of this
-    IF ( .not. LUCX ) THEN
+    ! Evalulate CH4 loss frequency from HEMCO. This must be done
+    ! every timestep to allow masking or scaling in HEMCO config.
+    CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'CH4_LOSS', CH4LOSS, RC )
+    IF ( RC /= GC_SUCCESS ) THEN
+       ErrMsg = 'CH4_LOSS not found in HEMCO data list!'
+       CALL GC_Error( ErrMsg, RC, ThisLoc )
+       RETURN
+    ENDIF
 
-       !==============================================================
-       ! %%%%% HISTORY (aka netCDF diagnostics) %%%%%
-       !
-       ! Zero the relevant diagnostic fields of State_Diag because
-       ! the position of the tropopause changes from one timestep
-       ! to the next
-       !==============================================================
-       IF ( State_Diag%Archive_LossCH4inStrat ) THEN
-          State_Diag%LossCH4inStrat = 0.0_f4
-       ENDIF
+    !==============================================================
+    ! %%%%% HISTORY (aka netCDF diagnostics) %%%%%
+    !
+    ! Zero the relevant diagnostic fields of State_Diag because
+    ! the position of the tropopause changes from one timestep
+    ! to the next
+    !==============================================================
+    IF ( State_Diag%Archive_LossCH4inStrat ) THEN
+       State_Diag%LossCH4inStrat = 0.0_f4
+    ENDIF
 
-       ! Chemistry timestep [s]
-       DT  = GET_TS_CHEM()
+    ! Chemistry timestep [s]
+    DT  = GET_TS_CHEM()
 
-       !=================================================================
-       ! Loop over stratospheric boxes only
-       !=================================================================
-       !$OMP PARALLEL DO       &
-       !$OMP DEFAULT( SHARED ) &
-       !$OMP PRIVATE( I, J, L, Spc2GCH4, GCH4, LRATE )
-       DO L = 1, State_Grid%NZ
-       DO J = 1, State_Grid%NY
-       DO I = 1, State_Grid%NX
+    !=================================================================
+    ! Loop over stratospheric boxes only
+    !=================================================================
+    !$OMP PARALLEL DO       &
+    !$OMP DEFAULT( SHARED ) &
+    !$OMP PRIVATE( I, J, L, Spc2GCH4, GCH4, LRATE )
+    DO L = 1, State_Grid%NZ
+    DO J = 1, State_Grid%NY
+    DO I = 1, State_Grid%NX
 
-          ! Only proceed if we are outside of the chemistry grid
-          IF ( .not. State_Met%InChemGrid(I,J,L) ) THEN
+       ! Only proceed if we are outside of the chemistry grid
+       IF ( .not. State_Met%InChemGrid(I,J,L) ) THEN
 
-             ! Conversion factor [kg/box] --> [molec/cm3]
-             ! [kg/box] / [AIRVOL * 1e6 cm3] * [XNUMOL_CH4 molec/mole]
-             Spc2GCH4 = 1e+0_fp / State_Met%AIRVOL(I,J,L) / 1e+6_fp * XNUMOL_CH4
+          ! Conversion factor [kg/box] --> [molec/cm3]
+          ! [kg/box] / [AIRVOL * 1e6 cm3] * [XNUMOL_CH4 molec/mole]
+          Spc2GCH4 = 1e+0_fp / State_Met%AIRVOL(I,J,L) / 1e+6_fp * XNUMOL_CH4
 
-             ! CH4 in [molec/cm3]
-             GCH4 = Spc(I,J,L,1) * Spc2GCH4
+          ! CH4 in [molec/cm3]
+          GCH4 = Spc(1)%Conc(I,J,L) * Spc2GCH4
 
-             ! Loss rate [molec/cm3/s]
-             LRATE = GCH4 * CH4LOSS( I,J,L )
+          ! Loss rate [molec/cm3/s]
+          LRATE = GCH4 * CH4LOSS( I,J,L )
 
-             ! Update Methane concentration in this grid box [molec/cm3]
-             GCH4 = GCH4 - ( LRATE * DT )
+          ! Update Methane concentration in this grid box [molec/cm3]
+          GCH4 = GCH4 - ( LRATE * DT )
 
-             ! Convert back from [molec CH4/cm3] --> [kg/box]
-             Spc(I,J,L,1) = GCH4 / Spc2GCH4
+          ! Convert back from [molec CH4/cm3] --> [kg/box]
+          Spc(1)%Conc(I,J,L) = GCH4 / Spc2GCH4
 
-             !------------------------------------------------------------
-             ! %%%%%% HISTORY (aka netCDF diagnostics) %%%%%
-             !
-             ! Loss of CH4 by OH above tropopause [kg/s]
-             !------------------------------------------------------------
-             IF ( State_Diag%Archive_LossCH4inStrat ) THEN
-                State_Diag%LossCH4inStrat(I,J,L) = LRATE / Spc2GCH4
-             ENDIF
-
+          !------------------------------------------------------------
+          ! %%%%%% HISTORY (aka netCDF diagnostics) %%%%%
+          !
+          ! Loss of CH4 by OH above tropopause [kg/s]
+          !------------------------------------------------------------
+          IF ( State_Diag%Archive_LossCH4inStrat ) THEN
+             State_Diag%LossCH4inStrat(I,J,L) = LRATE / Spc2GCH4
           ENDIF
-       ENDDO
-       ENDDO
-       ENDDO
-       !$OMP END PARALLEL DO
 
-    ENDIF ! not LUCX (SDE 03/25/13)
+       ENDIF
+    ENDDO
+    ENDDO
+    ENDDO
+    !$OMP END PARALLEL DO
 
     ! Free pointer
     Spc => NULL()
@@ -1299,6 +1442,7 @@ CONTAINS
 !
     USE ERROR_MOD,          ONLY : SAFE_DIV
     USE Input_Opt_Mod,      ONLY : OptInput
+    USE Species_Mod,        ONLY : SpcConc
     USE State_Chm_Mod,      ONLY : ChmState
     USE State_Grid_Mod,     ONLY : GrdState
 
@@ -1328,7 +1472,7 @@ CONTAINS
     INTEGER           :: I, J, L, N, NA, nAdvect
 
     ! Pointers
-    REAL(fp), POINTER :: Spc(:,:,:,:)
+    TYPE(SpcConc), POINTER :: Spc(:)
 
     !========================================================================
     ! CH4_DISTRIB begins here
@@ -1352,8 +1496,9 @@ CONTAINS
        DO L = 1, State_Grid%NZ
        DO J = 1, State_Grid%NY
        DO I = 1, State_Grid%NX
-          Spc(I,J,L,N) = SAFE_DIV(Spc(I,J,L,N),PREVCH4(I,J,L),0.e+0_fp) &
-                         * Spc(I,J,L,1)
+          Spc(N)%Conc(I,J,L) = &
+                         SAFE_DIV(Spc(N)%Conc(I,J,L),PREVCH4(I,J,L),0.e+0_fp) &
+                         * Spc(1)%Conc(I,J,L)
        ENDDO
        ENDDO
        ENDDO
@@ -1379,19 +1524,20 @@ CONTAINS
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE INIT_GLOBAL_CH4( Input_Opt, State_Diag, State_Grid, RC )
+  SUBROUTINE INIT_GLOBAL_CH4( Input_Opt, State_Chm, State_Diag, State_Grid, RC )
 !
 ! !USES:
 !
     USE ErrCode_Mod
     USE Input_Opt_Mod,      ONLY : OptInput
-    USE State_Chm_Mod,      ONLY : Ind_
+    USE State_Chm_Mod,      ONLY : Ind_, ChmState
     USE State_Diag_Mod,     ONLY : DgnState
     USE State_Grid_Mod,     ONLY : GrdState
 !
 ! !INPUT PARAMETERS:
 !
     TYPE(OptInput), INTENT(IN)    :: Input_Opt   ! Input Options object
+    TYPE(ChmState), INTENT(INOUT) :: State_Chm   ! Chemistry State object
     TYPE(GrdState), INTENT(IN)    :: State_Grid  ! Grid State object
 !
 ! !INPUT/OUTPUT PARAMETERS:
@@ -1436,72 +1582,9 @@ CONTAINS
        RETURN
     ENDIF
 
-    ALLOCATE( BAIRDENS( State_Grid%NX, State_Grid%NY, State_Grid%NZ ), &
-              STAT=RC )
-    CALL GC_CheckVar( 'global_ch4_mod.F90:BAIRDENS', 0, RC )
-    IF ( RC /= GC_SUCCESS ) RETURN
-    BAIRDENS = 0e+0_fp
-
-    ALLOCATE( CH4_EMIS( State_Grid%NX, State_Grid%NY, 15 ), STAT=RC )
-    CALL GC_CheckVar( 'global_ch4_mod.F90:CH4_EMIS', 0, RC )
-    IF ( RC /= GC_SUCCESS ) RETURN
-    CH4_EMIS = 0e+0_fp
-
     ! Initialize tropoch4 (counts total decay of CH4 due to OH)
     TROPOCH4 = 0e+0_fp
 
   END SUBROUTINE INIT_GLOBAL_CH4
-!EOC
-!------------------------------------------------------------------------------
-!                  GEOS-Chem Global Chemical Transport Model                  !
-!------------------------------------------------------------------------------
-!BOP
-!
-! !IROUTINE: cleanup_global_ch4
-!
-! !DESCRIPTION: Subroutine CLEANUP\_GLOBAL\_CH4 deallocates module arrays.
-!  (bmy, 1/16/01)
-!\\
-!\\
-! !INTERFACE:
-!
-  SUBROUTINE CLEANUP_GLOBAL_CH4( RC )
-!
-! !USES:
-!
-    USE ErrCode_Mod
-!
-! !OUTPUT PARAMETERS:
-!
-    INTEGER, INTENT(OUT) :: RC          ! Success or failure?
-!
-! !REVISION HISTORY:
-!  See https://github.com/geoschem/geos-chem for complete history
-!EOP
-!------------------------------------------------------------------------------
-!BOC
-!
-    ! Initialize
-    RC = GC_SUCCESS
-
-    ! Deallocate variables
-    IF ( ALLOCATED( BAIRDENS ) ) THEN
-       DEALLOCATE( BAIRDENS, STAT=RC )
-       CALL GC_CheckVar( 'global_ch4_mod.F90:BAIRDENS', 2, RC )
-       RETURN
-    ENDIF
-
-    IF ( ALLOCATED( CH4_EMIS ) ) THEN
-       DEALLOCATE( CH4_EMIS, STAT=RC )
-       CALL GC_CheckVar( 'global_ch4_mod.F90:CH4_EMIS', 2, RC )
-       RETURN
-    ENDIF
-
-    ! Free pointers
-    IF ( ASSOCIATED( BOH      ) ) BOH     => NULL()
-    IF ( ASSOCIATED( BCl      ) ) BCl     => NULL()
-    IF ( ASSOCIATED( CH4LOSS  ) ) CH4LOSS => NULL()
-
-  END SUBROUTINE CLEANUP_GLOBAL_CH4
 !EOC
 END MODULE GLOBAL_CH4_MOD

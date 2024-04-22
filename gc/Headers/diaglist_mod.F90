@@ -81,11 +81,13 @@ MODULE DiagList_Mod
   !=========================================================================
   ! Configurable Settings Used for Diagnostic Names at Run-time
   !=========================================================================
-  CHARACTER(LEN=5),  PUBLIC  :: RadWL(3)     ! Wavelengths in radiation menu
-  CHARACTER(LEN=2),  PUBLIC  :: RadFlux(12)  ! Names of RRTMG flux outputs
-  INTEGER,           PUBLIC  :: nRadFlux     ! # of selected RRTMG flux outputs
-  LOGICAL,           PUBLIC  :: IsFullChem   ! Is this a fullchem simulation?
-  CHARACTER(LEN=10), PUBLIC  :: AltAboveSfc  ! Alt for O3, HNO3 diagnostics
+  CHARACTER(LEN=5),  PUBLIC  :: RadWL(3)      ! Wavelengths in radiation menu
+  CHARACTER(LEN=4),  PUBLIC  :: RadOut(12)    ! Names of RRTMG outputs (tags)
+  INTEGER,           PUBLIC  :: nRadOut       ! # of selected RRTMG outputs
+  LOGICAL,           PUBLIC  :: IsFullChem    ! Is it a fullchem simulation?
+  LOGICAL,           PUBLIC  :: IsHg          ! Is it a Hg simulation?
+  LOGICAL,           PUBLIC  :: IsCarbon      ! Is it a carbon sim?
+  CHARACTER(LEN=10), PUBLIC  :: AltAboveSfc   ! Alt for O3, HNO3 diagnostics
 
   !=========================================================================
   ! Derived type for Collections List
@@ -105,6 +107,18 @@ MODULE DiagList_Mod
 ! !PUBLIC DATA MEMBERS:
 !
   TYPE(ColList),    PUBLIC  :: CollList      ! Collection list object
+#if defined( ESMF_ )
+!
+! !PUBLIC PARAMETERS
+!
+  ! Prefix of the species names in the internal state
+  CHARACTER(LEN=4), PUBLIC, PARAMETER  :: SPFX = 'SPC_'
+
+#if defined( MODEL_GEOS )
+  ! Non-standard diagnostics in GEOS may use GCC_.
+  CHARACTER(LEN=4), PUBLIC, PARAMETER  :: GPFX = 'GCC_'
+#endif
+#endif
 !
 ! !REVISION HISTORY:
 !  22 Sep 2017 - E. Lundgren - Initial version
@@ -121,9 +135,9 @@ CONTAINS
 !
 ! !IROUTINE: Init_DiagList
 !
-! !DESCRIPTION: Reads the HISTORY.rc and input.geos input files to get
+! !DESCRIPTION: Reads the HISTORY.rc and geoschem_config.yml input files to get
 !  determine which GEOS-Chem diagnostics have been requested.  Then it
-!  uses this information to initialize the master list of diagnostics,
+!  uses this information to initialize the main list of diagnostics,
 !  aka, the DiagList object.
 !\\
 !\\
@@ -142,6 +156,7 @@ CONTAINS
 !
     USE Charpak_Mod
     USE InquireMod,       ONLY : findFreeLun
+    USE QFYAML_Mod
 !
 ! !INPUT PARAMETERS:
 !
@@ -166,28 +181,37 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     ! Scalars
-    LOGICAL                  :: EOF, found, isWildcard, isTagged
-    LOGICAL                  :: InDefSection, InFieldsSection
-    INTEGER                  :: QMatch, CMatch, LineNum
-    INTEGER                  :: fId, IOS, N, N1, N2, N3, I, J, C, F, G
-    INTEGER                  :: IWLMAX, IWLMAXLOC(1), IWL(3)
-    INTEGER                  :: numSpcWords, numIDWords
+    LOGICAL                      :: EOF, found, isWildcard, isTagged
+    LOGICAL                      :: InDefSection, InFieldsSection
+    INTEGER                      :: QMatch, CMatch
+    INTEGER                      :: LineNum, LineLen, LineInd, LineInd2
+    INTEGER                      :: fId, IOS, N, N1, N2, N3, I, J
+    INTEGER                      :: WLIndMax, WLIndMaxLoc(1), WLInd(3)
+    INTEGER                      :: strIndMax, strInd(5)
+    INTEGER                      :: numSpcWords, numIDWords
+    INTEGER                      :: NFIELDS
 
     ! Strings
-    CHARACTER(LEN=80 )       :: ErrorLine
-    CHARACTER(LEN=255)       :: errMsg, thisLoc, nameAllCaps
-    CHARACTER(LEN=255)       :: line, SubStrs(500), SubStr
-    CHARACTER(LEN=255)       :: wildcard, tag, name, state
-    CHARACTER(LEN=255)       :: metadataID, registryID, registryIDprefix
-    CHARACTER(LEN=255)       :: collname, AttName, AttValue
-    CHARACTER(LEN=255)       :: AttComp,  FieldName
+    CHARACTER(LEN=80 )           :: ErrorLine
+    CHARACTER(LEN=255)           :: errMsg, thisLoc, nameAllCaps
+    CHARACTER(LEN=255)           :: line, SubStrs(500), SubStr
+    CHARACTER(LEN=255)           :: wildcard, tag, fullname, name, state
+    CHARACTER(LEN=255)           :: metadataID, registryID, registryIDprefix
+    CHARACTER(LEN=255)           :: collname, AttName, AttValue
+    CHARACTER(LEN=255)           :: AttComp,  FieldName
+    CHARACTER(LEN=2)             :: rrtmgOutputs(10)
+    CHARACTER(LEN=255)           :: names(100)
+    CHARACTER(LEN=QFYAML_NamLen) :: key
+    CHARACTER(LEN=QFYAML_StrLen) :: v_str, a_str(3)
 
     ! SAVEd variables
-    CHARACTER(LEN=255), SAVE :: LastCollName
+    CHARACTER(LEN=255), SAVE     :: LastCollName
 
-    ! Pointers
-    TYPE(DgnItem),   POINTER :: NewDiagItem
-    TYPE(ColItem),   POINTER :: NewCollItem
+    ! Pointers & Objects
+    TYPE(DgnItem),      POINTER  :: NewDiagItem
+    TYPE(ColItem),      POINTER  :: NewCollItem
+    TYPE(QFYAML_t)               :: Config
+    TYPE(QFYAML_t)               :: ConfigAnchored
 
     !=======================================================================
     ! Init_DiagList begins here
@@ -201,11 +225,14 @@ CONTAINS
     found           = .FALSE.
     NewDiagItem     => NULL()
     RadWL           =  ''
-    RadFlux         =  ''
-    nRadFlux        =  0
+    RadOut          =  ''
+    nRadOut         =  0
     IsFullChem      = .FALSE.
+    IsHg            = .FALSE.
+    IsCarbon        = .FALSE.
     InDefSection    = .FALSE.
     InFieldsSection = .FALSE.
+    Name            =  ''
     LastCollName    =  ''
 
     ! Create DiagList object
@@ -215,69 +242,71 @@ CONTAINS
     CollList%head   => NULL()
 
     !=======================================================================
-    ! Read the input.geos configuration file to find out:
+    ! Read the geoschem_config.yml configuration file to find out:
     ! (1) Which wavelength has been selected for optical depth diag output
     ! (2) If this is a fullchem simulation
     !=======================================================================
 
-    ! Open input.geos file
-    fId = FindFreeLun()
-    OPEN( fId, FILE=TRIM('input.geos'), STATUS='OLD', IOSTAT=RC )
-    IF ( RC /= GC_SUCCESS ) THEN
-       CALL GC_Error( 'Could not open input.geos!', RC, ThisLoc )
+    ! Open the YAML file
+    CALL QFYAML_Init( 'geoschem_config.yml', Config, ConfigAnchored, RC )
+    IF ( RC /= QFYAML_Success ) THEN
+       errMsg = 'Error opening input_options.yml!'
+       CALL GC_Error( errMsg, RC, thisLoc )
+       CALL QFYAML_CleanUp( Config          )
+       CALL QFYAML_CleanUp( ConfigAnchored  )
        RETURN
     ENDIF
 
-    ! Read data from the input.geos file
-    DO
-       ! Read line and strip leading/trailing spaces
-       Line = ReadOneLine( fId, EOF, IOS, Squeeze=.TRUE. )
-       IF ( EOF ) EXIT
-       IF ( IOS > 0 ) THEN
-          ErrMsg = 'Unexpected end-of-file input.geos!'
-          CALL GC_Error( ErrMsg, RC, ThisLoc )
-          RETURN
-       ENDIF
+    ! Read the simulation name
+    key   = "simulation%name"
+    v_str = "UNKNOWN"
+    CALL QFYAML_Add_Get( Config, key, v_str, "", RC )
+    IF ( RC /= GC_SUCCESS ) THEN
+       errMsg = 'Error parsing ' // TRIM( key ) // '!'
+       CALL GC_Error( errMsg, RC, thisLoc )
+       CALL QFYAML_CleanUp( Config          )
+       CALL QFYAML_CleanUp( ConfigAnchored  )
+       RETURN
+    ENDIF
+    IsFullChem  = ( To_UpperCase( v_str ) == "FULLCHEM"    )
+    IsHg        = ( To_UpperCase( v_str ) == "HG"          )
+    IsCarbon    = ( To_UpperCase( v_str ) == "CARBON" )
 
-       ! Find out if this is a full-chemistry simulation
-       IF ( INDEX( Line, 'Simulation name' ) > 0 ) THEN
-          CALL StrSplit( Line, ':', SubStrs, N )
-          SELECT CASE( To_UpperCase( ADJUSTL( SubStrs(2) ) ) )
-             CASE( 'ACIDUPTAKE', 'APM',              'BENCHMARK',            &
-                   'COMPLEXSOA', 'COMPLEXSOA_SVPOA', 'HEMCO',                &
-                   'MARINEPOA',  'RRTMG',            'STANDARD',             &
-                   'TROPCHEM',   'TOMAS12',          'TOMAS15',              &
-                   'TOMAS30',    'TOMAS40'                                  )
-                IsFullChem = .TRUE.
-             CASE DEFAULT
-                IsFullChem = .FALSE.
-          END SELECT
-       ENDIF
+    ! Read the altitude above the surface in meters for drydep diags
+    key   = "operations%dry_deposition%diag_alt_above_sfc_in_m"
+    v_str = "UNKNOWN"
+    CALL QFYAML_Add_Get( Config, key, v_str, "", RC )
+    IF ( RC /= GC_SUCCESS ) THEN
+       errMsg = 'Error parsing ' // TRIM( key ) // '!'
+       CALL GC_Error( errMsg, RC, thisLoc )
+       CALL QFYAML_CleanUp( Config          )
+       CALL QFYAML_CleanUp( ConfigAnchored  )
+       RETURN
+    ENDIF
+    AltAboveSfc = TRIM( ADJUSTL( v_str ) ) // 'm'
 
-       ! Find the altitude above thes surface for O3, HNO3 diagnostics
-       IF ( INDEX( Line, 'Diag alt above sfc [m]' ) > 0 ) THEN
-          CALL StrSplit( Line, ':', SubStrs, N )
-          AltAboveSfc = TRIM( ADJUSTL( SubStrs(2) ) ) // 'm'
-          found       = .TRUE.
-       ENDIF
-
-       ! Update wavelength(s) with string in file
-       IF ( INDEX( Line, 'AOD Wavelength' ) > 0 ) THEN
-          I = INDEX( Line, ':' )
-          CALL StrSplit( Line(I:), ' ', SubStrs, N )
-          DO J = 1, N-1
-             WRITE ( RadWL(J), "(a5)" ) SubStrs(J+1)
-             RadWL(J) = ADJUSTL( RadWL(J) )
-          ENDDO
-
-          ! Exit the search
-          IF ( found ) EXIT
-       ENDIF
+    ! Read the AOD wavelength in nm for diagnostics
+    key   = "operations%rrtmg_rad_transfer_model%aod_wavelengths_in_nm"
+    a_str = "UNKNOWN"
+    CALL QFYAML_Add_Get( Config, key, a_str, "", RC, dynamic_size=.TRUE. )
+    IF ( RC /= GC_SUCCESS ) THEN
+       errMsg = 'Error parsing ' // TRIM( key ) // '!'
+       CALL GC_Error( errMsg, RC, thisLoc )
+       CALL QFYAML_CleanUp( Config          )
+       CALL QFYAML_CleanUp( ConfigAnchored  )
+       RETURN
+    ENDIF
+    I = 0
+    DO N = 1, SIZE( a_str )
+       IF ( TRIM( ADJUSTL( a_str(N) ) ) == "UNKNOWN" ) EXIT
+       I = I + 1
+       WRITE ( RadWL(I), "(a5)" ) a_str(N)
+       RadWL(I) = ADJUSTL( RadWL(I) )
     ENDDO
 
-    ! Close the file
-    CLOSE( fId )
-    found = .FALSE.
+    ! Clean up YAML config objects
+    CALL QFYAML_CleanUp( Config          )
+    CALL QFYAML_CleanUp( ConfigAnchored  )
 
     !=======================================================================
     ! Read data from the HISTORY.rc configuration file
@@ -313,7 +342,12 @@ CONTAINS
           CALL GC_Error( ErrMsg, RC, ThisLoc, ErrorLine )
           RETURN
        ENDIF
+
+       ! Skip if there is a commment at the start of the line
        IF ( Line(1:1) == '#' ) CYCLE
+
+       ! Skip the EXPID tag at the top of the file
+       IF ( INDEX( Line, 'EXPID:' ) > 0 ) CYCLE
 
        !====================================================================
        ! Set collection name list (uncommented names only)
@@ -395,6 +429,7 @@ CONTAINS
           InDefSection    = .FALSE.
           InFieldsSection = .FALSE.
           LastCollName    = ''
+          CYCLE
        ENDIF
 
        !--------------------------------------------------------------------
@@ -430,8 +465,8 @@ CONTAINS
           ENDIF
 
           ! Each collection attribute definition needs to end with a colon
-          C = LEN_TRIM( AttName )
-          IF ( AttName(C:C) /= ':' ) THEN
+          LineLen = LEN_TRIM( AttName )
+          IF ( AttName(LineLen:LineLen) /= ':' ) THEN
              ErrMsg = 'The "' // TRIM( AttName ) // '" '                  // &
                       'collection attribute did not end with a ":" '      // &
                       'character!  Please check the HISTORY.rc file.'
@@ -461,8 +496,8 @@ CONTAINS
 
              ! Make sure that the value ends with a single quote
              ! (comma is optional)
-             C = LEN_TRIM( AttValue )
-             IF ( AttValue(C-1:C) /= "'," ) THEN
+             LineLen = LEN_TRIM( AttValue )
+             IF ( AttValue(LineLen-1:LineLen) /= "'," ) THEN
                 ErrMsg = 'The value of attribute "'// TRIM( AttName )     // &
                          '" must end with a single quote character, '     // &
                          'followed by a comma. '                          // &
@@ -491,9 +526,9 @@ CONTAINS
 
              ! Make sure that the value ends with a single quote
              ! (comma is optional)
-             C = LEN_TRIM( AttValue )
-             IF ( AttValue(C:C) == ',' ) C = C -1
-             IF ( AttValue(C:C) /= "'" ) THEN
+             LineLen = LEN_TRIM( AttValue )
+             IF ( AttValue(LineLen:LineLen) == ',' ) LineLen = LineLen -1
+             IF ( AttValue(LineLen:LineLen) /= "'" ) THEN
                 ErrMsg = 'The value of attribute "'// TRIM( AttName )     // &
                          '" must end with a single quote character. '     // &
                          'Please check the HISTORY.rc file.'
@@ -502,7 +537,6 @@ CONTAINS
                 RETURN
              ENDIF
           ENDIF
-
        ENDIF
 
        !-----------------------------------------------------------------
@@ -514,10 +548,11 @@ CONTAINS
           ! part of the attribute name (up to the "." character.  If this
           ! does not match the expected collection name, then we have a
           ! missing separator ("::") somewhere.  Stop with an error.
-          C = INDEX( AttName, '.' )
-          IF ( AttName(1:C-1) /= TRIM( LastCollName ) ) THEN
+          LineInd = INDEX( AttName, '.' )
+          IF ( AttName(1:LineInd-1) /= TRIM( LastCollName ) ) THEN
              ErrMsg = 'Attribute "' // TRIM( AttName ) // ' specifies a ' // &
-                      'value for collection "' // TRIM( AttName(1:C-1) )  // &
+                      'value for collection "'                            // &
+                      TRIM( AttName(1:LineInd-1) )                        // &
                       '", but the expected collection name is "'          // &
                       TRIM( LastCollName ) // '".  This indicates that '  // &
                       'the end-of-collection delimiter (i.e. "::") is '   // &
@@ -527,29 +562,15 @@ CONTAINS
              RETURN
           ENDIF
 
-          ! Throw an error if we cannot find the gridcomp name
-          ! (e.g. "'GIGCchem',").  GCHP will choke if this isn't found.
-          G = INDEX( Line, "'GIGCchem'," )
-          IF ( G == 0 ) THEN
-             ErrMsg = 'The name of the GCHP gridded component '           // &
-                      "(e.g. 'GIGCchem') for attribute "  // '" '         // &
-                      TRIM( AttName ) // '" must be enclosed in '         // &
-                      'single quotes and be followed by a comma. '        // &
-                      'Please check the HISTORY.rc file.'
-             WRITE( ErrorLine, 250 ) LineNum
-             CALL GC_Error( ErrMsg, RC, ThisLoc, ErrorLine )
-             RETURN
-          ENDIF
-
           ! Save into LineSq the text of the line, skipping over
           ! the attribute name (if we are on the first line),
           ! as well as the gridcomp name
-          F = INDEX( Line, '.fields' )
-          IF ( F > 0 ) THEN
-             C = INDEX( Line, ':' )
-             FieldName = Line(C+1:G-1)
+          LineInd = INDEX( Line, ',' )
+          IF ( INDEX( Line, '.fields' ) > 0 ) THEN
+             LineInd2 = INDEX( Line, ':' )
+             FieldName = Line(LineInd2+1:LineInd)
           ELSE
-             FieldName = Line(1:G-1)
+             FieldName = Line(1:LineInd)
           ENDIF
 
           ! Pack all whitespace in LineSq
@@ -567,8 +588,8 @@ CONTAINS
           ENDIF
 
           ! Make sure that the value ends with a single quote
-          C = LEN_TRIM( FieldName )
-          IF ( FieldName(C-1:C) /= "'," ) THEN
+          LineLen = LEN_TRIM( FieldName )
+          IF ( FieldName(LineLen-1:LineLen) /= "'," ) THEN
              ErrMsg = 'The diagnostic field name "' // TRIM( FieldName )  // &
                       '" must end with a single quote character '         // &
                       'followed by a comma, '                             // &
@@ -584,227 +605,254 @@ CONTAINS
        ! Add unique diagnostic names to diag list
        !====================================================================
 
-       ! Skip line if GIGCchem not present
-       ! GEOS-Chem is names 'GEOSCHEMCHEM' on NCCS discover,
-       ! scan accordingly (ckeller, 12/29/17)
-#ifdef MODEL_GEOS
+       ! Skip line if gridded component name not present and using GCHP or GEOS
+#if defined( MODEL_GCHPCTM )
+       IF ( INDEX( Line, 'GCHPchem' ) .le. 0 ) CYCLE
+#elif defined( MODEL_GEOS )
        IF ( INDEX( Line, 'GEOSCHEMCHEM' ) .le. 0 ) CYCLE
-#else
-       IF ( INDEX( Line, 'GIGCchem' ) .le. 0 ) CYCLE
 #endif
 
        ! Get diagnostic name
        CALL CStrip( Line, KeepSpaces=.TRUE. )
        CALL StrSplit( Line, " ", SubStrs, N )
        IF ( INDEX(Line, '.fields') > 0 .AND. N > 1 ) THEN
-          name = CleanText( SubStrs(2) )
+          fullname = CleanText( SubStrs(2) )
        ELSE
-          name = CleanText( SubStrs(1) )
+          fullname = CleanText( SubStrs(1) )
        ENDIF
 
-       ! Skip if diagnostic name is commented out
-       IF ( name(1:1) == '#' ) CYCLE
+       ! Skip to next line if the diagnostic name is commented out,
+       ! missing, or contains an attribute tag.
+       IF ( fullname(1:1) == '#' ) CYCLE
+       IF ( LEN_TRIM( fullname ) == 0   ) CYCLE
+       IF ( INDEX( fullname, '.template'  ) >  0   ) CYCLE
+       IF ( INDEX( fullname, '.frequency' ) >  0   ) CYCLE
+       IF ( INDEX( fullname, '.duration'  ) >  0   ) CYCLE
+       IF ( INDEX( fullname, '.format'    ) >  0   ) CYCLE
+       IF ( INDEX( fullname, '.mode'      ) >  0   ) CYCLE
 
-       ! Skip if name is already in diag list
-       CALL Search_DiagList( am_I_Root, DiagList, name, Found, RC )
-       IF ( Found ) CYCLE
+       ! Parse full diagnostics name. ESMF/MAPL supports the combination of
+       ! multiple fields (e.g., 'Field1+Field2') as well as math operations
+       ! (e.g.,2*Field1). To preserve this functionality, we need to register
+       ! each requested field individually.
+       CALL Parse_FullName( am_I_Root, fullname, names, NFIELDS, RC )
+       IF ( NFIELDS == 0 ) CYCLE
 
-       ! Set GC state
-       nameAllCaps = To_Uppercase( TRIM(name) )
-       IF ( nameAllCaps(1:4) == 'MET_' ) THEN
-          state = 'MET'
-       ELSEIF ( nameAllCaps(1:5) == 'CHEM_' ) THEN
-          state = 'CHEM'
+       ! Register all fields - as identified by Parse_FullName - individually
+       DO J=1,NFIELDS
+          name = TRIM(names(J))
+
+          ! Skip if name is already in diag list
+          CALL Search_DiagList( am_I_Root, DiagList, name, Found, RC )
+          IF ( Found ) CYCLE
+
+          ! Set GC state
+          nameAllCaps = To_Uppercase( TRIM(name) )
+          IF ( nameAllCaps(1:4) == 'MET_' ) THEN
+             state = 'MET'
+          ELSEIF ( nameAllCaps(1:5) == 'CHEM_' ) THEN
+             state = 'CHEM'
 #ifdef ESMF_
-       ! Emissions diagnostics are included in HISTORY.rc in GCHP only
-       ELSEIF ( nameAllCaps(1:4) == 'EMIS' ) THEN
-          state = 'EMISSIONS'
-       ! Emissions inventory diagnostics are included in HISTORY.rc in GCHP only
-       ELSEIF ( nameAllCaps(1:3) == 'INV' ) THEN
-          state = 'EMISSIONS'
+          ! HEMCO diagnostics are included in HISTORY.rc in GCHP/GEOS only.
+          ! Prefix for HEMCO diagnostics in HEMCO_Diagn.rc must be one of the
+          ! following (case-insensitve).
+          ELSEIF ( nameAllCaps(1:4) == 'EMIS' .OR. &
+                   nameAllCaps(1:3) == 'INV'  .OR. &
+                   nameAllCaps(1:3) == 'HCO') THEN
+             state = 'HEMCO'
+#ifdef ADJOINT
+          ! Emissions scaling factor sensitivites are included in HISTORY.rc in GCHP only
+          ELSEIF ( nameAllCaps(1:6) == 'SFEMIS' ) THEN
+             state = 'HEMCO'
+#endif
 #ifdef MODEL_GEOS
-       ! GEOS uses a different internal state prefix than GCHP and
-       ! and also can have custom diagnostics
-       ELSEIF ( nameAllCaps(1:5) == 'GEOS_' ) THEN
-          state = 'GEOS'
-       ELSEIF ( nameAllCaps(1:4) == 'TRC_' ) THEN
-#else
-       ELSEIF ( nameAllCaps(1:4) == 'SPC_' ) THEN
+          ! GEOS might have custom diagnostics outside of the standard states
+          ELSEIF ( nameAllCaps(1:5) == 'GEOS_' .OR. &
+                   nameAllCaps(1:4) == 'GCC_' ) THEN
+             state = 'GEOS'
+          ! GEOS might have internal state variables that start with other prefix
+          ELSEIF ( nameAllCaps(1:4) == GPFX ) THEN
+             state = 'INTERNAL'
 #endif
-          state = 'INTERNAL'
+          ELSEIF ( nameAllCaps(1:4) == SPFX ) THEN
+             state = 'INTERNAL'
 #endif
-       ELSE
-          state = 'DIAG'
-       ENDIF
-
-       ! Get wildcard, if any
-       ! NOTE: Must be prefaced with single underscore in HISTORY.rc!
-       isWildcard = .FALSE.
-       wildcard   = ''
-       IF ( INDEX( name, '?' ) > 0 ) THEN
-#ifdef ESMF_
-          ! Exit with an error if using GCHP and wildcard is present
-          ErrMsg = 'ERROR: HISTORY.rc wildcard handling is not ' // &
-                   'implemented in GCHP: ' // TRIM(name) // '. Replace ' // &
-                   'wildcard with a specific tag.'
-          CALL GC_Error( ErrMsg, RC, ThisLoc )
-          RETURN
-#endif
-          isWildcard = .TRUE.
-          CALL StrSplit( name, '?', SubStrs, N )
-          wildcard = SubStrs(N-1)
-       ENDIF
-
-       ! Get tag, if any
-       isTagged  = .FALSE.
-       tag = ''
-       IF ( .NOT. isWildcard ) THEN
-          CALL StrSplit( name, '_', SubStrs, N )
-          IF ( TRIM(state) == 'DIAG' .AND. N == 2 ) THEN
-             isTagged = .TRUE.
-             tag = SubStrs(2)
-          ELSEIF ( TRIM(state) == 'CHEM' &
-                   .AND. N == 3 ) THEN
-             isTagged = .TRUE.
-             tag = SubStrs(3)
-          ENDIF
-       ENDIF
-
-       ! Get registryID - start with the full name in HISTORY.rc
-       registryID = TRIM(nameAllCaps)
-       ! Then strip off the state prefix, if any
-       IF ( TRIM(state) == 'MET' ) THEN
-          registryID = registryID(5:)
-       ELSE IF ( TRIM(state) == 'CHEM' ) THEN
-          registryID = registryID(6:)
-       ENDIF
-       ! Then strip off the wildcard, if any
-       IF ( isWildcard ) THEN
-          I = INDEX( TRIM(registryID), '_' )
-          IF ( I .le. 0 ) THEN
-             ErrMsg = 'Error setting registryID. Single underscore must' &
-                      // ' precede wildcard in HISTORY.rc!'
-             CALL GC_ERROR( ErrMsg, RC, ThisLoc )
-             RETURN
-          ENDIF
-          registryID = registryID(1:I-1)
-       ENDIF
-
-       ! Get metadataID - start with the registry ID
-       metadataID = registryID
-       ! Then strip off the tag suffix, if any
-       IF ( isTagged ) THEN
-          I = INDEX( TRIM(metadataID), '_' )
-          metadataID = metadataID(1:I-1)
-       ENDIF
-
-       ! For registryID and metdataID, handle special case of AOD wavelength
-       ! Update registryID
-       IWL(1) = INDEX( TRIM(registryID), 'WL1' )
-       IWL(2) = INDEX( TRIM(registryID), 'WL2' )
-       IWL(3) = INDEX( TRIM(registryID), 'WL3' )
-       IWLMAX = MAX(IWL(1),IWL(2),IWL(3))
-       IF ( IWLMAX > 0 ) THEN
-          IWLMAXLOC = MAXLOC(IWL)
-          registryIDprefix = registryID(1:IWL(IWLMAXLOC(1))-1) // &
-                             TRIM(RadWL(IWLMAXLOC(1))) // 'NM'
-          I = INDEX( TRIM(registryID), '_' )
-          IF ( I > 0 ) THEN
-             registryID = TRIM(registryIDprefix) // registryID(I:)
           ELSE
-             registryID = registryIDprefix
+             state = 'DIAG'
           ENDIF
-       ENDIF
-       ! Update metadataID
-       IWL(1) = INDEX( TRIM(metadataID), 'WL1' )
-       IWL(2) = INDEX( TRIM(metadataID), 'WL2' )
-       IWL(3) = INDEX( TRIM(metadataID), 'WL3' )
-       IWLMAX = MAX(IWL(1),IWL(2),IWL(3))
-       IF ( IWLMAX > 0 ) THEN
-          IWLMAXLOC = MAXLOC(IWL(:))
-          metadataID = metadataID(1:IWL(IWLMAXLOC(1))-1) //  &
-                       TRIM(RadWL(IWLMAXLOC(1))) // 'NM'
-       ENDIF
 
-       ! Special handling for the RRTMG diagnostic flux outputs
-       ! Store the list of the requested fluxes in RadFlux
-       IWL(1) = INDEX( TRIM(metadataID), 'RADCLRSKY' )
-       IWL(2) = INDEX( TRIM(metadataID), 'RADALLSKY' )
-       IWLMAX = MAX( IWL(1), IWL(2) )
-       IF ( IWLMAX > 0 ) THEN
+          ! Get wildcard, if any
+          ! NOTE: Must be prefaced with single underscore in HISTORY.rc!
+          isWildcard = .FALSE.
+          wildcard   = ''
+          IF ( INDEX( name, '?' ) > 0 ) THEN
+#if defined( MODEL_GCHPCTM ) || defined( MODEL_GEOS ) || defined( MODEL_CESM )
+             ! Exit with an error if using GCHP and wildcard is present
+             ErrMsg = 'ERROR: HISTORY.rc wildcard handling is not ' // &
+                      'implemented in GCHP/CESM: ' // TRIM(name) // '. Replace ' // &
+                      'wildcard with a specific tag.'
+             CALL GC_Error( ErrMsg, RC, ThisLoc )
+             RETURN
+#endif
+             isWildcard = .TRUE.
+             CALL StrSplit( name, '?', SubStrs, N )
+             wildcard = SubStrs(N-1)
+          ENDIF
+          ! Get tag, if any
+          isTagged  = .FALSE.
+          tag = ''
+          IF ( .NOT. isWildcard ) THEN
+             CALL StrSplit( name, '_', SubStrs, N )
+             IF ( TRIM(state) == 'DIAG' .AND. N == 2 ) THEN
+                isTagged = .TRUE.
+                tag = SubStrs(2)
+             ELSE IF ( TRIM(state) == 'CHEM' .AND. N == 3 ) THEN
+                isTagged = .TRUE.
+                tag = SubStrs(3)
+             ENDIF
+          ENDIF
+          ! Get registryID - start with the full name in HISTORY.rc
+          registryID = TRIM(nameAllCaps)
+          ! Then strip off the state prefix, if any
+          IF ( TRIM(state) == 'MET' ) THEN
+             registryID = registryID(5:)
+          ELSE IF ( TRIM(state) == 'CHEM' ) THEN
+             registryID = registryID(6:)
+          ENDIF
+          ! Then strip off the wildcard, if any
+          IF ( isWildcard ) THEN
+             LineInd = INDEX( TRIM(registryID), '_' )
+             IF ( LineInd .le. 0 ) THEN
+                ErrMsg = 'Error setting registryID. Single underscore must' &
+                         // ' precede wildcard in HISTORY.rc!'
+                CALL GC_ERROR( ErrMsg, RC, ThisLoc )
+                RETURN
+             ENDIF
+             registryID = registryID(1:LineInd-1)
+          ENDIF
 
-          IF ( LEN_TRIM( Tag ) > 0 ) THEN
+          ! Get metadataID - start with the registry ID
+          metadataID = registryID
 
-             ! If a tag is specified explicitly, then add each
-             ! tag name to the RadFlux array and update nRadFlux
-             IF ( .not. ANY( RadFlux == TRIM(Tag) ) ) THEN
-                nRadFlux          = nRadFlux + 1
-                RadFlux(nRadFlux) = TRIM( Tag )
+          ! Then strip off the tag suffix, if any
+          IF ( isTagged ) THEN
+             LineInd = INDEX( TRIM(metadataID), '_' )
+             metadataID = metadataID(1:LineInd-1)
+          ENDIF
+
+          ! For registryID and metdataID, handle special case of AOD wavelength
+          ! Update registryID
+          WLInd(1) = INDEX( TRIM(registryID), 'WL1' )
+          WLInd(2) = INDEX( TRIM(registryID), 'WL2' )
+          WLInd(3) = INDEX( TRIM(registryID), 'WL3' )
+          WLIndMax = Max(WLInd(1),WLInd(2),WLInd(3))
+          IF ( WLIndMax > 0 ) THEN
+             WLIndMaxLoc = MAXLOC(WLInd)
+             registryIDprefix = registryID(1:WLInd(WLIndMaxLoc(1))-1) // &
+                                TRIM(RadWL(WLIndMaxLoc(1))) // 'NM'
+             LineInd = INDEX( TRIM(registryID), '_' )
+             IF ( LineInd > 0 ) THEN
+                registryID = TRIM(registryIDprefix) // registryID(LineInd:)
+             ELSE
+                registryID = registryIDprefix
+             ENDIF
+          ENDIF
+
+          ! Update metadataID with wavelength
+          WLInd(1) = INDEX( TRIM(metadataID), 'WL1' )
+          WLInd(2) = INDEX( TRIM(metadataID), 'WL2' )
+          WLInd(3) = INDEX( TRIM(metadataID), 'WL3' )
+          WLIndMax = Max(WLInd(1),WLInd(2),WLInd(3))
+          IF ( WLIndMax > 0 ) THEN
+             WLIndMaxLoc = MaxLOC(WLInd(:))
+             metadataID = metadataID(1:WLInd(WLIndMaxLoc(1))-1) //  &
+                          TRIM(RadWL(WLIndMaxLoc(1))) // 'NM'
+          ENDIF
+
+          ! Special handling for the RRTMG diagnostic outputs
+          ! Store the list of the requested outputs (tags) in RadOut.
+          strInd(1) = INDEX( TRIM(metadataID), 'RADCLR' )
+          strInd(2) = INDEX( TRIM(metadataID), 'RADALL' )
+          strInd(3) = INDEX( TRIM(metadataID), 'RADAOD' )
+          strInd(4) = INDEX( TRIM(metadataID), 'RADSSA' )
+          strInd(5) = INDEX( TRIM(metadataID), 'RADASYM' )
+          strIndMax = MAX(strInd(1),strInd(2),strInd(3),strInd(4),strInd(5))
+          IF ( strIndMax == 1 .AND. nRadOut < 12 ) THEN
+
+             ! If RRTMG diagnostics present, always calculate BASE, and store
+             ! first, since used to calculate other outputs.
+             IF ( nRadOut == 0 ) THEN
+                nRadOut = nRadOut + 1
+                RadOut(nRadOut) = 'BASE'
              ENDIF
 
-          ELSE
-
-             ! If a tag is not explicity stated, then manually define all
-             ! slots of the RadFlux array (and update nRadFlux accordingly)
-             ! See: wiki.geos-chem.org/Coupling_GEOS-Chem_with_RRTMG
-             RadFlux(1 ) = 'O3'
-             RadFlux(2 ) = 'ME'
-             RadFlux(3 ) = 'SU'
-             RadFlux(4 ) = 'NI'
-             RadFlux(5 ) = 'AM'
-             RadFlux(6 ) = 'BC'
-             RadFlux(7 ) = 'OA'
-             RadFlux(8 ) = 'SS'
-             RadFlux(9 ) = 'DU'
-             RadFlux(10) = 'PM'
-             RadFlux(11) = 'ST'
-             nRadFlux    = 11
-
+             ! Set the rest of the array to the contents of HISTORY.rc, or to
+             ! include all except stratosphere if wildcard found.
+             IF ( .NOT. isWildcard ) THEN
+                ! If a tag is specified explicitly, then add to the RadOut array
+                IF ( .not. ANY( RadOut == TRIM(Tag) ) ) THEN
+                   nRadOut          = nRadOut + 1
+                   RadOut(nRadOut) = TRIM( Tag )
+                ENDIF
+             ELSE
+                ! If the RRTMG wildcard is used then add all remaining possible
+                ! outputs, except the stratosphere (ST) and BASE (already added).
+                ! ST must be explicit in HISTORY.rc and is not included in the
+                ! RRTMG wildcard since it may not be relevant to the simulation.
+                RRTMGOutputs = (/'O3','ME','SU','NI','AM','BC','OA','SS','DU','PM'/)
+                DO N = 1, SIZE(rrtmgOutputs,1)
+                   IF ( .not. ANY( RadOut == TRIM(rrtmgOutputs(N)) ) ) THEN
+                      nRadOut          = nRadOut + 1
+                      RadOut(nRadOut) = TRIM( rrtmgOutputs(N) )
+                   ENDIF
+                ENDDO
+             ENDIF
           ENDIF
-       ENDIF
 
-       ! Special handling for diagnostics at a specific height
-       ! (e.g. rename O3CONCATALT --> O3CONCAT10M)
-       IWL(1) = INDEX( TRIM(registryID), 'ALT1' )
-       IF ( IWL(1) > 0 ) THEN
-          registryIDprefix = registryID(1:IWL(1)-1) // TRIM( AltAboveSfc )
-          I = INDEX( TRIM(registryID), '_' )
-          IF ( I > 0 ) THEN
-             registryID = TRIM(registryIDprefix) // registryID(I:)
-          ELSE
-             registryID = registryIDprefix
+          ! Special handling for diagnostics at a specific height
+          ! (e.g. rename O3CONCATALT --> O3CONCAT10M)
+          strInd(1) = INDEX( TRIM(registryID), 'ALT1' )
+          IF ( strInd(1) > 0 ) THEN
+             registryIDprefix = registryID(1:strInd(1)-1) // TRIM( AltAboveSfc )
+             LineInd = INDEX( TRIM(registryID), '_' )
+             IF ( LineInd > 0 ) THEN
+                registryID = TRIM(registryIDprefix) // registryID(LineInd:)
+             ELSE
+                registryID = registryIDprefix
+             ENDIF
           ENDIF
-       ENDIF
-       IWL(2) = INDEX( TRIM(metadataID), 'ALT1' )
-       IF ( IWL(2) > 0 ) THEN
-          metadataID = metadataID(1:IWL(2)-1) // TRIM( AltAboveSfc )
-       ENDIF
+          strInd(2) = INDEX( TRIM(metadataID), 'ALT1' )
+          IF ( strInd(2) > 0 ) THEN
+             metadataID = metadataID(1:strInd(2)-1) // TRIM( AltAboveSfc )
+          ENDIF
 
-       !====================================================================
-       ! Create a new DiagItem object
-       !====================================================================
-       CALL Init_DiagItem( am_I_Root,              &
-                           NewDiagItem,            &
-                           name=name,              &
-                           state=state,            &
-                           metadataID=metadataID,  &
-                           registryID=registryID,  &
-                           isWildcard=isWildcard,  &
-                           wildcard=wildcard,      &
-                           isTagged=isTagged,      &
-                           tag=tag,                &
-                           RC=RC  )
-       IF ( RC /= GC_SUCCESS ) THEN
-          ErrMsg = 'Error initializing DiagItem ' // TRIM(name)
-          CALL GC_Error( ErrMsg, RC, ThisLoc )
-          RETURN
-       ENDIF
+          !====================================================================
+          ! Create a new DiagItem object
+          !====================================================================
+          CALL Init_DiagItem( am_I_Root,              &
+                              NewDiagItem,            &
+                              name=name,              &
+                              state=state,            &
+                              metadataID=metadataID,  &
+                              registryID=registryID,  &
+                              isWildcard=isWildcard,  &
+                              wildcard=wildcard,      &
+                              isTagged=isTagged,      &
+                              tag=tag,                &
+                              RC=RC  )
+          IF ( RC /= GC_SUCCESS ) THEN
+             ErrMsg = 'Error initializing DiagItem ' // TRIM(name)
+             CALL GC_Error( ErrMsg, RC, ThisLoc )
+             RETURN
+          ENDIF
 
-       !====================================================================
-       ! Add new DiagItem to linked list
-       !====================================================================
-       CALL InsertBeginning_DiagList( am_I_Root, NewDiagItem, DiagList, RC )
-       IF ( RC /= GC_SUCCESS ) RETURN
+          !====================================================================
+          ! Add new DiagItem to linked list
+          !====================================================================
+          CALL InsertBeginning_DiagList( am_I_Root, NewDiagItem, DiagList, RC )
+          IF ( RC /= GC_SUCCESS ) RETURN
+
+       ENDDO !J loop (NFIELDS)
 
     ENDDO
 
@@ -820,11 +868,108 @@ CONTAINS
 !------------------------------------------------------------------------------
 !BOP
 !
+! !IROUTINE: Parse_FullName
+!
+! !DESCRIPTION: Parses the full field name as set in HISTORY.rc and checks
+!  for math expressions / field combinations, as possible in MAPL. Returns all
+!  individual field names as separate strings, along with the number of
+!  identified fields.
+!\\
+!\\
+! !INTERFACE:
+!
+  SUBROUTINE Parse_FullName ( am_I_Root, fullname, names, NFIELDS, RC )
+!
+! !USES:
+!
+    USE Charpak_Mod,        ONLY : CleanText, StrSplit
+!
+! !INPUT PARAMETERS:
+!
+    LOGICAL,             INTENT(IN) :: am_I_Root        ! Root CPU?
+    CHARACTER(LEN=*),    INTENT(IN) :: fullname         ! original field name, all upper-case
+!
+! !OUTPUT PARAMETERS:
+!
+    CHARACTER(LEN=*), INTENT(OUT)   :: names(100)       ! individual names (all upper-case)
+    INTEGER,          INTENT(OUT)   :: NFIELDS          ! number of individual fields
+    INTEGER,          OPTIONAL      :: RC               ! return code
+!
+! !REVISION HISTORY:
+!  05 Jan 2021 - C. Keller - Initial version
+!  See https://github.com/geoschem/geos-chem for complete history
+!EOP
+!------------------------------------------------------------------------------
+!BOC
+!
+! !LOCAL VARIABLES:
+!
+    CHARACTER(LEN=255) :: thisLoc, workstring, istr, SubStrs(500)
+    CHARACTER(LEN=1)   :: thischar
+    INTEGER            :: I, J, N, ilen, iasc
+    LOGICAL            :: hasChar
+
+    ! ================================================================
+    ! Parse_FullName begins here
+    ! ================================================================
+    thisLoc = 'Parse_FullName (diaglist_mod.F90)'
+
+    ! Init
+    names(:) = ""
+
+    ! Replace all supported math symbols (+,-,*,/) with hash symbol
+    workstring = CleanText(fullname)
+    ilen = LEN_TRIM(workstring)
+    DO I = 1,ilen
+       thischar = workstring(I:I)
+       IF ( thischar == "+" .OR. &
+            thischar == "-" .OR. &
+            thischar == "*" .OR. &
+            thischar == "/"       ) THEN
+          workstring(I:I) = "#"
+       ENDIF
+    ENDDO
+
+    ! Split for hashsymbol, then place each (valid) substring into
+    ! separate slot and count them. Some entries may be invalid. I.e., if one
+    ! uses something like '2*FieldX', the numeric entry needs to be removed.
+    ! All fields with at least one upper-case alphanumeric character (i.e.,
+    ! ascii characters 65-90), are assumed to be valid fields.
+    NFIELDS = 0
+    CALL StrSplit( workstring, "#", SubStrs, N )
+    DO I = 1, N
+       istr = CleanText( SubStrs(I) )
+       ! Check if clean name contains at least one upper-case alphanumeric character
+       hasChar = .FALSE.
+       ilen = LEN_TRIM(istr)
+       DO J = 1, ilen
+          iasc = ICHAR(istr(J:J))
+          IF ((iasc.GT.64).AND.(iasc.LT.91)) THEN
+             hasChar = .TRUE.
+             EXIT
+          ENDIF
+       ENDDO
+       IF ( hasChar ) THEN
+          NFIELDS = NFIELDS + 1
+          names(NFIELDS) = istr
+       ENDIF
+    ENDDO
+
+    ! Return
+    RC = GC_SUCCESS
+
+  END SUBROUTINE Parse_FullName
+!EOC
+!------------------------------------------------------------------------------
+!                  GEOS-Chem Global Chemical Transport Model                  !
+!------------------------------------------------------------------------------
+!BOP
+!
 ! !IROUTINE: Init_DiagItem
 !
 ! !DESCRIPTION: Initializes a DiagItem object, which contains information
 !  about a single GEOS-Chem diagnostic.  Several DiagItem objects will be
-!  linked together in the master diagnostics list (DiagList).
+!  linked together in the main diagnostics list (DiagList).
 !\\
 !\\
 ! !INTERFACE:
@@ -887,7 +1032,7 @@ CONTAINS
 !
 ! !DESCRIPTION: Initializes a ColItem object, which contains information
 !  about a single GEOS-Chem collection.  Several ColItem objects will be
-!  linked together in the master collections list (ColList).
+!  linked together in the main collections list (ColList).
 !\\
 !\\
 ! !INTERFACE:
@@ -994,7 +1139,7 @@ CONTAINS
 !
 ! !DESCRIPTION: Sets a ColItem object, which contains information
 !  about a single GEOS-Chem collection.  Several ColItem objects will be
-!  linked together in the master collections list (ColList).
+!  linked together in the main collections list (ColList).
 !\\
 !\\
 ! !INTERFACE:
@@ -1326,7 +1471,7 @@ CONTAINS
     thisLoc = ' -> at Check_DiagList (in module Headers/diaglist_mod.F90)'
     found   = .FALSE.
 
-    ! Get the optional exactMatch argument, whichg determines
+    ! Get the optional exactMatch argument, which determines
     ! if we should force an exact name match or not (bmy, 10/29/18)
     IF ( PRESENT( partial ) ) THEN
        doPartialMatch = partial

@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -139,17 +139,14 @@ MODULE HCOIO_DataRead_Mod
 !
 ! !REVISION HISTORY:
 !  22 Aug 2013 - C. Keller   - Initial version
-!  01 Jul 2014 - R. Yantosca - Now use F90 free-format indentation
-!  01 Jul 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  22 Feb 2016 - C. Keller   - Environment specific routines are now
-!                              in respective modules.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -165,11 +162,7 @@ CONTAINS
 !
 ! !USES:
 !
-#if defined(ESMF_)
-    USE HCOIO_READ_ESMF_MOD,  ONLY : HCOIO_READ_ESMF
-#else
-    USE HCOIO_READ_STD_MOD,   ONLY : HCOIO_READ_STD
-#endif
+    USE HCOIO_READ_MOD,   ONLY : HCOIO_READ
 !
 ! !INPUT PARAMETERS:
 !
@@ -182,11 +175,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  28 Aug 2013 - C. Keller   - Initial version
-!  27 Aug 2014 - R. Yantosca - Err msg now displays hcoio_dataread_mod.F90
-!  22 Feb 2016 - C. Keller   - Now calls down to model-specific routines.
-!  24 Mar 2016 - C. Keller   - Removed LUN and CloseFile. Not needed any more.
-!  05 Oct 2018 - R. Yantosca - Read files with cycle flag "E" just once.
-!                              Also improve the error trapping.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -194,76 +183,34 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     ! Strings
-    CHARACTER(LEN=512) :: MSG
-
-    ! SAVEd scalars
-    LOGICAL, SAVE      :: doPrintWarning = .TRUE.
+    CHARACTER(LEN=512) :: MSG 
+    CHARACTER(LEN=255) :: LOC
 
     !=======================================================================
     ! HCOIO_DATAREAD begins here
     !=======================================================================
+    LOC = 'HCOIO_DATAREAD (HCOIO_DATAREAD_MOD.F90)'
 
     ! Assume success until proven otherwise
     RC = HCO_SUCCESS
 
     ! Denote we are entering this routine
-    CALL HCO_ENTER( HcoState%Config%Err,                                     &
-                    'HCOIO_DataRead (hcoio_dataread_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
-#if defined( ESMF_ ) || defined( MODEL_GEOS )
-
-    !-----------------------------------------------------------------------
-    ! %%%%% ESMF environment (e.g. GCHP, GEOS-DAS) %%%%%%
-    !-----------------------------------------------------------------------
-
-    ! Call ESMF I/O routine.
-    CALL HCOIO_READ_ESMF( HcoState, Lct, RC )
+    ! Call the HEMCO Data Input Layer
+    ! Selection of which HCOIO module to be used is performed at compile level
+    CALL HCOIO_READ( HcoState, Lct, RC )
 
     ! Trap potential errors
     IF ( RC /= HCO_SUCCESS ) THEN
-       MSG = 'Error encountered in routine HCOIO_Read_ESMF!'
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
+       MSG = 'Error encountered in routine HCOIO_Read!'
+       CALL HCO_ERROR( MSG, RC )
        RETURN
     ENDIF
-
-#else
-
-    !-----------------------------------------------------------------------
-    ! %%%%% Standard environment (e.g. GEOS-Chem "Classic") %%%%%
-    !-----------------------------------------------------------------------
-
-    ! If the file has cycle flag "E" (e.g. it's a restart file), then we will
-    ! read it only once and then never again.  If the file has already been
-    ! read on a previous call, then don't call HCOIO_READ_STD. (bmy, 10/4/18)
-    IF ( Lct%Dct%Dta%CycleFlag == HCO_CFLAG_EXACT .and.                      &
-         Lct%Dct%Dta%UpdtFlag  == HCO_UFLAG_ONCE  .and.                      &
-         Lct%Dct%Dta%isTouched                          ) THEN
-
-       ! Print a warning message only once
-       IF ( doPrintWarning ) THEN
-          doPrintWarning = .FALSE.
-          MSG = 'No further attempts will be made to read file: ' //         &
-                TRIM( Lct%Dct%Dta%NcFile )
-          CALL HCO_WARNING ( HcoState%Config%Err, MSG, RC, WARNLEV=1 )
-       ENDIF
-
-       ! Return without reading
-       CALL HCO_LEAVE( HcoState%Config%Err, RC )
-       RETURN
-    ENDIF
-
-    ! Call standard I/O routines
-    CALL HCOIO_READ_STD( HcoState, Lct, RC )
-
-    ! Trap potential errors
-    IF ( RC /= HCO_SUCCESS ) THEN
-       MSG = 'Error encountered in routine HCOIO_Read_Std!'
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC )
-       RETURN
-    ENDIF
-
-#endif
 
     ! Denote we are leaving this routine
     CALL HCO_LEAVE( HcoState%Config%Err, RC )

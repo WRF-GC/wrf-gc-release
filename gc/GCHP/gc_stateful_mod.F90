@@ -22,6 +22,7 @@ module GC_Stateful_Mod
     use State_Diag_Mod
     use State_Grid_Mod
     use DiagList_Mod, only: DgnList
+    use TaggedDiagList_Mod, only: TaggedDgnList
     use HCO_TYPES_MOD, only: ConfigObj
     use HCO_State_Mod, only: HCO_State
     use HCOX_State_Mod, only: Ext_State
@@ -52,6 +53,7 @@ module GC_Stateful_Mod
     type(OptInput), public                             :: Global_Input_Opt
     type(ConfigObj), pointer, public                   :: Global_HcoConfig => NULL()
     type(DgnList), public                              :: Global_DiagList
+    type(TaggedDgnList), public                        :: Global_TaggedDiag_List
 
     ! Stateful objects
 #if defined ( EXTERNAL_GRID ) || defined( MODEL_ )
@@ -110,6 +112,7 @@ module GC_Stateful_Mod
 !  07 Jun 2018 - H.P. Lin  - Added workflow description and clarified code.
 !  28 Dec 2019 - H.P. Lin  - Update to GEOS-Chem 12.6.3
 !  19 May 2020 - H.P. Lin  - Booyah!
+!  18 Apr 2022 - H.P. Lin  - Update to GEOS-Chem 13.4.0
 !------------------------------------------------------------------------------
 !BOC
 contains
@@ -138,6 +141,7 @@ contains
         USE HCO_DIAGN_MOD,      only: DiagnFileOpen
         USE LINOZ_MOD,          only: Linoz_Read
         USE DiagList_Mod,       only: Init_DiagList, Print_DiagList
+        USE TaggedDiagList_Mod, only: Init_TaggedDiagList, Print_TaggedDiagList
 
 !
 ! !INPUT PARAMETERS:
@@ -182,8 +186,7 @@ contains
             return
         endif
 
-        ! Initialize Input_Opt fields to zeros or equivalent (v12)
-        call Set_Input_Opt( am_I_Root, Global_Input_Opt, RC )
+        ! Set_Input_Opt now called in chemics_init.F to mimic Chem_GridCompMod.F90 (hplin, 8/12/22)
 
         ! Some necessary set-up for GEOS-Chem HP
 #if defined ( EXTERNAL_GRID ) || defined( MODEL_ )
@@ -199,10 +202,13 @@ contains
         Global_Input_Opt%MPIComm = MPI_COMM
 
         ! Set some DEFAULT time-steps which will be overwritten by GIGC_Chunk_Mod later on
-        Global_Input_Opt%TS_CHEM = 10   ! Chemistry timestep [min]
-        Global_Input_Opt%TS_EMIS = 10   ! Chemistry timestep [min]
-        Global_Input_Opt%TS_DYN  = 20   ! Dynamic   timestep [min]
-        Global_Input_Opt%TS_CONV = 20   ! Dynamic   timestep [min]
+        Global_Input_Opt%TS_CHEM = 600   ! Chemistry timestep [s]
+        Global_Input_Opt%TS_EMIS = 600   ! Chemistry timestep [s]
+        Global_Input_Opt%TS_DYN  = 600   ! Dynamic   timestep [s]
+        Global_Input_Opt%TS_CONV = 600   ! Dynamic   timestep [s]
+        Global_Input_Opt%TS_RAD  = 600   ! RRTMG     timestep [s]
+
+        ! Note that TS_DYN needs to be the smallest or input_mod will complain (hplin, 4/20/22)
 #endif
 
         ! Read input.geos, now done on all threads since GC(HP) 12.2.0
@@ -243,13 +249,23 @@ contains
 
         ! Read HISTORY.rc & initialize diagnostics list object
         ! Ported from gigc_historyexports_mod, v12
-        CALL Init_DiagList(am_I_Root, "HISTORY.rc", Global_DiagList, RC)
+        CALL Init_DiagList(Global_Input_Opt%AmIRoot, "HISTORY.rc", Global_DiagList, RC)
         if(RC /= GC_SUCCESS) then 
             write(6, *) "STOP GC_Stateful_Mod :: Return Code /= GC_SUCCESS (Init_DiagList)"
             return
         endif
 
-        CALL Print_DiagList(am_I_Root, Global_DiagList, RC)
+        CALL Print_DiagList(Global_Input_Opt%AmIRoot, Global_DiagList, RC)
+
+        ! Initialize the TaggedDiag_List, ported from main.F90, v13
+        CALL Init_TaggedDiagList(Global_Input_Opt%amIroot, Global_DiagList,  &
+                                 Global_TaggedDiag_List,   RC         )
+        IF ( RC /= GC_SUCCESS ) THEN
+           write(6,*) "STOP GC_Stateful_Mod :: Return Code /= GC_SUCCESS (Init_TaggedDiagList)"
+           return
+        ENDIF
+
+        CALL Print_TaggedDiagList(Global_Input_Opt%amIRoot, Global_TaggedDiag_List, RC)
 
         !
         ! Allocate GEOS-Chem module arrays,

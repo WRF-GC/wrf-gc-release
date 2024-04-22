@@ -118,15 +118,10 @@ debug:
 
 drydep_toolbox_mod.o        : drydep_toolbox_mod.F90
 
-hcox_ch4wetland_mod.o       : hcox_ch4wetland_mod.F90         \
-                              hcox_state_mod.o		      \
-                              hcox_tools_mod.o
-
 hcox_custom_mod.o           : hcox_custom_mod.F90             \
                               hcox_state_mod.o
 
 hcox_driver_mod.o           : hcox_driver_mod.F90             \
-                              hcox_ch4wetland_mod.o           \
                               hcox_custom_mod.o               \
                               hcox_dustdead_mod.o             \
                               hcox_tomas_dustdead_mod.o       \

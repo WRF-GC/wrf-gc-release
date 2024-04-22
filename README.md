@@ -1,8 +1,8 @@
 ## WRF-GC
 
-This is the official release repository for the **WRF-GC** model, an online two-way coupling of the Weather Research and Forecasting (WRF) model and the [GEOS-Chem](https://geos-chem.seas.harvard.edu/) atmospheric chemistry model.
+This is the official repository for the **WRF-GC** model, an online two-way coupling of the Weather Research and Forecasting (WRF) model and the [GEOS-Chem](https://geos-chem.seas.harvard.edu/) atmospheric chemistry model.
 
-:bulb: User's Guide: https://wrfgc.readthedocs.io
+:bulb: Documentation: https://wrfgc.readthedocs.io
 
 :book: References: [Lin et al., 2020](https://gmd.copernicus.org/articles/13/3241/2020/gmd-13-3241-2020.html), [Feng et al., 2021](https://gmd.copernicus.org/articles/14/3741/2021/)
 
@@ -14,12 +14,12 @@ The WRF-GC model includes a versatile coupler coupling GEOS-Chem to WRF in a man
 
 ### License
 ```
-(c) 2017-2022 Haipeng Lin <hplin@seas.harvard.edu>, Xu Feng <fengx7@pku.edu.cn>, Tzung-May Fu <tmfu@pku.edu.cn>
+(c) 2017-2023 Haipeng Lin <hplin@seas.harvard.edu>, Xu Feng <fengx7@pku.edu.cn>, Tzung-May Fu <tmfu@pku.edu.cn>
 (c) 2017-2018 Atmospheric Chemistry & Climate Group, Peking University
-(c) 2018-2022 Atmospheric Chemistry & Climate Group, SUSTech
+(c) 2018-2023 Atmospheric Chemistry & Climate Group, SUSTech
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to
+of this software and associated documentation files (the "Software"), to 
 use, copy, modify the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 

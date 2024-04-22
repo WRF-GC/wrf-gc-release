@@ -1,0 +1,11 @@
+# This file defines the diagnostics to be written
+# out by the HEMCO standalone model
+#
+# Name           Spec   ExtNr Cat Hier Dim Unit
+GMI_ISOPRENE     ISOP   108   -1  -1   2   kgC/m2/s
+GMI_TERPENE      MTPA   109   -1  -1   2   kgC/m2/s
+GMI_MTPO       	 MTPO   109   -1  -1   2   kgC/m2/s
+GMI_LIMO       	 LIMO   109   -1  -1   2   kgC/m2/s
+GMI_SESQ       	 SESQ   109   -1  -1   2   kgC/m2/s
+EMIS_PRPE_BG   	 PRPE   108   -1  -1   2   kgC/m2/s
+EMIS_CO_BG     	 CO     109   -1  -1   2   kg/m2/s

@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -42,8 +42,7 @@ MODULE HCOX_Iodine_Mod
 !
 ! !REVISION HISTORY:
 !  15 Mar 2013 - T. Sherwen - Initial implementation (v9-3-01)
-!  15 Jul 2015 - T. Sherwen - Now a HEMCO extension module
-!  11 Sep 2018 - C. Keller  - Added instances wrapper
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !
@@ -73,7 +72,7 @@ MODULE HCOX_Iodine_Mod
 CONTAINS
 !EOC
 !-------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -112,38 +111,41 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  15 Mar 2013 - T. Sherwen - Initial implementation (v9-3-01)
-!  15 Jul 2015 - T. Sherwen - Now a HEMCO extension module
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
 ! !LOCAL VARIABLES:
 !
-    INTEGER                :: I, J
-    REAL*8                 :: EMIS_HOI
-    REAL*8                 :: EMIS_I2, IODIDE, O3_CONC
-    REAL*8                 :: SST
-    REAL*8                 :: A_M2
-    REAL*8                 :: W10M
-    REAL(hp), TARGET       :: FLUXHOI (HcoState%NX,HcoState%NY)
-    REAL(hp), TARGET       :: FLUXI2 (HcoState%NX,HcoState%NY)
-    TYPE(MyInst), POINTER  :: Inst
+    INTEGER               :: I, J
+    REAL*8                :: EMIS_HOI
+    REAL*8                :: EMIS_I2, IODIDE, O3_CONC
+    REAL*8                :: SST
+    REAL*8                :: A_M2
+    REAL*8                :: W10M
+    REAL(hp),     TARGET  :: FLUXHOI(HcoState%NX,HcoState%NY)
+    REAL(hp),     TARGET  :: FLUXI2(HcoState%NX,HcoState%NY)
+    TYPE(MyInst), POINTER :: Inst
 
     ! Error handling
-    LOGICAL                :: ERR
-    CHARACTER(LEN=255)     :: MSG
+    LOGICAL               :: ERR
+    CHARACTER(LEN=255)    :: MSG, LOC
 
     !=================================================================
     ! HCOX_Iodine_Run begins here!
     !=================================================================
+    LOC = 'HCOX_Iodine_Run (HCOX_IODINE_MOD.F90)'
 
     ! Return if extension disabled
     IF ( ExtState%Inorg_Iodine <= 0 ) RETURN
 
     ! Enter
-    CALL HCO_ENTER ( HcoState%Config%Err,   &
-                     'HCOX_Iodine_Run (hcox_iodine_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER ( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Exit status
     ERR = .FALSE.
@@ -153,122 +155,130 @@ CONTAINS
     CALL InstGet ( ExtState%Inorg_Iodine, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        WRITE(MSG,*) 'Cannot find iodine instance Nr. ', ExtState%Inorg_Iodine
-       CALL HCO_ERROR(HcoState%Config%Err,MSG,RC)
+       CALL HCO_ERROR(MSG,RC)
        RETURN
     ENDIF
 
     ! Initialize flux arrays/variables
     FLUXHOI  = 0.0_hp
     FLUXI2   = 0.0_hp
-    EMIS_HOI = 0.0_hp
-    EMIS_I2  = 0.0_hp
 
-    ! Loop over surface boxes
+    !------------------------------------------------------------------------
+    ! Compute emissions
+    !------------------------------------------------------------------------
+    !$OMP PARALLEL DO                                                        &
+    !$OMP DEFAULT( SHARED                                                   )&
+    !$OMP PRIVATE( I,      J,       A_M2,    W10M,     SST                  )&
+    !$OMP PRIVATE( IODIDE, O3_CONC, EMIS_I2, EMIS_HOI                       )&
+    !$OMP COLLAPSE( 2                                                       )&
+    !$OMP SCHEDULE( DYNAMIC, 4                                              )
     DO J = 1, HcoState%NY
     DO I = 1, HcoState%NX
 
-       ! Advance to next grid box if box is not over water
-       ! further check needed for ocean, but not available
-       ! ( as parameterisation of iodide based on ocean data)
-       IF ( HCO_LANDTYPE( ExtState%WLI%Arr%Val(I,J), &
-                          ExtState%ALBD%Arr%Val(I,J) ) /= 0 ) CYCLE
+       ! Zero private variables for safety's sake
+       A_M2     = 0.0d0
+       EMIS_HOI = 0.0d0
+       EMIS_I2  = 0.0d0
+       IODIDE   = 0.0d0
+       O3_CONC  = 0.0d0
+       SST      = 0.0d0
+       W10M     = 0.0d0
+
+       ! Advance to next grid box if box is not over ocean
+       IF ( HCO_LANDTYPE( ExtState%FRLAND%Arr%Val(I,J),   &
+                          ExtState%FRLANDIC%Arr%Val(I,J), &
+                          ExtState%FROCEAN%Arr%Val(I,J),  &
+                          ExtState%FRSEAICE%Arr%Val(I,J), &
+                          ExtState%FRLAKE%Arr%Val(I,J) ) /= 0 ) CYCLE
 
        ! Grid box surface area on simulation grid [m2]
        A_M2 = HcoState%Grid%AREA_M2%Val( I, J )
 
        ! Wind speed at 10 m altitude [m/s]
-       W10M = SQRT( ExtState%U10M%Arr%Val(I,J)**2 &
-                  + ExtState%V10M%Arr%Val(I,J)**2 )
+       W10M = SQRT( ExtState%U10M%Arr%Val(I,J)**2                            &
+                  + ExtState%V10M%Arr%Val(I,J)**2                           )
 
        ! limit W10M to a minimium of 5 m/s to avoid overestimation of fluxes
        ! from CARPENTER et al. (2013) (per. comm.)
-       IF ( W10M .LE. 5d0  ) THEN
-           W10M   =  5d0
-       ENDIF
+       IF ( W10M .LE. 5.0d0  ) W10M = 5.0d0
 
-       ! Sea surface temperature in Celcius
-!       SST = ExtState%TSKIN%Arr%Val(I,J) - 273.15d0
+!%%% Comment out unused code (bmy, 09 Mar 2022)
+!%%%!       ! Sea surface temperature in Celcius
+!%%%!       SST = ExtState%TSKIN%Arr%Val(I,J) - 273.15d0
+
        ! Sea surface temperature in Kelvin
        SST = ExtState%TSKIN%Arr%Val(I,J)
 
-#if defined( MODEL_GEOS )
-       ! Empirical SST scaling factor (jaegle 5/11/11)
-!       SCALE = 0.329d0 + 0.0904d0*SST - &
-!               0.00717d0*SST**2d0 + 0.000207d0*SST**3d0
-#endif
+!%%%% Comment out unused code (bmy, 09 Mar 2022)
+!%%%#if defined( MODEL_GEOS )
+!%%%!       ! Empirical SST scaling factor (jaegle 5/11/11)
+!%%%!       SCALE = 0.329d0 + 0.0904d0*SST - &
+!%%%!               0.00717d0*SST**2d0 + 0.000207d0*SST**3d0
+!%%%#endif
+!%%%!
+!%%%!       ! SST dependence of iodide - Chance et al. 2014
+!%%%!       IODIDE = ( (0.225d0 * ( (SST)**2d0) )  + 19d0 )  / 1d9
 
-!       ! SST dependence of iodide - Chance et al. 2014
-!       IODIDE = ( (0.225d0 * ( (SST)**2d0) )  + 19d0 )  / 1d9
-!       ! SST dependence of iodide - Macdonald et al. 2014
+       ! SST dependence of iodide - Macdonald et al. 2014
        IODIDE = 1.46d6 * EXP( (-9134d0/SST) )
 
        ! Get O3 concentration at the surface ( in mol/mol )
        ! ExtState%O3 is in units of kg/kg dry air
-       O3_CONC = ExtState%O3%Arr%Val(I,J,1)         &
-               * HcoState%Phys%AIRMW / 48.0_dp &
-               * 1.e9_dp
+       O3_CONC = ExtState%O3%Arr%Val(I,J,1)                                  &
+               * HcoState%Phys%AIRMW / 48.0_dp                               &
+               * 1.0e9_dp
 
-#if defined( MODEL_GEOS )
-       ! Reset to using original Gong (2003) emissions (jaegle 6/30/11)
-       !SCALE = 1.0d0
+!%%% Comment out unused code (bmy, 09 Mar 2022)
+!%%%#if defined( MODEL_GEOS )
+!%%%       ! Reset to using original Gong (2003) emissions (jaegle 6/30/11)
+!%%%       !SCALE = 1.0d0
+!%%%
+!%%%       ! Eventually apply wind scaling factor.
+!%%%!       SCALE = SCALE * WindScale
+!%%%#endif
 
-       ! Eventually apply wind scaling factor.
-!       SCALE = SCALE * WindScale
-#endif
-
+       !---------------------------------------------------------------------
        ! If I2 & emitting, use parameterisation from
        ! Carpenter et al (2013) to give emissions in nmol m-2 d-1.
        ! Then convert this to kg/m2/s
+       !---------------------------------------------------------------------
        IF ( Inst%CalcI2 ) THEN
-           EMIS_I2 = ( O3_CONC * (IODIDE**1.3d0) * &
-               ( ( 1.74d9 - ( 6.54d8*LOG( W10M ) )   ) )/ &
+           EMIS_I2 = ( O3_CONC * (IODIDE**1.3d0) *                           &
+               ( ( 1.74d9 - ( 6.54d8*LOG( W10M ) )   ) )/                    &
                      24d0/60d0/60d0/1d9*MWT_I2 )
 
           ! If parametsation results in negative ( W10 too high )
           ! flux set to zero
-          IF ( EMIS_I2 .LT. 0d0 ) THEN
-             EMIS_I2 = 0d0
-          ENDIF
+          IF ( EMIS_I2 .LT. 0.0d0 ) EMIS_I2 = 0.0d0
 
-       ENDIF
-!
-       IF ( Inst%CalcHOI ) THEN
-       ! If HOI & emitting, use parameterisation from
-       ! Carpenter et al (2013) to give emissions in nmol m-2 d-1.
-       ! Then convert this to kg/m2/s
-
-         EMIS_HOI =  O3_CONC * &
-            ( ( 4.15d5 * ( SQRT(IODIDE)/ W10M ) ) - &
-            ( 20.6 / W10M ) - ( 2.36d4  * SQRT(IODIDE) ) ) / &
-                      24d0/60d0/60d0/1d9*MWT_HOI
-
-         ! If parametsation results in negative ( W10 too high )
-         ! flux set to zero
-         IF ( EMIS_HOI .LT. 0d0 ) THEN
-                EMIS_HOI = 0d0
-         ENDIF
-
-       ENDIF
-
-       ! Store HOI flux in tendency array in [kg/m2/s]
-       IF ( Inst%CalcHOI ) THEN
-
-          ! kg --> kg/m2/s
-          FLUXHOI(I,J) = EMIS_HOI
-
-
-       ENDIF
-
-       ! store I2 flux in tendency array in [kg/m2/s]
-       IF ( Inst%CalcI2 ) THEN
-
-          ! kg --> kg/m2/s
+          ! store I2 flux in tendency array in [kg/m2/s]
           FLUXI2(I,J) = EMIS_I2
 
        ENDIF
 
+       !---------------------------------------------------------------------
+       ! If HOI & emitting, use parameterisation from
+       ! Carpenter et al (2013) to give emissions in nmol m-2 d-1.
+       ! Then convert this to kg/m2/s
+       !---------------------------------------------------------------------
+       IF ( Inst%CalcHOI ) THEN
+
+          EMIS_HOI =  O3_CONC *                                              &
+             ( ( 4.15d5 * ( SQRT(IODIDE)/ W10M ) ) -                         &
+             ( 20.6 / W10M ) - ( 2.36d4  * SQRT(IODIDE) ) ) /                &
+                      24d0/60d0/60d0/1d9*MWT_HOI
+
+          ! If parametsation results in negative ( W10 too high )
+          ! flux set to zero
+          IF ( EMIS_HOI .LT. 0.0d0 ) EMIS_HOI = 0.0d0
+
+          ! Store HOI flux in tendency array in [kg/m2/s]
+          FLUXHOI(I,J) = EMIS_HOI
+       ENDIF
+
     ENDDO !I
     ENDDO !J
+    !$OMP END PARALLEL DO
 
     ! Check exit status
     IF ( ERR ) THEN
@@ -316,7 +326,7 @@ CONTAINS
 
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -349,10 +359,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  15 Mar 2013 - T. Sherwen - Initial implementation (v9-3-01)
-!  15 Jul 2015 - T. Sherwen - Now a HEMCO extension module adapted from
-!                             hcox_seasalt_mod
-!  11 Oct 2017 - R. Yantosca - Fixed typo in comment character (# instead of !)
-!  27 Nov 2017 - C. Keller   - Now output messages to HEMCO logfile
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -360,7 +367,7 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     INTEGER                        :: ExtNr, N, R, AS
-    CHARACTER(LEN=255)             :: MSG
+    CHARACTER(LEN=255)             :: MSG, LOC
     INTEGER                        :: nSpc, minLen
     LOGICAL                        :: FOUND
     INTEGER, ALLOCATABLE           :: HcoIDs(:)
@@ -370,15 +377,18 @@ CONTAINS
     !=================================================================
     ! HCOX_Iodine_Init begins here!
     !=================================================================
+    LOC = 'HCOX_Iodine_Init (HCOX_IODINE_MOD.F90)'
 
     ! Extension Nr.
     ExtNr = GetExtNr( HcoState%Config%ExtList, TRIM(ExtName) )
     IF ( ExtNr <= 0 ) RETURN
 
     ! Enter
-    CALL HCO_ENTER ( HcoState%Config%Err,   &
-                     'HCOX_iodine_Init (hcox_iodine_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER ( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Init
     Inst => NULL()
@@ -386,7 +396,7 @@ CONTAINS
     ! Create Instance
     CALL InstCreate ( ExtNr, ExtState%Inorg_Iodine, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot create InorgIodine instance', RC )
+       CALL HCO_ERROR ( 'Cannot create InorgIodine instance', RC )
        RETURN
     ENDIF
 
@@ -399,11 +409,17 @@ CONTAINS
     !       the config. file!
     CALL GetExtOpt ( HcoState%Config, Inst%ExtNr, 'Emit I2',  &
                      OptValBool=Inst%CalcI2, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     CALL GetExtOpt ( HcoState%Config, Inst%ExtNr, 'Emit HOI', &
                      OptValBool=Inst%CalcHOI, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Set minimum length and update if CalcI2/CalcHOI==True
     minLen = 0
@@ -415,7 +431,10 @@ CONTAINS
     ENDIF
     ! Get HEMCO species IDs
     CALL HCO_GetExtHcoID( HcoState, Inst%ExtNr, HcoIDs, SpcNames, nSpc, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 4', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( nSpc < minLen ) THEN
        MSG = 'Not enough iodine emission species set'
        CALL HCO_ERROR ( MSG, RC )
@@ -450,13 +469,16 @@ CONTAINS
     !=======================================================================
 
     ! Activate met fields used by this module
-    ExtState%WLI%DoUse   = .TRUE.
-    ExtState%ALBD%DoUse  = .TRUE.
-    ExtState%TSKIN%DoUse = .TRUE.
-    ExtState%U10M%DoUse  = .TRUE.
-    ExtState%V10M%DoUse  = .TRUE.
-    ExtState%O3%DoUse    = .TRUE.
-    ExtState%AIR%DoUse   = .TRUE.
+    ExtState%FRLAND%DoUse   = .TRUE.
+    ExtState%FRLANDIC%DoUse = .TRUE.
+    ExtState%FROCEAN%DoUse  = .TRUE.
+    ExtState%FRSEAICE%DoUse = .TRUE.
+    ExtState%FRLAKE%DoUse   = .TRUE.
+    ExtState%TSKIN%DoUse    = .TRUE.
+    ExtState%U10M%DoUse     = .TRUE.
+    ExtState%V10M%DoUse     = .TRUE.
+    ExtState%O3%DoUse       = .TRUE.
+    ExtState%AIR%DoUse      = .TRUE.
 
     ! Enable module
     !ExtState%Inorg_Iodine = .TRUE.
@@ -471,7 +493,7 @@ CONTAINS
 
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -491,8 +513,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  15 Mar 2013 - T. Sherwen - Initial implementation (v9-3-01)
-!  15 Jul 2015 - T. Sherwen - Now a HEMCO extension module adapted from
-!                             hcox_seasalt_final
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -509,7 +530,7 @@ CONTAINS
   END SUBROUTINE HCOX_Iodine_Final
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -531,6 +552,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -563,7 +585,7 @@ CONTAINS
   END SUBROUTINE InstGet
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -591,7 +613,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -639,7 +661,7 @@ CONTAINS
   END SUBROUTINE InstCreate
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -658,7 +680,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -687,8 +709,11 @@ CONTAINS
           AllInst => Inst%NextInst
        ENDIF
        DEALLOCATE(Inst)
-       Inst => NULL()
     ENDIF
+
+    ! Free pointers before exiting
+    PrevInst => NULL()
+    Inst     => NULL()
 
    END SUBROUTINE InstRemove
 !EOC

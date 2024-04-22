@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -47,8 +47,7 @@ MODULE HCOX_Driver_Mod
 !
 ! !REVISION HISTORY:
 !  15 Dec 2013 - C. Keller   - Initial version
-!  01 Jul 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  01 Jul 2014 - R. Yantosca - Now use F90 free-format indentation
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -80,7 +79,7 @@ MODULE HCOX_Driver_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -109,7 +108,6 @@ CONTAINS
     USE HCOX_Finn_Mod,          ONLY : HCOX_FINN_Init
     USE HCOX_GC_RnPbBe_Mod,     ONLY : HCOX_GC_RnPbBe_Init
     USE HCOX_GC_POPs_Mod,       ONLY : HCOX_GC_POPs_Init
-    USE HCOX_CH4WetLand_MOD,    ONLY : HCOX_CH4WETLAND_Init
     USE HCOX_Volcano_Mod,       ONLY : HCOX_Volcano_Init
     USE HCOX_Iodine_Mod,        ONLY : HCOX_Iodine_Init
 #if defined( TOMAS )
@@ -134,21 +132,19 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  12 Sep 2013 - C. Keller   - Initial version
-!  07 Jul 2014 - R. Yantosca - Now init GEOS-Chem Rn-Pb-Be emissions module
-!  20 Aug 2014 - M. Sulprizio- Now init GEOS-Chem POPs emissions module
-!  01 Oct 2014 - R. Yantosca - Now init TOMAS sea salt emissions module
-!  01 Nov 2016 - M. Sulprizio- Rename TOMAS sea salt to TOMAS Jeagle (J. Kodros)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
 ! !LOCAL VARIABLES:
 !
-    CHARACTER(LEN=255) :: ErrMsg, ThisLoc
+    CHARACTER(LEN=255) :: ErrMsg, ThisLoc, LOC
 
     !=======================================================================
     ! HCOX_INIT begins here!
     !=======================================================================
+    LOC = 'HCOX_INIT (HCOX_DRIVER_MOD.F90)'
 
     ! Initialize
     RC      = HCO_SUCCESS
@@ -157,8 +153,11 @@ CONTAINS
        ' -> at HCOX_INIT (in module HEMCO/Extensions/hcox_driver_mod.F90'
 
     ! Error handling
-    CALL HCO_ENTER(HcoState%Config%Err,'HCOX_INIT (hcox_driver_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER(HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     !=======================================================================
     ! Initialize extensions
@@ -166,7 +165,7 @@ CONTAINS
     CALL ExtStateInit( ExtState, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        ErrMsg = 'Error encountered in "ExtState_Init"!'
-       CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+       CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
        RETURN
     ENDIF
 
@@ -184,7 +183,7 @@ CONTAINS
     CALL HCOX_PARANOX_INIT( HcoState, 'ParaNOx', ExtState, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        ErrMsg = 'Error encountered in "HCOX_ParaNOx_Init"!'
-       CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+       CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
        RETURN
     ENDIF
 
@@ -194,7 +193,7 @@ CONTAINS
     CALL HCOX_LightNox_Init( HcoState, 'LightNOx', ExtState, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        ErrMsg = 'Error encountered in "HCOX_LightNox_Init"!'
-       CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+       CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
        RETURN
     ENDIF
 
@@ -204,7 +203,7 @@ CONTAINS
     CALL HCOX_Volcano_Init( HcoState, 'Volcano', ExtState,  RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        ErrMsg = 'Error encountered in "HCOX_Volcano_Init"!'
-       CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+       CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
        RETURN
     ENDIF
 
@@ -220,7 +219,7 @@ CONTAINS
        CALL HCOX_Custom_Init( HcoState, 'Custom', ExtState, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           ErrMsg = 'Error encountered in "HCOX_Custom_Init"!'
-          CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+          CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 
@@ -230,7 +229,7 @@ CONTAINS
        CALL HCOX_SeaFlux_Init( HcoState, 'SeaFlux', ExtState, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           ErrMsg = 'Error encountered in "HCOX_SeaFlux_Init"!'
-          CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+          CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 
@@ -240,7 +239,7 @@ CONTAINS
        CALL HCOX_SoilNox_Init( HcoState, 'SoilNOx', ExtState, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           ErrMsg = 'Error encountered in "HCOX_SoilNox_Init"!'
-          CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+          CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 
@@ -250,7 +249,7 @@ CONTAINS
        CALL HCOX_DustDead_Init( HcoState, 'DustDead', ExtState,  RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           ErrMsg = 'Error encountered in "HCOX_DustDead_Init"!'
-          CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+          CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 #if defined( TOMAS )
@@ -258,7 +257,7 @@ CONTAINS
                                       ExtState, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           ErrMsg = 'Error encountered in "HCOX_TOMAS_DustDead_Init"!'
-          CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+          CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 #endif
@@ -269,7 +268,7 @@ CONTAINS
        CALL HCOX_DustGinoux_Init( HcoState, 'DustGinoux', ExtState, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           ErrMsg = 'Error encountered in "HCOX_DustGinoux_Init"!'
-          CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+          CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 
@@ -279,7 +278,7 @@ CONTAINS
        CALL HCOX_SeaSalt_Init( HcoState, 'SeaSalt', ExtState, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           ErrMsg = 'Error encountered in "HCOX_SeaSalt_Init"!'
-          CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+          CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 
@@ -289,7 +288,7 @@ CONTAINS
        CALL HCOX_Megan_Init( HcoState, 'MEGAN', ExtState, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           ErrMsg = 'Error encountered in "HCOX_Megan_Init"!'
-          CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+          CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 
@@ -299,7 +298,7 @@ CONTAINS
        CALL HCOX_GFED_Init( HcoState, 'GFED', ExtState, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           ErrMsg = 'Error encountered in "HCOX_GFED_Init"!'
-          CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+          CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 
@@ -309,7 +308,7 @@ CONTAINS
        CALL HCOX_FINN_Init( HcoState, 'FINN', ExtState, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           ErrMsg = 'Error encountered in "HCOX_FINN_Init"!'
-          CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+          CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 
@@ -319,7 +318,7 @@ CONTAINS
        CALL HCOX_GC_RnPbBe_Init( HcoState, 'GC_Rn-Pb-Be', ExtState,  RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           ErrMsg = 'Error encountered in "HCOX_GC_RnPbBe_Init"!'
-          CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+          CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 
@@ -329,17 +328,7 @@ CONTAINS
        CALL HCOX_GC_POPs_Init( HcoState, 'GC_POPs', ExtState,  RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           ErrMsg = 'Error encountered in "HCOX_GC_POPs_Init"!'
-          CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
-          RETURN
-       ENDIF
-
-       !--------------------------------------------------------------------
-       ! CH4 wetland emissions
-       !--------------------------------------------------------------------
-       CALL HCOX_CH4Wetland_Init( HcoState, 'CH4_WETLANDS', ExtState,  RC )
-       IF ( RC /= HCO_SUCCESS ) THEN
-          ErrMsg = 'Error encountered in "HCOX_CH4Wetland_Init"!'
-          CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+          CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 
@@ -349,7 +338,7 @@ CONTAINS
        CALL HCOX_Iodine_Init( HcoState, 'Inorg_Iodine', ExtState,  RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           ErrMsg = 'Error encountered in "HCOX_Iodine_Init"!'
-          CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+          CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 
@@ -360,7 +349,7 @@ CONTAINS
        CALL HCOX_TOMAS_Jeagle_Init( HcoState, 'TOMAS_Jeagle', ExtState,  RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           ErrMsg = 'Error encountered in "HCOX_TOMAS_Jeagle_Init"!'
-          CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+          CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 #endif
@@ -377,7 +366,7 @@ CONTAINS
     ! Cannot have both DustDead and DustGinoux turned on!
     IF ( ExtState%DustDead > 0 .AND. ExtState%DustGinoux > 0 ) THEN
        ErrMsg = 'Ginoux and DEAD dust emissions switched on!'
-       CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+       CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
        RETURN
     ENDIF
 
@@ -388,7 +377,7 @@ CONTAINS
        CALL HCOX_DiagnDefine( HcoState, ExtState, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           ErrMsg = 'Error encountered in "ExtState_Init"!'
-          CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+          CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
     ENDIF
@@ -401,7 +390,7 @@ CONTAINS
   END SUBROUTINE HCOX_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -430,10 +419,9 @@ CONTAINS
     USE HCOX_SeaSalt_Mod,       ONLY : HCOX_SeaSalt_Run
     USE HCOX_Megan_Mod,         ONLY : HCOX_Megan_Run
     USE HCOX_GFED_Mod,          ONLY : HCOX_GFED_Run
-    USE HcoX_FINN_Mod,          ONLY : HcoX_FINN_Run
+    USE HCOX_FINN_Mod,          ONLY : HCOX_FINN_Run
     USE HCOX_GC_RnPbBe_Mod,     ONLY : HCOX_GC_RnPbBe_Run
     USE HCOX_GC_POPs_Mod,       ONLY : HCOX_GC_POPs_Run
-    USE HCOX_CH4WetLand_mod,    ONLY : HCOX_CH4Wetland_Run
     USE HCOX_Volcano_Mod,       ONLY : HCOX_Volcano_Run
     USE HCOX_Iodine_Mod,        ONLY : HCOX_Iodine_Run
 #if defined( TOMAS )
@@ -455,17 +443,14 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  15 Dec 2013 - C. Keller   - Initial version
-!  07 Jul 2014 - R. Yantosca - Now Run GEOS-Chem Rn-Pb-Be emissions module
-!  20 Aug 2014 - M. Sulprizio- Now run GEOS-Chem POPs emissions module
-!  01 Oct 2014 - R. Yantosca - Now run TOMAS sea salt emissions module
-!  01 Nov 2016 - M. Sulprizio- Rename TOMAS sea salt to TOMAS Jeagle (J. Kodros)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
 ! !LOCAL VARIABLES:
 !
-    CHARACTER(LEN=255) :: ErrMsg, ThisLoc
+    CHARACTER(LEN=255) :: ErrMsg, ThisLoc, LOC
     LOGICAL            :: IsEmisTime
 
     !=======================================================================
@@ -473,17 +458,24 @@ CONTAINS
     !=======================================================================
 
     ! Initialize
+    LOC     = 'HCOX_RUN (HCOX_DRIVER_MOD.F90)'
     RC      = HCO_SUCCESS
     ErrMsg  = ''
     ThisLoc = ' -> at HCOX_RUN (in module HEMCO/Extensions/hcox_driver_mod.F90'
 
     ! For error handling
-    CALL HCO_ENTER( HcoState%Config%Err,'HCOX_RUN (hcox_driver_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Is it time for emissions?
     CALL HcoClock_Get ( HcoState%Clock, IsEmisTime=IsEmisTime, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Can leave here if it's not time for emissions
     IF ( .NOT. IsEmisTime ) THEN
@@ -505,7 +497,7 @@ CONTAINS
        CALL HCOX_Volcano_Run( ExtState, HcoState, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           ErrMsg = 'Error encountered in "HCOX_Volcano_Run"!'
-          CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+          CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
     ENDIF
@@ -526,7 +518,7 @@ CONTAINS
           CALL HCOX_Custom_Run( ExtState, HcoState, RC)
           IF ( RC /= HCO_SUCCESS ) THEN
              ErrMsg = 'Error encountered in "HCOX_Custom_Run"!'
-             CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+             CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
              RETURN
           ENDIF
        ENDIF
@@ -538,7 +530,7 @@ CONTAINS
           CALL HCOX_SeaFlux_Run( ExtState, HcoState, RC)
           IF ( RC /= HCO_SUCCESS ) THEN
              ErrMsg = 'Error encountered in "HCOX_SeaFlux_Run"!'
-             CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+             CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
              RETURN
           ENDIF
        ENDIF
@@ -550,7 +542,7 @@ CONTAINS
           CALL HCOX_ParaNox_Run( ExtState, HcoState, RC )
           IF ( RC /= HCO_SUCCESS ) THEN
              ErrMsg = 'Error encountered in "HCOX_ParaNOx_Run"!'
-             CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+             CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
              RETURN
           ENDIF
        ENDIF
@@ -562,7 +554,7 @@ CONTAINS
           CALL HCOX_LightNox_Run( ExtState, HcoState, RC )
           IF ( RC /= HCO_SUCCESS ) THEN
              ErrMsg = 'Error encountered in "HCOX_LightNox_Run"!'
-             CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+             CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
              RETURN
           ENDIF
        ENDIF
@@ -574,7 +566,7 @@ CONTAINS
           CALL HCOX_SoilNox_Run( ExtState, HcoState, RC )
           IF ( RC /= HCO_SUCCESS ) THEN
              ErrMsg = 'Error encountered in "HCOX_SoilNOx_Run"!'
-             CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+             CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
              RETURN
           ENDIF
        ENDIF
@@ -586,7 +578,7 @@ CONTAINS
           CALL HCOX_DustDead_Run( ExtState, HcoState, RC )
           IF ( RC /= HCO_SUCCESS ) THEN
              ErrMsg = 'Error encountered in "HCOX_DustDead_Run"!'
-             CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+             CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
              RETURN
           ENDIF
        ENDIF
@@ -597,7 +589,7 @@ CONTAINS
           CALL HCOX_TOMAS_DustDead_Run( ExtState, HcoState, RC )
           IF ( RC /= HCO_SUCCESS ) THEN
              ErrMsg = 'Error encountered in "HCOX_TOMAS_DustDead_Run"!'
-             CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+             CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
              RETURN
           ENDIF
        ENDIF
@@ -610,7 +602,7 @@ CONTAINS
           CALL HCOX_DustGinoux_Run( ExtState, HcoState, RC )
           IF ( RC /= HCO_SUCCESS ) THEN
              ErrMsg = 'Error encountered in "HCOX_DustGinoux_Run"!'
-             CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+             CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
              RETURN
           ENDIF
        ENDIF
@@ -622,7 +614,7 @@ CONTAINS
           CALL HCOX_SeaSalt_Run( ExtState, HcoState, RC )
           IF ( RC /= HCO_SUCCESS ) THEN
              ErrMsg = 'Error encountered in "HCOX_SeaSalt_Run"!'
-             CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+             CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
              RETURN
           ENDIF
        ENDIF
@@ -634,7 +626,7 @@ CONTAINS
           CALL HCOX_Megan_Run( ExtState, HcoState, RC )
           IF ( RC /= HCO_SUCCESS ) THEN
              ErrMsg = 'Error encountered in "HCOX__Run"!'
-             CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+             CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
              RETURN
           ENDIF
        ENDIF
@@ -646,7 +638,7 @@ CONTAINS
           CALL HCOX_GFED_Run( ExtState, HcoState, RC )
           IF ( RC /= HCO_SUCCESS ) THEN
              ErrMsg = 'Error encountered in "HCOX_GFED_Run"!'
-             CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+             CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
              RETURN
           ENDIF
        ENDIF
@@ -655,10 +647,10 @@ CONTAINS
        ! FINN biomass burning emissions
        ! -------------------------------------------------------------------
        IF ( ExtState%FINN > 0 ) THEN
-          CALL HcoX_FINN_Run( ExtState, HcoState, RC )
+          CALL HCOX_FINN_Run( ExtState, HcoState, RC )
           IF ( RC /= HCO_SUCCESS ) THEN
              ErrMsg = 'Error encountered in "HCOX_FINN_Run"!'
-             CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+             CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
              RETURN
           ENDIF
        ENDIF
@@ -670,7 +662,7 @@ CONTAINS
           CALL HCOX_GC_RnPbBe_Run( ExtState, HcoState, RC )
           IF ( RC /= HCO_SUCCESS ) THEN
              ErrMsg = 'Error encountered in "HCOX_GC_RnPbBe_Run"!'
-             CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+             CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
              RETURN
           ENDIF
        ENDIF
@@ -682,19 +674,7 @@ CONTAINS
           CALL HCOX_GC_POPs_Run( ExtState, HcoState, RC )
           IF ( RC /= HCO_SUCCESS ) THEN
              ErrMsg = 'Error encountered in "HCOX_GC_POPs_Run"!'
-             CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
-             RETURN
-          ENDIF
-       ENDIF
-
-       !--------------------------------------------------------------------
-       ! CH4 wetland emissions
-       !--------------------------------------------------------------------
-       IF ( ExtState%Wetland_CH4 > 0 ) THEN
-          CALL HCOX_CH4Wetland_Run( ExtState, HcoState, RC )
-          IF ( RC /= HCO_SUCCESS ) THEN
-             ErrMsg = 'Error encountered in "HCOX_CH4Wetland_Run"!'
-             CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+             CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
              RETURN
           ENDIF
        ENDIF
@@ -707,7 +687,7 @@ CONTAINS
           CALL HCOX_TOMAS_Jeagle_Run( ExtState, HcoState, RC )
           IF ( RC /= HCO_SUCCESS ) THEN
              ErrMsg = 'Error encountered in "HCOX_TOMAS_Jeagle_Run"!'
-             CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+             CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
              RETURN
           ENDIF
        ENDIF
@@ -720,7 +700,7 @@ CONTAINS
           CALL HCOX_Iodine_Run( ExtState, HcoState, RC )
           IF ( RC /= HCO_SUCCESS ) THEN
              ErrMsg = 'Error encountered in "HCOX_Iodine_Run"!'
-             CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+             CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
              RETURN
           ENDIF
        ENDIF
@@ -742,7 +722,7 @@ CONTAINS
        CALL HCOX_DiagnFill( HcoState, ExtState, RC )
        IF ( RC /= HCO_SUCCESS ) THEN
           ErrMsg = 'Error encountered in "HCOX_DiagnFill_Run"!'
-          CALL HCO_ERROR( HcoState%Config%Err, ErrMsg, RC, ThisLoc )
+          CALL HCO_ERROR( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 
@@ -756,7 +736,7 @@ CONTAINS
   END SUBROUTINE HCOX_Run
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -782,10 +762,9 @@ CONTAINS
     USE HCOX_SeaSalt_Mod,       ONLY : HCOX_SeaSalt_Final
     USE HCOX_MEGAN_Mod,         ONLY : HCOX_MEGAN_Final
     USE HCOX_GFED_Mod,          ONLY : HCOX_GFED_Final
-    USE HcoX_FINN_Mod,          ONLY : HcoX_FINN_Final
+    USE HCOX_FINN_Mod,          ONLY : HCOX_FINN_Final
     USE HCOX_GC_RnPbBe_Mod,     ONLY : HCOX_GC_RnPbBe_Final
     USE HCOX_GC_POPs_Mod,       ONLY : HCOX_GC_POPs_Final
-    USE HCOX_CH4WetLand_Mod,    ONLY : HCOX_CH4Wetland_Final
     USE HCOX_Volcano_Mod,       ONLY : HCOX_Volcano_Final
     USE HCOX_Iodine_Mod,        ONLY : HCOX_Iodine_Final
 #if defined( TOMAS )
@@ -801,12 +780,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  12 Sep 2013 - C. Keller   - Initial version
-!  07 Jul 2014 - R. Yantosca - Now finalize GEOS-Chem Rn-Pb-Be emissions pkg
-!  20 Aug 2014 - M. Sulprizio- Now finalize GEOS-Chen POPs emissions module
-!  01 Oct 2014 - R. Yantosca - Now finalize TOMAS sea salt emissions module
-!  09 Mar 2015 - C. Keller   - Now pass HcoState since it is needed by some
-!                              finalization calls.
-!  01 Nov 2016 - M. Sulprizio- Rename TOMAS sea salt to TOMAS Jeagle (J. Kodros)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -894,10 +868,6 @@ CONTAINS
              CALL HCOX_GC_POPs_Final( ExtState )
           ENDIF
 
-          IF ( ExtState%Wetland_CH4 > 0 ) THEN
-             CALL HCOX_CH4Wetland_Final( ExtState )
-          ENDIF
-
           IF ( ExtState%Volcano > 0 ) THEN
              CALL HCOX_Volcano_Final( ExtState )
           ENDIF
@@ -936,7 +906,7 @@ CONTAINS
   END SUBROUTINE HCOX_Final
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -958,6 +928,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Feb 2015 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !
@@ -979,38 +950,38 @@ CONTAINS
 
        ALLOCATE( DGN_LAI(I,J), STAT=AS )
        IF ( AS /= 0 ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'Diagnostics allocation error 1', RC, THISLOC=LOC )
+          CALL HCO_ERROR( 'Diagnostics allocation error 1', RC, THISLOC=LOC )
           RETURN
        ENDIF
 !       ALLOCATE( DGN_GWET(I,J), STAT=AS )
 !       IF ( AS /= 0 ) THEN
-!          CALL HCO_ERROR( HcoState%Config%Err, 'Diagnostics allocation error 1', RC, THISLOC=LOC )
+!          CALL HCO_ERROR( 'Diagnostics allocation error 1', RC, THISLOC=LOC )
 !          RETURN
 !       ENDIF
 !       ALLOCATE( DGN_T2M(I,J), DGN_V10M(I,J), DGN_U10M(I,J), STAT=AS )
 !       IF ( AS /= 0 ) THEN
-!          CALL HCO_ERROR( HcoState%Config%Err, 'Diagnostics allocation error 2', RC, THISLOC=LOC )
+!          CALL HCO_ERROR( 'Diagnostics allocation error 2', RC, THISLOC=LOC )
 !          RETURN
 !       ENDIF
 !       ALLOCATE( DGN_PARDR(I,J), DGN_PARDF(I,J), DGN_SZAFACT(I,J), STAT=AS )
 !       IF ( AS /= 0 ) THEN
-!          CALL HCO_ERROR( HcoState%Config%Err, 'Diagnostics allocation error 3', RC, THISLOC=LOC )
+!          CALL HCO_ERROR( 'Diagnostics allocation error 3', RC, THISLOC=LOC )
 !          RETURN
 !       ENDIF
 !       ALLOCATE( DGN_CLDFRC(I,J), DGN_ALBD(I,J), DGN_WLI(I,J), STAT=AS )
 !       IF ( AS /= 0 ) THEN
-!          CALL HCO_ERROR( HcoState%Config%Err, 'Diagnostics allocation error 4', RC, THISLOC=LOC )
+!          CALL HCO_ERROR( 'Diagnostics allocation error 4', RC, THISLOC=LOC )
 !          RETURN
 !       ENDIF
 !       ALLOCATE( DGN_TROPP(I,J), STAT=AS )
 !       IF ( AS /= 0 ) THEN
-!          CALL HCO_ERROR( HcoState%Config%Err, 'Diagnostics allocation error 5', RC, THISLOC=LOC )
+!          CALL HCO_ERROR( 'Diagnostics allocation error 5', RC, THISLOC=LOC )
 !          RETURN
 !       ENDIF
 
        ALLOCATE( DGN_SUNCOS(I,J), DGN_DRYTOTN(I,J), DGN_WETTOTN(I,J), STAT=AS )
        IF ( AS /= 0 ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, 'Diagnostics allocation error 6', RC, THISLOC=LOC )
+          CALL HCO_ERROR( 'Diagnostics allocation error 6', RC, THISLOC=LOC )
           RETURN
        ENDIF
 
@@ -1037,7 +1008,10 @@ CONTAINS
 !       IF ( RC /= HCO_SUCCESS ) RETURN
 !
        CALL DgnDefine ( HcoState, 'HCO_LAI', DGN_LAI, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
 !       CALL DgnDefine ( HcoState, 'HCO_U10M', DGN_U10M, RC )
 !       IF ( RC /= HCO_SUCCESS ) RETURN
@@ -1067,13 +1041,22 @@ CONTAINS
 !       IF ( RC /= HCO_SUCCESS ) RETURN
 
        CALL DgnDefine ( HcoState, 'HCO_SUNCOS', DGN_SUNCOS, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 4', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        CALL DgnDefine ( HcoState, 'DRY_TOTN', DGN_DRYTOTN, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 5', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        CALL DgnDefine ( HcoState, 'WET_TOTN', DGN_WETTOTN, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 6', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
     ENDIF
 
@@ -1083,7 +1066,7 @@ CONTAINS
   END SUBROUTINE HCOX_DiagnDefine
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1109,8 +1092,16 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Feb 2015 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
+!BOC
+!
+! !LOCAL VARIABLES:
+!
+    CHARACTER(LEN=255)  :: LOC
+
+    LOC = 'DgnDefine (HCOX_DRIVER_MOD.F90)'
 
     CALL Diagn_Create ( HcoState   = HcoState,          &
                         cName      = TRIM(DgnName),     &
@@ -1124,7 +1115,10 @@ CONTAINS
                         Trgt2D     = Trgt2D,            &
                         COL = HcoState%Diagn%HcoDiagnIDDefault, &
                         RC         = RC                  )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 7', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Return w/ success
     RC = HCO_SUCCESS
@@ -1132,7 +1126,7 @@ CONTAINS
   END SUBROUTINE DgnDefine
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1153,6 +1147,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Feb 2015 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 

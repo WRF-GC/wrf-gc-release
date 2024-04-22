@@ -289,9 +289,9 @@
 #else
       Integer, Parameter   :: IonicKind=fp
 #endif
-      Real(Kind=IonicKind) ::  IONIC_MASTER
+      Real(Kind=IonicKind) ::  IONIC_MAIN
       !----------------------------------------------------------------------
-!$OMP THREADPRIVATE( IONIC_MASTER )
+!$OMP THREADPRIVATE( IONIC_MAIN )
 
 !  INPUT:
 !  1. [WFTYPI] 
@@ -10126,7 +10126,7 @@
 !
 ! *** ISORROPIA CODE II
 ! *** SUBROUTINE ISORROPIA
-! *** THIS SUBROUTINE IS THE MASTER ROUTINE FOR THE ISORROPIA
+! *** THIS SUBROUTINE IS THE MAIN ROUTINE FOR THE ISORROPIA
 !     THERMODYNAMIC EQUILIBRIUM AEROSOL MODEL (VERSION 1.1 and above)
 !
 ! ======================== ARGUMENTS / USAGE ===========================
@@ -10410,7 +10410,7 @@
       OTHER(2) = SULRAT            ! Other stuff
       OTHER(3) = SULRATW
       OTHER(4) = SODRAT
-      OTHER(5) = IONIC_MASTER
+      OTHER(5) = IONIC_MAIN
       OTHER(6) = ICLACT
       OTHER(7) = SO4RAT
       OTHER(8) = CRNARAT
@@ -14383,7 +14383,7 @@
 !
 ! *** CALCULATE IONIC ACTIVITY OF SOLUTION *****************************
 !
-      IONIC_MASTER = 0.0
+      IONIC_MAIN = 0.0
       IONIC=0.0
       DO 30 I=1,NIONS
          IONIC=IONIC + MOLAL(I)*Z(I)*Z(I)
@@ -14421,7 +14421,9 @@
       F1(5)=0.0
       F1(6)=0.0
 !
-      DO 110 I=1,3
+      ! Rewrite so that nested DO loops don't end on the same CONTINUE,
+      ! which may cause an warning/error on newer compilers (bmy, 1/13/21)
+      DO 109 I=1,3
          ZPL = Z(I)
          MPL = MOLAL(I)/WATER
          DO 110 J=1,4
@@ -14431,9 +14433,12 @@
             YJI   = CH*MOLAL(J+3)/WATER
             F1(I) = F1(I) + SNGL(YJI*(G0(I,J) + ZPL*ZMI*H))
             F2A(J) = F2A(J) + SNGL(XIJ*(G0(I,J) + ZPL*ZMI*H))
-110   CONTINUE
+ 110     CONTINUE
+ 109  CONTINUE
 !
-      DO 330 I=4,6
+      ! Rewrite so that nested DO loops don't end on the same CONTINUE,
+      ! which may cause an warning/error on newer compilers (bmy, 1/13/21)
+      DO 329 I=4,6
          ZPL = Z(I+4)
          MPL = MOLAL(I+4)/WATER
          DO 330 J=1,4
@@ -14448,8 +14453,8 @@
             YJI   = CH*MOLAL(J+3)/WATER
             F1(I) = F1(I) + SNGL(YJI*(G0(I,J) + ZPL*ZMI*H))
             F2B(J) = F2B(J) + SNGL(XIJ*(G0(I,J) + ZPL*ZMI*H))
-330   CONTINUE
-
+ 330     CONTINUE
+ 329  CONTINUE
 !
 ! *** LOG10 OF ACTIVITY COEFFICIENTS ***********************************
 !
@@ -14511,7 +14516,7 @@
       ICLACT = ICLACT + 1                ! Increment ACTIVITY call counter
 
       ! Store the result of IONIC
-      IONIC_MASTER = IONIC
+      IONIC_MAIN = IONIC
 !
 ! *** END OF SUBROUTINE ACTIVITY ****************************************
 !
@@ -14573,7 +14578,7 @@
 !
 ! *** CALCULATE IONIC ACTIVITY OF SOLUTION *****************************
 !
-      Ionic_Master = 0.0
+      Ionic_Main = 0.0
       IONIC=0.0
       DO 30 I=1,7
          IONIC=IONIC + MOLAL(I)*Z(I)*Z(I)
@@ -14608,7 +14613,9 @@
 100   CONTINUE
       F2(4)=0.0
 !
-      DO 110 I=1,3
+      ! Rewrite so that nested DO loops don't end on the same CONTINUE,
+      ! which may cause an warning/error on newer compilers (bmy, 1/13/21)
+      DO 109 I=1,3
          ZPL = Z(I)
          MPL = MOLAL(I)/WATER
          DO 110 J=1,4
@@ -14618,7 +14625,8 @@
             YJI   = CH*MOLAL(J+3)/WATER
             F1(I) = F1(I) + SNGL(YJI*(G0(I,J) + ZPL*ZMI*H))
             F2(J) = F2(J) + SNGL(XIJ*(G0(I,J) + ZPL*ZMI*H))
-110   CONTINUE
+ 110     CONTINUE
+ 109  CONTINUE
 !
 ! *** LOG10 OF ACTIVITY COEFFICIENTS ***********************************
 !
@@ -14672,7 +14680,7 @@
       ICLACT = ICLACT + 1                ! Increment ACTIVITY call counter
 
       ! Store IONIC
-      IONIC_MASTER = IONIC
+      IONIC_MAIN = IONIC
 !
 ! *** END OF SUBROUTINE ACTIVITY ****************************************
 !
@@ -14740,7 +14748,7 @@
 !
 ! *** CALCULATE IONIC ACTIVITY OF SOLUTION *****************************
 !
-      Ionic_Master = 0.0
+      Ionic_Main = 0.0
       IONIC=0.0
       MOLAL(2) = ZERO
       MOLAL(4) = ZERO
@@ -14776,7 +14784,9 @@
 100   CONTINUE
       F2(4)=0.0
 !
-      DO 110 I=1,3,2
+      ! Rewrite so that nested DO loops don't end on the same CONTINUE,
+      ! which may cause an warning/error on newer compilers (bmy, 1/13/21)
+      DO 109 I=1,3,2
          ZPL = Z(I)
          MPL = MOLAL(I)/WATER
          DO 110 J=2,4
@@ -14786,7 +14796,8 @@
             YJI   = CH*MOLAL(J+3)/WATER
             F1(I) = F1(I) + SNGL(YJI*(G0(I,J) + ZPL*ZMI*H))
             F2(J) = F2(J) + SNGL(XIJ*(G0(I,J) + ZPL*ZMI*H))
-110   CONTINUE
+ 110     CONTINUE
+ 109  CONTINUE
 !
 ! *** LOG10 OF ACTIVITY COEFFICIENTS ***********************************
 !
@@ -14865,7 +14876,7 @@
       ICLACT = ICLACT + 1                ! Increment ACTIVITY call counter
 
       ! Store IONIC
-      IONIC_MASTER = IONIC
+      IONIC_MAIN = IONIC
 !
 ! *** END OF SUBROUTINE ACTIVITY ****************************************
 !
@@ -14933,7 +14944,7 @@
 !
 ! *** CALCULATE IONIC ACTIVITY OF SOLUTION *****************************
 !
-      Ionic_Master = 0.0
+      Ionic_Main = 0.0
       IONIC=0.0
       MOLAL(2) = ZERO
       MOLAL(4) = ZERO
@@ -14970,7 +14981,9 @@
 100   CONTINUE
       F2(4)=0.0
 !
-      DO 110 I=1,3,2
+      ! Rewrite so that nested DO loops don't end on the same CONTINUE,
+      ! which may cause an warning/error on newer compilers (bmy, 1/13/21)
+      DO 109 I=1,3,2
          ZPL = Z(I)
          MPL = MOLAL(I)/WATER
          DO 110 J=2,3
@@ -14980,7 +14993,8 @@
             YJI   = CH*MOLAL(J+3)/WATER
             F1(I) = F1(I) + SNGL(YJI*(G0(I,J) + ZPL*ZMI*H))
             F2(J) = F2(J) + SNGL(XIJ*(G0(I,J) + ZPL*ZMI*H))
-110   CONTINUE
+ 110     CONTINUE
+ 109  CONTINUE
 !
 ! *** LOG10 OF ACTIVITY COEFFICIENTS ***********************************
 !
@@ -15063,7 +15077,7 @@
       ICLACT = ICLACT + 1                ! Increment ACTIVITY call counter
 
       ! Store IONIC
-      IONIC_MASTER = IONIC
+      IONIC_MAIN = IONIC
 !
 ! *** END OF SUBROUTINE ACTIVITY ****************************************
 !
@@ -20617,6 +20631,7 @@
       DENO = MAX(CHI6-PSI6-PSI3, ZERO)
       PSI5 = CHI5/((A6/A5)*(DENO/PSI6) + ONE)
 !
+
 !------------------------------------------------------------------------------
 ! Prior to 1/31/18:
 ! Shaojie Song wrote:

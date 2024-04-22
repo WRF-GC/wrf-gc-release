@@ -1,6 +1,6 @@
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                  Harmonized Emissions Component (HEMCO)                     !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -29,7 +29,7 @@
 !
 !  DATA:
 !  -----
-!  The GFED3_EMFAC array contains emission factors in kg/kgDM or kgC/kgDM
+!  The GFED3_EMFAC array contains emission factors in kg/kgDM
 !  GFED3_EMFAC(N,1) = Agricultural Waste   Emission Factor for species N
 !  GFED3_EMFAC(N,1) = Deforestation        Emission Factor for species N
 !  GFED3_EMFAC(N,1) = Extratropical Forest Emission Factor for species N
@@ -46,12 +46,7 @@
 !
 ! !REVISION HISTORY:
 !  08 Aug 2014 - R. Yantosca - Initial version
-!  10 Jul 2015 - R. Yantosca - Fixed minor issues in ProTeX header
-!  16 Oct 2015 - M. Sulprizio- Added the following updates from E. Fischer:
-!                              - Added EOH and MTPA for PAN updates;
-!                              - Updated the emission factors for NMVOCs and
-!                                NOx from extratropical forests, savannas and
-!                                agricultural fires from Akagi et al. (2011,ACP)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC

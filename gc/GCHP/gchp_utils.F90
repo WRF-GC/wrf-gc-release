@@ -68,28 +68,28 @@ MODULE GCHP_Utils
              ! Test for ocean/land boxes
              IF ( State_Met%FRCLND(I,J) >= 0.5 ) THEN
                 ! Continental boundary layer: 2 ppbv MOH
-                State_Chm%Species(I,J,L,IND) = 2.000e-9_fp
+                State_Chm%Species(IND)%Conc(I,J,L) = 2.000e-9_fp
              ELSE
                 ! Marine boundary layer: 0.9 ppbv MOH
-                State_Chm%Species(I,J,L,IND) = 0.900e-9_fp
+                State_Chm%Species(IND)%Conc(I,J,L) = 0.900e-9_fp
              ENDIF
           ELSE
              ! Test for troposphere
              IF ( State_Met%InTroposphere(I,J,L) ) THEN
                 ! Free troposphere: 0.6 ppbv MOH
-                State_Chm%Species(I,J,L,IND) = 0.600e-9_fp 
+                State_Chm%Species(IND)%Conc(I,J,L) = 0.600e-9_fp
              ELSE
                 ! Strat/mesosphere:
-                State_Chm%Species(I,J,L,IND) = 1.0E-30_FP 
+                State_Chm%Species(IND)%Conc(I,J,L) = 1.0E-30_FP
              ENDIF
           ENDIF
        ELSEIF ( L > State_Grid%MaxChemLev .AND. &
                 ( .NOT. SpcInfo%Is_Advected ) ) THEN
           ! For non-advected spc at L > State_Grid%MaxChemLev, use small number
-          State_Chm%Species(I,J,L,IND) = 1.0E-30_fp
+          State_Chm%Species(IND)%Conc(I,J,L) = 1.0E-30_fp
        ELSE
           ! For all other cases, use the background value in spc db
-          State_Chm%Species(I,J,L,IND) = SpcInfo%BackgroundVV 
+          State_Chm%Species(IND)%Conc(I,J,L) = SpcInfo%BackgroundVV
        ENDIF
     ENDDO
     ENDDO

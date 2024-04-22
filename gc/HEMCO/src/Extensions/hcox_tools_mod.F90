@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -32,6 +32,7 @@ MODULE HCOX_TOOLS_MOD
 !
 ! !REVISION HISTORY:
 !  11 Jun 2015 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !-----------------------------------------------------------------------------
 !BOC
@@ -48,7 +49,7 @@ MODULE HCOX_TOOLS_MOD
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -78,6 +79,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Jun 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -85,16 +87,21 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     REAL(hp)            :: SCAL(HcoState%NX,HcoState%NY)
+    CHARACTER(LEN=255)  :: LOC
 
     !======================================================================
     ! HCOX_SCALE_sp2D begins here
     !======================================================================
+    LOC = 'HCOX_SCALE_sp2D (HCOX_TOOLS_MOD.F90)'
 
     IF ( TRIM(SCALENAME) /= TRIM(HCOX_NOSCALE) ) THEN
 
        ! Get mask field
        CALL HCO_EvalFld ( HcoState, TRIM(SCALENAME), SCAL, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        ! Set array to zero outside of mask region
        Arr = Arr * SCAL
@@ -106,7 +113,7 @@ CONTAINS
   END SUBROUTINE HCOX_SCALE_sp2D
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -136,6 +143,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Jun 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -144,16 +152,21 @@ CONTAINS
 !
     REAL(hp)            :: SCAL(HcoState%NX,HcoState%NY)
     INTEGER             :: I, NZ
+    CHARACTER(LEN=255)  :: LOC
 
     !======================================================================
     ! HCOX_SCALE_sp3D begins here
     !======================================================================
+    LOC = 'HCOX_SCALE_sp3D (HCOX_TOOLS_MOD.F90)'
 
     IF ( TRIM(SCALENAME) /= TRIM(HCOX_NOSCALE) ) THEN
 
        ! Get mask field
        CALL HCO_EvalFld ( HcoState, TRIM(SCALENAME), SCAL, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        ! Number of levels
        NZ = SIZE(Arr,3)
@@ -170,7 +183,7 @@ CONTAINS
   END SUBROUTINE HCOX_SCALE_sp3D
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -200,6 +213,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Jun 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -207,16 +221,21 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     REAL(hp)            :: SCAL(HcoState%NX,HcoState%NY)
+    CHARACTER(LEN=255)  :: LOC
 
     !======================================================================
     ! HCOX_SCALE_dp2D begins here
     !======================================================================
+    LOC = 'HCOX_SCALE_dp2D (HCOX_TOOLS_MOD.F90)'
 
     IF ( TRIM(SCALENAME) /= TRIM(HCOX_NOSCALE) ) THEN
 
        ! Get mask field
        CALL HCO_EvalFld ( HcoState, TRIM(SCALENAME), SCAL, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        ! Set array to zero outside of mask region
        Arr = Arr * SCAL
@@ -229,7 +248,7 @@ CONTAINS
   END SUBROUTINE HCOX_SCALE_dp2D
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -259,6 +278,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Jun 2013 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -267,16 +287,21 @@ CONTAINS
 !
     REAL(hp)            :: SCAL(HcoState%NX,HcoState%NY)
     INTEGER             :: I, NZ
+    CHARACTER(LEN=255)  :: LOC
 
     !======================================================================
     ! HCOX_SCALE_dp3D begins here
     !======================================================================
+    LOC = 'HCOX_SCALE_dp3D (HCOX_TOOLS_MOD.F90)'
 
     IF ( TRIM(SCALENAME) /= TRIM(HCOX_NOSCALE) ) THEN
 
        ! Get mask field
        CALL HCO_EvalFld ( HcoState, TRIM(SCALENAME), SCAL, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        ! Number of levels
        NZ = SIZE(Arr,3)

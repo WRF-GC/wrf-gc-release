@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -59,21 +59,7 @@ MODULE HCOX_DustGinoux_Mod
 !
 ! !REVISION HISTORY:
 !  08 Apr 2004 - T. D. Fairlie - Initial version
-!  (1 ) Added OpenMP parallelization (bmy, 4/8/04)
-!  (2 ) Now references DATA_DIR from "directory_mod.f" (bmy, 7/20/04)
-!  25 Aug 2010 - R. Yantosca - Added ProTeX headers
-!  01 Mar 2012 - R. Yantosca - Now use GET_AREA_M2(I,J,L) from grid_mod.F90
-!  01 Aug 2012 - R. Yantosca - Add reference to findFreeLUN from inqure_mod.F90
-!  03 Aug 2012 - R. Yantosca - Move calls to findFreeLUN out of DEVEL block
-!  09 Nov 2012 - M. Payer    - Replaced all met field arrays with State_Met
-!                              derived type object
-!  26 Feb 2013 - R. Yantosca - Now accept Input_Opt via the arg list
-!  11 Dec 2013 - C. Keller   - Now a HEMCO extension.
-!  29 Sep 2014 - R. Yantosca - Now make NBINS a variable and not a parameter
-!  29 Sep 2014 - R. Yantosca - Now use F90 free-format indentation
-!  08 Jul 2015 - M. Sulprizio- Now include dust alkalinity source (tdf 04/10/08)
-!  14 Oct 2016 - C. Keller   - Now use HCO_EvalFld instead of HCO_GetPtr.
-!  25 Jan 2019 - M. Sulprizio- Add instance wrapper
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -113,7 +99,7 @@ MODULE HCOX_DustGinoux_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -162,23 +148,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  08 Apr 2004 - T. D. Fairlie - Initial version
-!  (1 ) Added OpenMP parallelization (bmy, 4/8/04)
-!  (2 ) Now references DATA_DIR from "directory_mod.f" (bmy, 7/20/04)
-!  25 Aug 2010 - R. Yantosca - Added ProTeX headers
-!  01 Mar 2012 - R. Yantosca - Now use GET_AREA_M2(I,J,L) from grid_mod.F90
-!  01 Aug 2012 - R. Yantosca - Add reference to findFreeLUN from inqure_mod.F90
-!  03 Aug 2012 - R. Yantosca - Move calls to findFreeLUN out of DEVEL block
-!  09 Nov 2012 - M. Payer    - Replaced all met field arrays with State_Met
-!                              derived type object
-!  26 Feb 2013 - R. Yantosca - Now accept Input_Opt via the arg list
-!  11 Dec 2013 - C. Keller   - Now a HEMCO extension
-!  29 Sep 2014 - R. Yantosca - Bug fix: SRCE_CLAY should have been picked when
-!                              M=3 but was picked when M=2.  Now corrected.
-!  26 Jun 2015 - E. Lundgren - Add L. Zhang new dust size distribution scheme
-!  08 Jul 2015 - M. Sulprizio- Now include dust alkalinity source (tdf 04/10/08)
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
-!  07 Jul 2017 - R. Yantosca - Bug fix: Skip DustAlk IF block unless that
-!                              extension has been turned on in the config file
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -200,7 +170,7 @@ CONTAINS
     REAL*8            :: SRCE_P, REYNOL, ALPHA,  BETA
     REAL*8            :: GAMMA,  CW,     DTSRCE, A_M2,  G
     REAL              :: DSRC
-    CHARACTER(LEN=63) :: MSG
+    CHARACTER(LEN=63) :: MSG, LOC
 
     ! Arrays
     REAL*8            :: DUST_EMI_TOTAL(HcoState%NX, HcoState%NY)
@@ -212,20 +182,24 @@ CONTAINS
     !=======================================================================
     ! HCOX_DUSTGINOUX_RUN begins here!
     !=======================================================================
+    LOC = 'HCOX_DUSTGINOUX_RUN (HCOX_DUSTGINOUX_MOD.F90)'
 
     ! Return if extension is disabled
     IF ( ExtState%DustGinoux <= 0 ) RETURN
 
     ! Enter
-    CALL HCO_ENTER(HcoState%Config%Err,'HCOX_DustGinoux_Run (hcox_dustginoux_mod.F90)',RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER(HcoState%Config%Err, LOC, RC)
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Get instance
     Inst   => NULL()
     CALL InstGet ( ExtState%DustGinoux, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        WRITE(MSG,*) 'Cannot find DustGinoux instance Nr. ', ExtState%DustGinoux
-       CALL HCO_ERROR(HcoState%Config%Err,MSG,RC)
+       CALL HCO_ERROR(MSG,RC)
        RETURN
     ENDIF
 
@@ -251,15 +225,24 @@ CONTAINS
 
        ! Sand
        CALL HCO_EvalFld( HcoState, 'GINOUX_SAND', Inst%SRCE_SAND, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        ! Silt
        CALL HCO_EvalFld( HcoState, 'GINOUX_SILT', Inst%SRCE_SILT, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        ! Clay
        CALL HCO_EvalFld( HcoState, 'GINOUX_CLAY', Inst%SRCE_CLAY, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
     !ENDIF
 
     !=================================================================
@@ -405,7 +388,7 @@ CONTAINS
                             Inst%HcoIDs(N), RC,       ExtNr=Inst%ExtNr   )
           IF ( RC /= HCO_SUCCESS ) THEN
              WRITE(MSG,*) 'HCO_EmisAdd error: dust bin ', N
-             CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+             CALL HCO_ERROR(MSG, RC )
              RETURN
           ENDIF
 
@@ -421,7 +404,7 @@ CONTAINS
                                Inst%HcoIDsAlk(N), RC, ExtNr=Inst%ExtNrAlk)
              IF ( RC /= HCO_SUCCESS ) THEN
                 WRITE(MSG,*) 'HCO_EmisAdd error: dust alkalinity bin ', N
-                CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+                CALL HCO_ERROR(MSG, RC )
                 RETURN
              ENDIF
           ENDIF
@@ -442,7 +425,7 @@ CONTAINS
   END SUBROUTINE HcoX_DustGinoux_Run
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -473,8 +456,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Dec 2013 - C. Keller   - Now a HEMCO extension
-!  26 Sep 2014 - R. Yantosca - Updated for TOMAS
-!  29 Sep 2014 - R. Yantosca - Now initialize NBINS from HcoState%N_DUST_BINS
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -483,7 +465,7 @@ CONTAINS
 !
     ! Scalars
     INTEGER                        :: N, AS, nSpc, nSpcAlk, ExtNr
-    CHARACTER(LEN=255)             :: MSG
+    CHARACTER(LEN=255)             :: MSG, LOC
     REAL(dp)                       :: Mp, Rp, TmpScal
     LOGICAL                        :: FOUND
 
@@ -497,6 +479,7 @@ CONTAINS
     !=======================================================================
     ! HCOX_DUSTGINOUX_INIT begins here!
     !=======================================================================
+    LOC = 'HCOX_DUSTGINOUX_INIT (HCOX_DUSTGINOUX_MOD.F90)'
 
     ! Extension Nr.
     ExtNr = GetExtNr( HcoState%Config%ExtList, TRIM(ExtName) )
@@ -506,7 +489,7 @@ CONTAINS
     Inst => NULL()
     CALL InstCreate ( ExtNr, ExtState%DustGinoux, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot create DustGinoux instance', RC )
+       CALL HCO_ERROR ( 'Cannot create DustGinoux instance', RC )
        RETURN
     ENDIF
     ! Also fill Inst%ExtNr
@@ -516,8 +499,11 @@ CONTAINS
     Inst%ExtNrAlk = GetExtNr( HcoState%Config%ExtList, 'DustAlk' )
 
     ! Enter
-    CALL HCO_ENTER(HcoState%Config%Err,'HCOX_DustGinoux_Init (hcox_dustginoux_mod.F90)',RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER(HcoState%Config%Err, LOC, RC)
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 4', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Get the expected number of dust species
     Inst%NBINS = HcoState%nDust
@@ -525,13 +511,19 @@ CONTAINS
     ! Get the actual number of dust species defined for DustGinoux extension
     CALL HCO_GetExtHcoID( HcoState, Inst%ExtNr, Inst%HcoIDs, &
                           SpcNames, nSpc, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 5', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Get the dust alkalinity species defined for DustAlk option
     IF ( Inst%ExtNrAlk > 0 ) THEN
        CALL HCO_GetExtHcoID( HcoState,    Inst%ExtNrAlk, Inst%HcoIDsAlk, &
                              SpcNamesAlk, nSpcAlk,  RC)
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 6', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
     ENDIF
 
     ! Make sure the # of dust species is as expected
@@ -539,7 +531,7 @@ CONTAINS
        WRITE( MSG, 100 ) Inst%NBINS, nSpc
  100   FORMAT( 'Expected ', i3, ' DustGinoux species but only found ', i3, &
                ' in the HEMCO configuration file!  Exiting...' )
-       CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+       CALL HCO_ERROR(MSG, RC )
        RETURN
     ENDIF
 
@@ -548,7 +540,10 @@ CONTAINS
     ! based upon compiler switches.
     CALL GetExtOpt( HcoState%Config, Inst%ExtNr, 'Mass tuning factor', &
                      OptValDp=TmpScal, Found=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 7', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Set parameter FLX_MSS_FDG_FCT to specified tuning factor. Get from
     ! wrapper routine if not defined in configuration file
@@ -604,7 +599,7 @@ CONTAINS
                Inst%SRCE_CLAY ( HcoState%NX, HcoState%NY ), &
                STAT = AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR(HcoState%Config%Err,'Allocation error', RC )
+       CALL HCO_ERROR('Allocation error', RC )
        RETURN
     ENDIF
 
@@ -632,7 +627,7 @@ CONTAINS
 
 #if !defined( TOMAS )
        MSG = 'Cannot have > 4 GINOUX dust bins unless you are using TOMAS!'
-       CALL HCO_ERROR(HcoState%Config%Err,MSG, RC )
+       CALL HCO_ERROR(MSG, RC )
        RETURN
 #endif
 
@@ -762,7 +757,7 @@ CONTAINS
     ELSE
 
        ! Stop w/ error message
-       CALL HCO_ERROR( HcoState%Config%Err, 'Wrong number of TOMAS dust bins!', RC )
+       CALL HCO_ERROR( 'Wrong number of TOMAS dust bins!', RC )
 
     ENDIF
 
@@ -790,7 +785,7 @@ CONTAINS
   END SUBROUTINE HcoX_DustGinoux_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -810,6 +805,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Dec 2013 - C. Keller - Now a HEMCO extension
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -825,7 +821,7 @@ CONTAINS
   END SUBROUTINE HcoX_DustGinoux_Final
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -854,8 +850,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  11 Dec 2013 - C. Keller   - Initial version
-!  25 Sep 2014 - R. Yantosca - Updated for TOMAS
-!  24 Aug 2017 - M. Sulprizio- Remove support for GRID1x1
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -892,7 +887,7 @@ CONTAINS
   END FUNCTION HCOX_DustGinoux_GetChDust
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -914,6 +909,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -946,7 +942,7 @@ CONTAINS
   END SUBROUTINE InstGet
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -974,7 +970,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1022,7 +1018,7 @@ CONTAINS
   END SUBROUTINE InstCreate
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !BOP
@@ -1042,7 +1038,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1064,31 +1060,77 @@ CONTAINS
     ! Instance-specific deallocation
     IF ( ASSOCIATED(Inst) ) THEN
 
+       !---------------------------------------------------------------------
+       ! Deallocate fields of Inst before popping Inst off the list
+       ! in order to avoid memory leaks (Bob Yantosca, 17 Aug 2020)
+       !---------------------------------------------------------------------
+       IF ( ASSOCIATED( Inst%SRCE_SAND ) ) THEN
+          DEALLOCATE( Inst%SRCE_SAND )
+       ENDIF
+       Inst%SRCE_SAND => NULL()
+
+       IF ( ASSOCIATED( Inst%SRCE_SILT ) ) THEN
+          DEALLOCATE( Inst%SRCE_SILT )
+       ENDIF
+       Inst%SRCE_SILT => NULL()
+
+       IF ( ASSOCIATED( Inst%SRCE_CLAY ) ) THEN
+          DEALLOCATE( Inst%SRCE_CLAY )
+       ENDIF
+       Inst%SRCE_CLAY  => NULL()
+
+       IF ( ASSOCIATED( Inst%IPOINT ) ) THEN
+          DEALLOCATE( Inst%IPOINT )
+       ENDIF
+       Inst%IPOINT => NULL()
+
+       IF ( ASSOCIATED( Inst%FRAC_S ) ) THEN
+          DEALLOCATE( Inst%FRAC_S )
+       ENDIf
+       Inst%FRAC_S => NULL()
+
+       IF ( ASSOCIATED( Inst%DUSTDEN ) ) THEN
+          DEALLOCATE( Inst%DUSTDEN   )
+       ENDIF
+       Inst%DUSTDEN => NULL()
+
+       IF ( ASSOCIATED( Inst%DUSTREFF ) ) THEN
+          DEALLOCATE( Inst%DUSTREFF )
+       ENDIF
+       Inst%DUSTREFF => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUX ) ) THEN
+          DEALLOCATE( Inst%FLUX )
+       ENDIF
+       Inst%FLUX => NULL()
+
+       IF ( ASSOCIATED( Inst%FLUX_ALK  ) ) THEN
+          DEALLOCATE( Inst%FLUX_ALK )
+       ENDIF
+       Inst%FLUX_ALK   => NULL()
+
+       IF ( ALLOCATED ( Inst%HcoIDs ) ) THEN
+          DEALLOCATE( Inst%HcoIDs  )
+       ENDIF
+
+       IF ( ALLOCATED ( Inst%HcoIDsALK ) ) THEN
+          DEALLOCATE( Inst%HcoIDsALK )
+       ENDIF
+
+       !---------------------------------------------------------------------
        ! Pop off instance from list
+       !---------------------------------------------------------------------
        IF ( ASSOCIATED(PrevInst) ) THEN
-
-          ! Free pointer
-          IF ( ASSOCIATED( Inst%SRCE_SAND ) ) DEALLOCATE( Inst%SRCE_SAND )
-          IF ( ASSOCIATED( Inst%SRCE_SILT ) ) DEALLOCATE( Inst%SRCE_SILT )
-          IF ( ASSOCIATED( Inst%SRCE_CLAY ) ) DEALLOCATE( Inst%SRCE_CLAY )
-
-          ! Cleanup option object
-          IF ( ASSOCIATED( Inst%IPOINT    ) ) DEALLOCATE( Inst%IPOINT    )
-          IF ( ASSOCIATED( Inst%FRAC_S    ) ) DEALLOCATE( Inst%FRAC_S    )
-          IF ( ASSOCIATED( Inst%DUSTDEN   ) ) DEALLOCATE( Inst%DUSTDEN   )
-          IF ( ASSOCIATED( Inst%DUSTREFF  ) ) DEALLOCATE( Inst%DUSTREFF  )
-          IF ( ASSOCIATED( Inst%FLUX      ) ) DEALLOCATE( Inst%FLUX      )
-          IF ( ASSOCIATED( Inst%FLUX_ALK  ) ) DEALLOCATE( Inst%FLUX_ALK  )
-          IF ( ALLOCATED ( Inst%HcoIDs    ) ) DEALLOCATE( Inst%HcoIDs    )
-          IF ( ALLOCATED ( Inst%HcoIDsALK ) ) DEALLOCATE( Inst%HcoIDsALK )
-
           PrevInst%NextInst => Inst%NextInst
        ELSE
           AllInst => Inst%NextInst
        ENDIF
        DEALLOCATE(Inst)
-       Inst => NULL()
     ENDIF
+
+    ! Free pointers before exiting
+    PrevInst => NULL()
+    Inst     => NULL()
 
    END SUBROUTINE InstRemove
 !EOC

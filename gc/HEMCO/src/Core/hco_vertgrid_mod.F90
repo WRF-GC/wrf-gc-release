@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -116,13 +116,14 @@ MODULE HCO_VertGrid_Mod
 !
 ! !REVISION HISTORY:
 !  28 Sep 2015 - C. Keller   - Initialization
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -143,6 +144,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  28 Sep 2015 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -168,7 +170,7 @@ CONTAINS
   END SUBROUTINE HCO_VertGrid_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -200,6 +202,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  28 Sep 2015 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -217,7 +220,7 @@ CONTAINS
     ! Allocate AP and BP
     ALLOCATE(zGrid%Ap(nz+1), zGrid%Bp(nz+1), STAT=AS )
     IF ( AS /= 0 ) THEN
-       CALL HCO_ERROR( HcoConfig%Err, 'Cannot allocate Ap / Bp', RC, THISLOC=LOC )
+       CALL HCO_ERROR( 'Cannot allocate Ap / Bp', RC, THISLOC=LOC )
        RETURN
     ENDIF
     zGrid%Ap = 0.0_hp
@@ -230,7 +233,7 @@ CONTAINS
        IF ( nz > 72 ) THEN
           WRITE(MSG,*) 'Vertical grid has more than 72 vertical levels', &
                        '- please provide Ap values in configuration file.'
-          CALL HCO_ERROR( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
           RETURN
        ELSEIF ( nz > 47 ) THEN
           zGrid%Ap(:) = Ap72(1:(nz+1))
@@ -246,7 +249,7 @@ CONTAINS
        IF ( nz > 72 ) THEN
           WRITE(MSG,*) 'Vertical grid has more than 72 vertical levels', &
                        '- please provide Bp values in configuration file.'
-          CALL HCO_ERROR( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
           RETURN
        ELSEIF ( nz > 47 ) THEN
           zGrid%Bp(:) = Bp72(1:(nz+1))
@@ -271,7 +274,7 @@ CONTAINS
   END SUBROUTINE HCO_VertGrid_Define
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -291,19 +294,25 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  28 Sep 2015 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
-    ! Eventually deallocate Ap/Bp vectors
-    IF( ASSOCIATED(zGrid%Ap) ) THEN
-       DEALLOCATE(zGrid%Ap)
-       zGrid%Ap => NULL()
+    IF( ASSOCIATED( zGrid%Ap ) ) THEN
+       DEALLOCATE( zGrid%Ap )
     ENDIF
-    IF( ASSOCIATED(zGrid%Bp) ) THEN
-       DEALLOCATE(zGrid%Bp)
-       zGrid%Bp => NULL()
+    zGrid%Ap => NULL()
+
+    IF( ASSOCIATED( zGrid%Bp ) ) THEN
+       DEALLOCATE( zGrid%Bp )
     ENDIF
+    zGrid%Bp => NULL()
+
+    IF ( ASSOCIATED( zGrid ) ) THEN
+       DEALLOCATE( zGrid )
+    ENDIF
+    zGrid => NULL()
 
   END SUBROUTINE HCO_VertGrid_Cleanup
 !EOC

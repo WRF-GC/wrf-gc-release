@@ -1,0 +1,24 @@
+# List species below. For each species, the following entries must be given:
+# ID        : species ID
+# NAME      : species name
+# MW       : molecular weight (g/mol) 
+# MWEMIS    : molecular weight of emitted species (g/mol)
+# MOLECRATIO: molecules of emitted species per molecule of species
+# K0        : Henry constant at 298 K (M/atm, liquid over gas)
+# CR        : Henry temperature dependency (-d ln(KH)/d(1/T)
+# pKA       : acid dissociation constant
+#
+# Note: all hydrocarbons are listed as MW=12.0 to reflect the fact
+# that the input data is already in kgC or the conversion factors are
+# explicitly listed as scale factors in HEMCO_Config.rc. This avoid
+# any unwanted conversions between mass species as mass C 
+# (ckeller, 1/18/16).
+
+# ID NAME   MW    MWEMIS MOLECRATIO K0     CR     PKA
+1    ISOP  68.12  12.0	 5.0        0.0    0.0    0.0
+2    MTPA  136.23 136.23 1.0        0.0    0.0    0.0
+3    MTPO  136.23 136.23 1.0        0.0    0.0    0.0
+4    SESQ  136.23 136.23 1.0        0.0    0.0    0.0
+5    LIMO  136.23 136.23 1.0        0.0    0.0    0.0
+6    PRPE  42.08  42.08	 1.0        0.0    0.0    0.0
+7    CO    28.0   28.0   1.0        0.0    0.0    0.0

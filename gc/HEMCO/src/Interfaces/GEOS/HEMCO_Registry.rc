@@ -1,0 +1,61 @@
+#
+# This the HEMCO Grid Component Registry. It defines Import,
+# Internal and Export states for this component as well as
+# any
+#
+# !REVISION HISTORY:
+#  02Feb2016  da Silva   First Version
+# -----------------------------------------------------------------
+
+  COMP_NAME: HEMCO
+
+# Only change the Registry version when major structural changes
+# occurs, not changes in content
+# --------------------------------------------------------------
+  MAPL_REGISTRY_VERSION: 1.00
+
+#				------------
+#				Import State
+#				------------
+
+<ImportSpec name="HEMCO", cols="short_name,units,dims,vlocation,stat,refresh_interval,averaging_interval,num_subtiles,default,norestart,long_name">
+# -------------------|-------------|-----|---|----|---|---|-----|------|----|--------------------------
+#  Short	     |  	   |	 | V |Item|Intervl| Sub | Def  | No |	Long
+#  Name 	     |   Units     | Dim |Loc|Type| R | A |Tiles| ault | Rst|	Name
+# -------------------|-------------|-----|---|----|---|---|-----|------|----|--------------------------
+# -------------------|-------------|-----|---|----|---|---|-----|------|----|--------------------------
+</ImportSpec>
+#				------------
+#				Export State
+#				------------
+
+<ExportSpec name="HEMCO", cols="short_name,units,dims,vlocation,stat,refresh_interval,averaging_interval,num_subtiles,long_name">
+# --------------------------------|----------------|-----|---|----|---|---|-----|---------------------------------
+#  Short	                  |		   |     | V |Item|Intervl| Sub |	     Long
+#  Name 	                  |   Units	   | Dim |Loc|Type| R | A |Tiles|	     Name
+# --------------------------------|----------------|-----|---|----|---|---|-----|---------------------------------
+# --------------------------------|----------------|-----|---|----|---|---|-----|---------------------------------
+</ExportSpec>
+#                               --------------
+#                               Internal State
+#                               --------------
+#
+# Note: 1) For friendlies, use "D" for dynamics, "T" for turbulence, "C" for convection, "E" for emission, S=self (adds to export); leave blank otherwise
+#       2) If quantity requires no restart, put an 'x' in the No Rst column
+#       3) RO = Alkoxy radical, RO2 = Organic peroxy radical
+<InternalSpec name="HEMCO", cols="short_name,units,dims,vlocation,stat,refresh_interval,averaging_interval,num_subtiles,default,norestart,halowidth,friendlyto,long_name">
+# --------------|------------|-----|---|----|---|---|-----|------|----|----|---------|---------------------------------
+#  Short        |            |     | V |Item|Intervl| Sub | Def  | No | Ha | Friends |            Long
+#  Name         |   Units    | Dim |Loc|Type| R | A |Tiles| ault | Rst| lo |         |            Name
+# --------------|------------|-----|---|----|---|---|-----|------|----|----|---------|---------------------------------
+  PFACTOR       | 1          | xy  |   |    |   |   |     |1.0   |    |    | S       | soilnox_pfactor_restart 
+  DRYPERIOD     | 1          | xy  |   |    |   |   |     |0.0   |    |    | S       | soilnox_dryperiod_restart
+  GWET_PREV     | 1          | xy  |   |    |   |   |     |0.0   |    |    | S       | soilnox_gwet_prev_restart
+  DEP_RESERVOIR | kg m-3     | xy  |   |    |   |   |     |1e-4  |    |    | S       | soilnox_dep_reservoir_restart
+  T_DAVG        |   1        | xy  |   |    |   |   |     |273.1 |    |    | S       | megan_t_davg_restart
+  T_PREVDAY     |   1        | xy  |   |    |   |   |     |273.1 |    |    | S       | megan_t_prevday_restart
+  LAI_PREVDAY   |   1        | xy  |   |    |   |   |     |0.0   |    |    | S       | megan_lai_prevday_restart
+  PARDR_DAVG    |   W/m2     | xy  |   |    |   |   |     |0.0   |    |    | S       | megan_pardr_davg_restart
+  PARDF_DAVG    |   W/m2     | xy  |   |    |   |   |     |0.0   |    |    | S       | megan_pardf_davg_restart
+# --------------|------------|-----|---|----|---|---|-----|------|----|----|---------|---------------------------------
+</InternalSpec>

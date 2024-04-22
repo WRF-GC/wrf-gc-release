@@ -1,4 +1,5 @@
-List of Developers for GEOS-Chem, HEMCO, and Related Software (05 Feb 2020)
+List of Developers for GEOS-Chem, GCHP, HEMCO, and Related Software
+(26 Oct 2022)
 ===============================================================================
 
 Peter Adams
@@ -14,8 +15,10 @@ Steven Barret
 Brice Barret
 Kelvin Bates
 Isabelle Bey
+Liam Bindle
 Folkert Boersma
 Sreekanth Bojjagani
+Eimy Bonilla
 Benoit Bovy
 Kevin Bowman
 Brian Boys
@@ -28,8 +31,10 @@ Beata Bukosa
 Christopher Butenhoff
 Karen Cady-Pereira
 Philip Cameron-Smith
+Patrick Campbell
 Liangzhong Cao
 Guofeng Cao
+Yi Cao
 Shannon Capps
 Claire Carouge
 Therese Carter
@@ -44,6 +49,7 @@ Xin Chen
 Yang Chen
 Yunsoo Choi
 Kenneth Christian
+Tom Clune
 Matt Cooper
 Bess Corbitt
 Betty Croft
@@ -57,15 +63,18 @@ Max Desservettaz
 Nicholas Deutscher
 Maurizio di Pierro
 Aurelien Dommergue
+Will Downs
 Easan Drury
 Bryan Duncan
 Sebastian Eastham
 Raluca Ellis
 Joseph Enberg
+Lucas Estrada
 Mathew Evans
 T. Duncan Fairlie
 Sal Farina
 Vivian Faye
+Ari Feinberg
 Brendan Field
 Arlene Fiore
 Emily Fischer
@@ -75,7 +84,9 @@ Eric Fleming
 Judit Flo-Gaya
 Bonne Ford
 Timmy Francis
+Lyssa Freese
 Carey Friedman
+Thibaud Fritz
 Tzung-May Fu
 Joshua Fu
 Brett Gantt
@@ -83,6 +94,7 @@ Cui Ge
 Jeffrey Geddes
 Amanda Giang
 Christos Giannakopoulos
+Harriet Gounia
 Edward Graef
 Jesse Greenslade
 Xiaoguang Gu
@@ -100,21 +112,23 @@ Zahra Hosseni
 Lu Hu
 Jianping Huang
 Jiayue Huang
-Rynda Hudman Kay
-Hyeonmin Kim
 Kohei Ikeda
 Daniel Jacob
 Andy Jacobson
 Marc Jacobson
 Lyatt Jaegle
 Ruud Jansen
+Weiyuan Jiang
 Zhe Jiang
+Lixu Jin
 Matthew Johnson
 Dylan Jones
 Jaegun Jung
 Prasad Kasibhatla
+Rynda Hudman Kay
 Christoph Keller
 Tetsuro Kikuchi
+Hyeonmin Kim
 Sungshik Kim
 Nutthida Kitwiroon
 Jack Kodros
@@ -129,8 +143,10 @@ Lok Lamsal
 Kateryna Lapina
 Kelsey Larson
 David Lary
+Robyn Latimer
 Philippe Le Sager
 Chulkyu Lee
+Colin Lee
 Meemong Lee
 Ralph Lehmann
 Eric Leibensperger
@@ -141,10 +157,11 @@ Chi Li
 Ke Li
 Qinbin Li
 Xianglan Li
+Yanshun Li
 K. J. Liao
 Qing Liang
 Hong Liao
-Hiapeng Lin
+Haipeng Lin
 Jintai Lin
 Shian-Jiann Lin
 John Linford
@@ -152,10 +169,12 @@ Hongyu Liu
 Jane Liu
 Junhua Liu
 Pengfei Liu
+Tina Liu
 Yang Liu
 Ying Liu
 Jennifer Logan
 Mike Long
+Xiao Lu
 Lizzie Lundgren
 Gan Luo
 J.D. (Bram) Maasakkers
@@ -167,9 +186,12 @@ Eloise Marais
 Marguerite Marks
 Arjen Markus
 Randall Martin
+Maggie Marvin
 Erin McDuffie
+Dana McGuffin
 Chris McLinden
 Hongjian Meng
+Jun Meng
 Nicholas Meskhidze
 Natallia Miatselskaya
 Loretta Mickley
@@ -194,6 +216,7 @@ Justus Notholt
 Kate O'Dell
 Sachiko Okamoto
 Neil Page
+Sidhant Pai
 Paul Palmer
 Nick Parazoo
 Justin Parella
@@ -204,8 +227,10 @@ Sajeev Philip
 Christopher Pickett-Heaps
 Jeff Pierce
 Will Porter
+Ryan Pound
 Michael Prather
 Anna Protonatariou
+Bill Putman
 Havala Pye
 Asif Qureshi
 Emily Ramnarine
@@ -220,16 +245,19 @@ Sarah Safieddine
 Adrian Sandu
 Mauricio Santillana
 Bastien Sauvage
+Tia Scarpelli
 Luke Schiferl
 Johan Schmidt
 Martin Schultz
 Rebecca Schwantes
+Paolo Sebastianelli
 Noelle Selin
 Michael Seymour
 Viral Shah
 Jingyuan Shao
 Lu Shen
 Tomas Sherwen
+Joshua Shutter
 Sam Silva
 Nicole Smith-Downey
 Anne Laerke Soerensen
@@ -238,7 +266,9 @@ Shaojie Song
 Yu Song
 Dominick Spracklen
 Ilya Stanevich
+Stephen Steenrod
 Rebecca Stern
+Robin Stevens
 David Streets
 Sarah Strode
 Flora Su
@@ -247,16 +277,20 @@ Minmin Sun
 Elsie Sunderland
 Parvada Suntharalingam
 Luke Surl
+Bethany Sutherland
 Kimito Suto
+Monika Szelag
 Amos Tai
 Hiroshi Tanimoto
 John Tannahill
 Shu Tao
 Colin Thackray
+Matt Thompson
 Thibaud Thonat
 Rong Tian
 Maria Tombrou
 Katherine Travis
+Atanas Trayanov 
 Win Trivitayanurak
 Corey Trujillo
 Paolo Tuccella
@@ -270,19 +304,20 @@ Kostas Varotsos
 Geert Vinken
 Kristina Wagstrom
 Thomas Walker
-Qiaoqiao Wang
-Jun Wang
-Xuan Wang
-Yuxuan Wang
 James Wang
-Yuting Wang
-Zifa Wang
-Yuhang Wang
+Jun Wang
+Qiaoqiao Wang
+Xuan Wang
 Xiaoli Wang
+Yuhang Wang
+Yuting Wang
+Yuxuan Wang
+Zifa Wang
 Kevin Wecht
 Richard Weidner
 Debra Weisenstein
 Kelley Wells
+Hongjian Weng
 Dan Westervelt
 Cynthia Whaley
 Christine Wiedinmyer
@@ -291,6 +326,7 @@ Ingo Wohltmann
 Shiliang Wu
 Shiliang Wu
 Yaping Xiao
+Junwei Xu
 Yingying Yan
 Matt Yannetti
 Bob Yantosca
@@ -299,18 +335,20 @@ Keiya Yumimoto
 Karen Yu
 Fangqun Yu
 Xu Yue
+Xuyan Yue
 Maria Zatko
+Shixian Zhai
 Shuting Zhai
-Li Zhang
 Bo Zhang
-Jiawei Zhang
-Yanxu Zhang
-Lin Zhang
 Chi Zhang
 Hongliang Zhang
+Jiawei Zhang
+Li Zhang
+Lin Zhang
 Qiang Zhang
-Liye Zhu
+Yanxu Zhang
 Lei Zhu
+Liye Zhu
 Jiawei Zhuang
 Quanlai Zhuang
 Peter Zoogman

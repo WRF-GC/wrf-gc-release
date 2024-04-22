@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -70,16 +70,7 @@ MODULE HCO_ExtList_Mod
 !
 ! !REVISION HISTORY:
 !  02 Oct 2013 - C. Keller   - Initial version
-!  01 Jul 2014 - R. Yantosca - Now use F90 free-format indentation
-!  01 Jul 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  30 Sep 2014 - R. Yantosca - ThisExt%Spcs now has 2047 chars for extensions
-!                              having many individual species
-!  20 Sep 2015 - C. Keller   - Reorganize options in linked lists. Tokens are
-!                              now the same as options and can be flexibly
-!                              set by the user.
-!  24 Aug 2017 - M. Sulprizio- Remove support for GCAP, GEOS-4, GEOS-5 and MERRA
-!  29 Aug 2018 - M. Sulprizio- Users can now specify $MET or $met to use
-!                              uppercase or lowercase strings for met field
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !-----------------------------------------------------------------------------
 !BOC
@@ -127,7 +118,7 @@ MODULE HCO_ExtList_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -145,7 +136,7 @@ CONTAINS
 !
 ! !USES:
 !
-    USE CHARPAK_MOD,  ONLY : TRANLC
+    USE HCO_CHARPAK_MOD,  ONLY : TRANLC
 !
 ! !INPUT PARAMETERS::
 !
@@ -161,9 +152,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  03 Oct 2013 - C. Keller - Initial version
-!  20 Sep 2015 - C. Keller - Options are now linked list
-!  12 Dec 2015 - C. Keller - Added argument InUse
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -195,7 +184,7 @@ CONTAINS
        IF ( OrigExtNr /= ExtNr ) THEN
           WRITE(MSG,*) 'Cannot create extension - extension already exists', &
                        TRIM(lcName), ExtNr, OrigExtNr
-          CALL HCO_ERROR(HcoConfig%Err,MSG,RC,THISLOC='AddExt (hco_extlist_mod.F90)')
+          CALL HCO_ERROR(MSG,RC,THISLOC='AddExt (hco_extlist_mod.F90)')
           RETURN
 
        ! Nothing to do otherwise
@@ -260,7 +249,7 @@ CONTAINS
   END SUBROUTINE AddExt
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -280,7 +269,7 @@ CONTAINS
 !
 ! !USES:
 !
-  USE CHARPAK_MOD,       ONLY : STRSPLIT, TRANLC
+  USE HCO_CHARPAK_MOD,       ONLY : STRSPLIT, TRANLC
 !
 ! !INPUT PARAMETERS:
 !
@@ -295,8 +284,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  03 Oct 2013 - C. Keller - Initial version
-!  20 Sep 2015 - C. Keller - Options are now linked list
-!  12 Dec 2015 - C. Keller - Added argument IgnoreIfExist
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -304,12 +292,13 @@ CONTAINS
 ! !INTERNAL VARIABLES:
 !
     INTEGER               :: IDX
-    CHARACTER(LEN=255)    :: MSG
+    CHARACTER(LEN=255)    :: MSG, LOC
     CHARACTER(LEN=OPTLEN) :: TmpStr, OptName, OptValue
 
     !======================================================================
     ! AddExtOpt begins here
     !======================================================================
+    LOC = 'AddExtOpt (HCO_EXTLIST_MOD.F90)'
 
     ! Parse option name and option value. These must be separated by colon.
     IDX = INDEX( TRIM(Opt), ':' )
@@ -318,7 +307,7 @@ CONTAINS
     IF ( IDX <= 0 ) THEN
        MSG = 'Cannot extract option name/value pair - these must be ' // &
              'separated by a colon (:) character: ' // TRIM(Opt)
-       CALL HCO_ERROR(HcoConfig%Err,MSG,RC,THISLOC='AddExtOpt (hco_extlist_mod)')
+       CALL HCO_ERROR(MSG,RC,THISLOC='AddExtOpt (hco_extlist_mod)')
        RETURN
     ENDIF
 
@@ -337,7 +326,10 @@ CONTAINS
     ! Pass to options
     CALL HCO_AddOpt( HcoConfig, OptName, OptValue, ExtNr, RC, &
                      IgnoreIfExist=IgnoreIfExist )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Cleanup and leave
     RC = HCO_SUCCESS
@@ -345,7 +337,7 @@ CONTAINS
   END SUBROUTINE AddExtOpt
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -368,7 +360,7 @@ CONTAINS
 !
 ! !USES:
 !
-  USE CHARPAK_MOD,       ONLY : STRSPLIT, TRANLC
+  USE HCO_CHARPAK_MOD,       ONLY : STRSPLIT, TRANLC
 !
 ! !INPUT PARAMETERS:
 !
@@ -392,12 +384,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  03 Oct 2013 - C. Keller   - Initial version
-!  13 Jan 2015 - R. Yantosca - Add optional variable of flex precision (hp)
-!  14 Feb 2015 - C. Keller   - Add option to search all extensions (ExtNr=-999).
-!  17 Apr 2015 - C. Keller   - Passed option OptName must now exactly match the
-!                              stored option name to avoid ambiguity.
-!  20 Sep 2015 - C. Keller   - Options are now linked list.
-!  20 Jan 2016 - C. Keller   - Bug fix: boolean options are now case insensitive.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -431,7 +418,7 @@ CONTAINS
     ELSEIF ( .NOT. OptFound ) THEN
        WRITE(MSG,*) '(A) Cannot find option ', TRIM(OptName),  &
        ' in extension ', ExtNr
-       CALL HCO_ERROR(HcoConfig%Err,MSG,RC,THISLOC=LOC )
+       CALL HCO_ERROR(MSG,RC,THISLOC=LOC )
        RETURN
     ENDIF
 
@@ -485,7 +472,7 @@ CONTAINS
   END SUBROUTINE GetExtOpt
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -502,7 +489,7 @@ CONTAINS
 !
 ! !USES:
 !
-    USE CHARPAK_MOD,  ONLY : TRANLC
+    USE HCO_CHARPAK_MOD,  ONLY : TRANLC
 !
 ! !INPUT PARAMETERS:
 !
@@ -515,7 +502,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  03 Oct 2013 - C. Keller - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -564,7 +551,7 @@ CONTAINS
   END FUNCTION GetExtNr
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -594,7 +581,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Jan 2014 - C. Keller: Initialization (update)
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -622,7 +609,7 @@ CONTAINS
 
     IF ( .NOT. ASSOCIATED( ThisExt ) ) THEN
        WRITE(MSG,*) 'Cannot find extension Nr. ', ExtNr
-       CALL HCO_ERROR( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+       CALL HCO_ERROR(  MSG, RC, THISLOC=LOC )
        RETURN
     ENDIF
 
@@ -636,7 +623,7 @@ CONTAINS
     END SUBROUTINE GetExtSpcStr
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -671,7 +658,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Jun 2015 - C. Keller - Initial version
-!  20 Sep 2015 - C. Keller - Now allocate output array in this routine.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -691,7 +678,7 @@ CONTAINS
     END SUBROUTINE GetExtSpcVal_sp
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -726,7 +713,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Jun 2015 - C. Keller - Initial version
-!  20 Sep 2015 - C. Keller - Now allocate output array in this routine.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -746,7 +733,7 @@ CONTAINS
     END SUBROUTINE GetExtSpcVal_Int
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -781,7 +768,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Jun 2015 - C. Keller - Initial version
-!  20 Sep 2015 - C. Keller - Now allocate output array in this routine.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -801,7 +788,7 @@ CONTAINS
     END SUBROUTINE GetExtSpcVal_char
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -841,7 +828,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Jun 2015 - C. Keller   - Initial version
-!  20 Sep 2015 - C. Keller   - Options are now linked list.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -867,17 +854,26 @@ CONTAINS
 
        IF ( PRESENT(SpcScal_sp) ) THEN
           CALL GetExtOpt ( HcoConfig, ExtNr, IOptName, OptValSp=iScal_sp, FOUND=FND, RC=RC )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+          IF ( RC /= HCO_SUCCESS ) THEN
+              CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+              RETURN
+          ENDIF
           IF ( FND ) SpcScal_sp(I) = iScal_sp
        ENDIF
        IF ( PRESENT(SpcScal_in) ) THEN
           CALL GetExtOpt ( HcoConfig, ExtNr, IOptName, OptValInt=iScal_in, FOUND=FND, RC=RC )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+          IF ( RC /= HCO_SUCCESS ) THEN
+              CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+              RETURN
+          ENDIF
           IF ( FND ) SpcScal_in(I) = iScal_in
        ENDIF
        IF ( PRESENT(SpcScal_char) ) THEN
           CALL GetExtOpt ( HcoConfig, ExtNr, IOptName, OptValChar=iScal_char, FOUND=FND, RC=RC )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+          IF ( RC /= HCO_SUCCESS ) THEN
+              CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+              RETURN
+          ENDIF
           IF ( FND ) SpcScal_char(I) = iScal_char
        ENDIF
     ENDDO
@@ -888,7 +884,7 @@ CONTAINS
     END SUBROUTINE GetExtSpcVal_Dr
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -908,7 +904,7 @@ CONTAINS
 !
 ! !USES:
 !
-    USE CHARPAK_MOD,  ONLY : TRANLC
+    USE HCO_CHARPAK_MOD,  ONLY : TRANLC
 !
 ! !INPUT PARAMETERS:
 !
@@ -922,7 +918,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  12 Jan 2015 - C. Keller - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -993,7 +989,7 @@ CONTAINS
   END SUBROUTINE SetExtNr
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1018,7 +1014,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  03 Oct 2013 - C. Keller - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1064,7 +1060,7 @@ CONTAINS
   END FUNCTION ExtNrInUse
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1083,8 +1079,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  03 Oct 2013 - C. Keller - Initial version
-!  20 Sep 2015 - C. Keller - Options are now linked list.
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1124,7 +1119,7 @@ CONTAINS
   END SUBROUTINE ExtFinal
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1154,8 +1149,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Sep 2015 - C. Keller - Initial version
-!  12 Dec 2015 - C. Keller - Added argument IgnoreIfExist
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1169,7 +1163,7 @@ CONTAINS
     LOGICAL                 :: VRB
     LOGICAL                 :: Ignore
     CHARACTER(LEN=255)      :: MSG
-    CHARACTER(LEN=255)      :: LOC = 'HCO_AddOpt (hco_chartools_mod.F90)'
+    CHARACTER(LEN=255)      :: LOC = 'HCO_AddOpt (hco_extlist_mod.F90)'
 
     !=================================================================
     ! HCO_AddOpt begins here!
@@ -1209,7 +1203,7 @@ CONTAINS
           IF ( TRIM(DUM) /= ADJUSTL(TRIM(OptValue)) ) THEN
              MSG = 'Cannot add option pair: '//TRIM(OptName)//': '//TRIM(OptValue) &
                 // ' - option already exists: '//TRIM(OptName)//': '//TRIM(DUM)
-             CALL HCO_ERROR ( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+             CALL HCO_ERROR (  MSG, RC, THISLOC=LOC )
              RETURN
           ! Return with no error if values are the same
           ELSE
@@ -1229,7 +1223,7 @@ CONTAINS
     IF ( .NOT. ASSOCIATED( ThisExt ) ) THEN
        WRITE(MSG,*) 'Cannot add option to extension Nr. ', ExtNr
        MSG = TRIM(MSG) // '. Make sure this extension is activated!'
-       CALL HCO_ERROR(HcoConfig%Err,MSG,RC,THISLOC='AddOpt (hco_extlist_mod)')
+       CALL HCO_ERROR(MSG,RC,THISLOC='AddOpt (hco_extlist_mod)')
        RETURN
     ENDIF
 
@@ -1259,7 +1253,7 @@ CONTAINS
   END SUBROUTINE HCO_AddOpt
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1285,7 +1279,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Sep 2015 - C. Keller - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1356,7 +1350,7 @@ CONTAINS
   END FUNCTION HCO_GetOpt
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1381,6 +1375,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Sep 2015 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1390,7 +1385,7 @@ CONTAINS
   END FUNCTION HCO_ROOT
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1413,7 +1408,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Sep 2015 - C. Keller - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1435,9 +1430,9 @@ CONTAINS
        ! Archive next option in list
        NextOpt => ThisOpt%NextOpt
 
-       ! Cleanup option
+       ! Free the memory allocated to ThisOpt (this avoids memory leaks)
        ThisOpt%NextOpt => NULL()
-       NULLIFY(ThisOpt)
+       DEALLOCATE( ThisOpt )
 
        ! Go to next option in list (previously archived)
        ThisOpt => NextOpt
@@ -1450,7 +1445,7 @@ CONTAINS
   END SUBROUTINE HCO_CleanupOpt
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1479,6 +1474,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Sep 2015 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1486,11 +1482,13 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     CHARACTER(LEN=OPTLEN)     :: DUM
+    CHARACTER(LEN=255)        :: LOC
     LOGICAL                   :: FOUND
 
     !=================================================================
     ! HCO_SetDefaultToken begins here!
     !=================================================================
+    LOC = 'HCO_SetDefaultToken (HCO_EXTLIST_MOD)'
 
     IF ( Trim(CF%MetField) == 'GEOSFP' ) THEN
        DEF_MET_UC = 'GEOSFP'
@@ -1516,25 +1514,37 @@ CONTAINS
 
     ! Wildcard character
     CALL GetExtOpt( CF, CoreNr, 'Wildcard', OptValChar=DUM, Found=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 4', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. FOUND) DUM = DEF_WILDCARD
     CALL HCO_AddOpt( CF, 'Wildcard', DUM, CoreNr, RC, VERB=.FALSE. )
 
     ! Separator
     CALL GetExtOpt( CF, CoreNr, 'Separator', OptValChar=DUM, Found=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 5', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. FOUND) DUM = DEF_SEPARATOR
     CALL HCO_AddOpt( CF, 'Separator', DUM, CoreNr, RC, VERB=.FALSE. )
 
     ! Colon
     CALL GetExtOpt( CF, CoreNr, 'Colon', OptValChar=DUM, Found=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 6', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. FOUND) DUM = DEF_COLON
     CALL HCO_AddOpt( CF, 'Colon', DUM, CoreNr, RC, VERB=.FALSE. )
 
     ! Root directory
     CALL GetExtOpt( CF, CoreNr, 'ROOT', OptValChar=DUM, Found=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 7', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. FOUND) DUM = DEF_ROOT
     CALL HCO_AddOpt( CF, 'ROOT', DUM, CoreNr, RC, VERB=.FALSE. )
 
@@ -1543,31 +1553,46 @@ CONTAINS
 
     ! Meteorology token (uppercase)
     CALL GetExtOpt( CF, CoreNr, 'MET', OptValChar=DUM, Found=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 8', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. FOUND) DUM = DEF_MET_UC
     CALL HCO_AddOpt( CF, 'MET', DUM, CoreNr, RC, VERB=.FALSE. )
 
     ! Meteorology token (lowercase)
     CALL GetExtOpt( CF, CoreNr, 'met', OptValChar=DUM, Found=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 9', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. FOUND) DUM = DEF_MET_LC
     CALL HCO_AddOpt( CF, 'met', DUM, CoreNr, RC, VERB=.FALSE. )
 
     ! Year for constant met fields
     CALL GetExtOpt( CF, CoreNr, 'CNYR', OptValChar=DUM, Found=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 10', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. FOUND) DUM = DEF_CN_YR
     CALL HCO_AddOpt( CF, 'CNYR', DUM, CoreNr, RC, VERB=.FALSE. )
 
     ! NetCDF version extension
     CALL GetExtOpt( CF, CoreNr, 'NC', OptValChar=DUM, Found=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 11', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. FOUND) DUM = DEF_NC_VER
     CALL HCO_AddOpt( CF, 'NC', DUM, CoreNr, RC, VERB=.FALSE. )
 
     ! Resolution token
     CALL GetExtOpt( CF, CoreNr, 'RES', OptValChar=DUM, Found=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 12', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. FOUND ) DUM = DEF_RES
     CALL HCO_AddOpt( CF, 'RES', DUM, CoreNr, RC, VERB=.FALSE. )
 

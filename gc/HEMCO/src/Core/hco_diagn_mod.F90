@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -11,7 +11,7 @@
 ! in list DiagnList. Each diagnostics container contains information
 ! about the diagnostics type (extension number, emission category /
 ! hierarchy, species ID), data structure (Scalar, 2D, 3D), and output
-! units (mass, area, time).
+! units (area, time).
 !\\
 !\\
 ! The HEMCO diagnostics module can store multiple, independent
@@ -171,19 +171,7 @@ MODULE HCO_Diagn_Mod
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller   - Initialization
-!  08 Jul 2014 - R. Yantosca - Now use F90 free-format indentation
-!  08 Jul 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  01 Aug 2014 - C. Keller   - Added manual output frequency
-!  12 Aug 2014 - C. Keller   - Added cumulative sum option
-!  09 Jan 2015 - C. Keller   - Added diagnostics collections
-!  03 Apr 2015 - C. Keller   - Now tie output frequency to collection instead
-!                              of individual diagnostic containers.
-!  06 Nov 2015 - C. Keller   - Added argument OutTimeStamp to collection to
-!                              control the file output time stamp (beginning,
-!                              middle, end of diagnostics interval).
-!  25 Jan 2016 - R. Yantosca - Added bug fixes for pgfortran compiler
-!  19 Sep 2016 - R. Yantosca - Add extra overloaded functions to the
-!                              Diagn_Update interface to avoid Gfortran errors
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -214,7 +202,7 @@ MODULE HCO_Diagn_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -241,9 +229,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller   - Initial version
-!  11 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  11 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -295,7 +281,7 @@ CONTAINS
   END SUBROUTINE HcoDiagn_AutoUpdate
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -319,7 +305,7 @@ CONTAINS
     USE HCO_STATE_MOD,   ONLY : HCO_State
     USE HCO_ExtList_Mod, ONLY : GetExtOpt
     USE HCO_ExtList_Mod, ONLY : CoreNr
-    USE CHARPAK_MOD,     ONLY : TRANLC
+    USE HCO_CHARPAK_MOD, ONLY : TRANLC
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -328,12 +314,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  03 Apr 2015 - C. Keller   - Initial version
-!  10 Apr 2015 - C. Keller   - Now create diagnostics based on entries
-!                              in the HEMCO diagnostics definition file.
-!  06 Nov 2015 - C. Keller   - Added OutTimeStamp.
-!  01 Nov 2017 - E. Lundgren - Change default OutTimeStamp from end to start
-!                              for diagnostics collection
-!  29 Dec 2017 - C. Keller   - Added datetime tokens to file prefixes.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !-----------------------------------------------------------------------
 !BOC
@@ -360,12 +341,18 @@ CONTAINS
     ! Default diagnostics
     ! ------------------------------------------------------------------
     CALL DiagnCollection_GetDefaultDelta ( HcoState, deltaYMD, deltaHMS, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Try to get prefix from configuration file
     CALL GetExtOpt ( HcoState%Config, CoreNr, 'DiagnPrefix', &
                      OptValChar=DiagnPrefix, FOUND=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. FOUND ) THEN
 #if defined( MODEL_GEOS )
        DiagnPrefix = 'HEMCO_Diagnostics.$YYYY$MM$DD$HH$MN.nc'
@@ -377,7 +364,10 @@ CONTAINS
     ! Output time stamp location
     CALL GetExtOpt ( HcoState%Config, CoreNr, 'DiagnTimeStamp', &
                      OptValChar=OutTimeStampChar, FOUND=FOUND, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( .NOT. FOUND ) THEN
        OutTimeStamp = HcoDiagnStart
     ELSE
@@ -411,7 +401,10 @@ CONTAINS
                                  deltaHMS     = deltaHMS,                  &
                                  OutTimeStamp = OutTimeStamp,              &
                                  RC           = RC                          )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Pass this collection ID to fixed variable for easy further
     ! reference to this collection
@@ -444,11 +437,91 @@ CONTAINS
                                  deltaHMS     = deltaHMS,                  &
                                  OutTimeStamp = HcoDiagnEnd,               &
                                  RC           = RC                          )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 4', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Pass this collection ID to fixed variable for easy further
     ! reference to this collection
     HcoState%Diagn%HcoDiagnIDRestart = CollectionID
+#ifdef ADJOINT
+    IF ( HcoState%isAdjoint ) THEN
+    ! ------------------------------------------------------------------
+    ! Default diagnostics
+    ! ------------------------------------------------------------------
+    CALL DiagnCollection_GetDefaultDelta ( HcoState, &
+                                           deltaYMD,  deltaHMS, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 5', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
+
+    ! Try to get prefix from configuration file
+    CALL GetExtOpt ( HcoState%Config, CoreNr, 'DiagnPrefix', &
+                     OptValChar=DiagnPrefix, FOUND=FOUND, RC=RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 6', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
+    IF ( .NOT. FOUND ) THEN
+#if defined( MODEL_GEOS )
+       DiagnPrefix = 'HEMCO_Diagnostics.$YYYY$MM$DD$HH$MN.nc'
+#else
+       DiagnPrefix = 'HEMCO_diagnostics'
+#endif
+    ENDIF
+
+    ! Output time stamp location
+    CALL GetExtOpt ( HcoState%Config, CoreNr, 'DiagnTimeStamp', &
+                     OptValChar=OutTimeStampChar, FOUND=FOUND, RC=RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 7', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
+    IF ( .NOT. FOUND ) THEN
+       OutTimeStamp = HcoDiagnStart
+    ELSE
+       CALL TRANLC( OutTimeStampChar )
+       IF (     TRIM(OutTimeStampChar) == 'start' ) THEN
+          OutTimeStamp = HcoDiagnStart
+
+       ELSEIF ( TRIM(OutTimeStampChar) == 'mid'   ) THEN
+          OutTimeStamp = HcoDiagnMid
+
+       ELSEIF ( TRIM(OutTimeStampChar) == 'end'   ) THEN
+          OutTimeStamp = HcoDiagnEnd
+
+       ELSE
+          WRITE(MSG,*) 'Unrecognized output time stamp location: ', &
+             TRIM(OutTimeStampChar), ' - will use default (start)'
+          CALL HCO_WARNING(HcoState%Config%Err,MSG,RC,THISLOC=LOC,WARNLEV=1)
+          OutTimeStamp = HcoDiagnStart
+       ENDIF 
+    ENDIF
+
+    CALL DiagnCollection_Create( HcoState%Diagn,                           &
+                                 NX           = HcoState%NX,               &
+                                 NY           = HcoState%NY,               &
+                                 NZ           = HcoState%NZ,               &
+                                 TS           = HcoState%TS_EMIS,          &
+                                 AM2          = HcoState%Grid%AREA_M2%Val, &
+                                 COL          = CollectionID,              & 
+                                 PREFIX       = TRIM(DiagnPrefix),         &
+                                 deltaYMD     = deltaYMD,                  & 
+                                 deltaHMS     = deltaHMS,                  & 
+                                 OutTimeStamp = OutTimeStamp,              & 
+                                 RC           = RC                          )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 8', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
+
+    ! Pass this collection ID to fixed variable for easy further 
+    ! reference to this collection
+    HcoState%Diagn%HcoDiagnIDAdjoint = CollectionID
+    endif
+#endif
 
     ! ------------------------------------------------------------------
     ! Manual diagnostics
@@ -476,7 +549,10 @@ CONTAINS
                                  deltaYMD  = deltaYMD,                  &
                                  deltaHMS  = deltaHMS,                  &
                                  RC        = RC                          )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 9', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Pass this collection ID to fixed variable for easy further
     ! reference to this collection
@@ -489,7 +565,10 @@ CONTAINS
     ! into the default HEMCO collection.
     ! ------------------------------------------------------------------
     CALL Diagn_DefineFromConfig( HcoState, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 10', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Return w/ success
     RC = HCO_SUCCESS
@@ -497,7 +576,7 @@ CONTAINS
   END SUBROUTINE HcoDiagn_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -541,8 +620,8 @@ CONTAINS
 ! !USES:
 !
     USE HCO_CharTools_Mod
-    USE CHARPAK_Mod,       ONLY : STRREPL, STRSPLIT
-    USE inquireMod,        ONLY : findFreeLUN
+    USE HCO_CHARPAK_Mod,   ONLY : STRREPL, STRSPLIT
+    USE HCO_inquireMod,    ONLY : findFreeLUN
     USE HCO_STATE_MOD,     ONLY : HCO_GetHcoID
     USE HCO_STATE_MOD,     ONLY : HCO_State
     USE HCO_EXTLIST_MOD,   ONLY : GetExtOpt
@@ -554,7 +633,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Apr 2015 - C. Keller   - Initial version
-!  21 Feb 2016 - C. Keller   - Added default diagnostics (optional)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -577,7 +656,10 @@ CONTAINS
 
     ! Load DiagnFile into buffer
     CALL DiagnFileOpen( HcoState%Config, LUN, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 11', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! If defined, sequentially get all entries
     IF ( LUN > 0 ) THEN
@@ -590,7 +672,10 @@ CONTAINS
                                  SpcName,         ExtNr,   Cat, Hier,  &
                                  SpaceDim,        OutUnit, EOF, RC,    &
                                  lName=lName )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+          IF ( RC /= HCO_SUCCESS ) THEN
+              CALL HCO_ERROR( 'ERROR 12', RC, THISLOC=LOC )
+              RETURN
+          ENDIF
 
           ! Leave here if end of file
           IF ( EOF ) EXIT
@@ -600,6 +685,26 @@ CONTAINS
           HcoID = HCO_GetHcoID( TRIM(SpcName), HcoState )
           IF ( HcoID <= 0 ) CYCLE
 
+#ifdef ADJOINT
+          if ( cName(1:6) == 'SFEmis' ) then
+          ! ------------------------------------------------------------------
+          ! Add it to the HEMCO diagnostics collection
+          ! ------------------------------------------------------------------
+          CALL Diagn_Create( HcoState,                      &
+                             cName     = cName,             &
+                             long_name = lName,             &
+                             HcoID     = HcoID,             &  
+                             ExtNr     = ExtNr,             &  
+                             Cat       = Cat,               &  
+                             Hier      = Hier,              &  
+                             SpaceDim  = SpaceDim,          &  
+                             OutUnit   = OutUnit,           &
+                             OutOper   = 'CumulSum',        &
+                             AutoFill  = 1,                 &  
+                             COL       = HcoState%Diagn%HcoDiagnIDAdjoint, &
+                             RC        = RC                  )
+          else
+#endif
           ! ------------------------------------------------------------------
           ! Add it to the HEMCO diagnostics collection
           ! ------------------------------------------------------------------
@@ -615,7 +720,13 @@ CONTAINS
                              AutoFill  = 1,                 &
                              COL       = HcoState%Diagn%HcoDiagnIDDefault, &
                              RC        = RC                  )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+#ifdef ADJOINT
+          endif
+#endif
+          IF ( RC /= HCO_SUCCESS ) THEN
+              CALL HCO_ERROR( 'ERROR 13', RC, THISLOC=LOC )
+              RETURN
+          ENDIF
 
        ENDDO
 
@@ -670,7 +781,10 @@ CONTAINS
                              AutoFill  = 1,                                &
                              COL       = HcoState%Diagn%HcoDiagnIDDefault, &
                              RC        = RC                                 )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+          IF ( RC /= HCO_SUCCESS ) THEN
+              CALL HCO_ERROR( 'ERROR 14', RC, THISLOC=LOC )
+              RETURN
+          ENDIF
        ENDDO
     ENDIF
 
@@ -680,7 +794,7 @@ CONTAINS
   END SUBROUTINE Diagn_DefineFromConfig
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -702,8 +816,7 @@ CONTAINS
 !      module (see HCO\_UNITS\_Mod.F90). No unit conversions will be
 !      performed if the argument OutOper is set (see below).
 !\item HcoState: HEMCO state object. Used to determine the species
-!      properties if any of arguments MW\_g, EmMW\_g or MolecRatio
-!      is missing.
+!      properties.
 !\item OutOper: output operation for non-standard units. If this
 !      argument is used, the specified operation is performed and all
 !      unit specifications are ignored. Can be one of 'Mean', 'Sum',
@@ -717,18 +830,6 @@ CONTAINS
 !      unit conversions, etc., and the data will be written to disk
 !      as is.
 !\item Trgt3D: as Trgt2D, but for 3D data.
-!\item MW\_g: species molecular weight. Used to determine unit
-!      conversion factors. Not needed for target containers or if
-!      argument OutOper is specified. Can be omitted if HcoState is
-!      given.
-!\item EmMW\_g: Molecular weight of emitted species. Used to determine
-!      unit conversion factors. Not needed for target containers or if
-!      argument OutOper is specified. Can be omitted if HcoState is
-!      given.
-!\item MolecRatio: Molecules of species per emitted molecule. Used to
-!      determine unit conversion factors. Not needed for target
-!      containers or if argument OutOper is specified. Can be omitted
-!      if HcoState is given.
 !\item ScaleFact: constant scale factor. If provided, the diagnostics
 !      are scaled uniformly by this value before outputting. Will be
 !      applied on top of any other unit conversions. Does not work on
@@ -744,15 +845,13 @@ CONTAINS
                            ExtNr,     Cat,        Hier,       &
                            HcoID,     SpaceDim,   OutUnit,    &
                            OutOper,   LevIdx,     AutoFill,   &
-                           Trgt2D,    Trgt3D,     MW_g,       &
-                           EmMW_g,    MolecRatio, ScaleFact,  &
+                           Trgt2D,    Trgt3D,     ScaleFact,  &
                            cID,       RC,    COL, OkIfExist,  &
                            long_name                           )
 !
 ! !USES:
 !
     USE HCO_State_Mod, ONLY : HCO_State
-    USE HCO_Unit_Mod,  ONLY : HCO_Unit_GetMassScal
     USE HCO_Unit_Mod,  ONLY : HCO_Unit_GetAreaScal
     USE HCO_Unit_Mod,  ONLY : HCO_Unit_GetTimeScal
 !
@@ -771,9 +870,6 @@ CONTAINS
     INTEGER,          INTENT(IN   ), OPTIONAL :: AutoFill      ! 1=fill auto.;0=don't
     REAL(sp),         INTENT(IN   ), OPTIONAL :: Trgt2D(:,:)   ! 2D target data
     REAL(sp),         INTENT(IN   ), OPTIONAL :: Trgt3D(:,:,:) ! 3D target data
-    REAL(hp),         INTENT(IN   ), OPTIONAL :: MW_g          ! species MW (g/mol)
-    REAL(hp),         INTENT(IN   ), OPTIONAL :: EmMW_g        ! emission MW (g/mol)
-    REAL(hp),         INTENT(IN   ), OPTIONAL :: MolecRatio    ! molec. emission ratio
     REAL(hp),         INTENT(IN   ), OPTIONAL :: ScaleFact     ! uniform scale factor
     INTEGER,          INTENT(IN   ), OPTIONAL :: COL           ! Collection number
     INTEGER,          INTENT(IN   ), OPTIONAL :: cID           ! Container ID
@@ -786,9 +882,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller - Initialization
-!  05 Mar 2015 - C. Keller - container ID can now be set by the user
-!  31 Mar 2015 - C. Keller - added argument OkIfExist
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -804,7 +898,6 @@ CONTAINS
     CHARACTER(LEN=255)             :: LOC, MSG
     INTEGER                        :: PS, Flag
     REAL(hp)                       :: Scal
-    REAL(hp)                       :: MWg, EmMWg, MolR
     LOGICAL                        :: ForceMean, FOUND
 
     !======================================================================
@@ -820,13 +913,16 @@ CONTAINS
     LOC = 'Diagn_Create (hco_diagn_mod.F90)'
     CALL DiagnCollection_DefineID( HcoState%Diagn, PS, RC, COL=COL, &
                                    HcoState=HcoState, InUse=FOUND, ThisColl=ThisColl )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 15', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Error if collection does not exist
     IF ( .NOT. FOUND ) THEN
        WRITE(MSG,*) 'Cannot create diagnostics ', TRIM(cName), &
                     ' - collection does not exist: ', PS
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+       CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
        RETURN
     ENDIF
 
@@ -893,12 +989,18 @@ CONTAINS
     IF ( PRESENT(Trgt2D) ) THEN
        CALL DiagnCont_Link_2D( ThisDiagn, ThisColl, Trgt2D, RC, &
                                HcoState=HcoState )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 16', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
     ENDIF
     IF ( PRESENT(Trgt3D) ) THEN
        CALL DiagnCont_Link_3D( ThisDiagn, ThisColl, Trgt3D, RC, &
                                HcoState=HcoState )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 17', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
     ENDIF
 
     ! Update module variable AF_LevelDefined. For all AutoFill diagnostics,
@@ -941,13 +1043,13 @@ CONTAINS
        IF ( ThisDiagn%DtaIsPtr ) THEN
           MSG = 'Cannot use scale factor on diagnostics that '// &
                 'are pointers to other data: '//TRIM(cName)
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
           RETURN
        ENDIF
        IF ( TRIM(OutOper) == 'CumulSum' ) THEN
           MSG = 'Cannot use scale factor on diagnostics that '// &
                 'are cumulative sums: '//TRIM(cName)
-          CALL HCO_ERROR( HcoState%config%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
           RETURN
        ENDIF
        ThisDiagn%ScaleFact = ScaleFact
@@ -982,7 +1084,7 @@ CONTAINS
              MSG = TRIM(MSG) // '. Allowed are `Mean`, `Sum`, '// &
                    '`CumulSum`, `Instantaneous`.'
              MSG = TRIM(MSG) // ' (' // TRIM(cName) // ')'
-             CALL HCO_ERROR( HcoState%config%Err, MSG, RC, THISLOC=LOC )
+             CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
              RETURN
           ENDIF
 
@@ -991,37 +1093,6 @@ CONTAINS
 
           ! Will calculate the mean
           ThisDiagn%AvgName = 'mean'
-
-          !----------------------------------------------------------------
-          ! Scale factor for mass. This determines the scale factor from
-          ! HEMCO mass unit (kg) to the desired output unit.
-          ! HCO_UNIT_MassCal returns the mass scale factor from OutUnit to
-          ! HEMCO unit, hence need to invert this value!
-          !----------------------------------------------------------------
-          IF ( .NOT. PRESENT(MW_g)       .OR. &
-               .NOT. PRESENT(EmMW_g)     .OR. &
-               .NOT. PRESENT(MolecRatio)       ) THEN
-             MWg   = HcoState%Spc(HcoID)%MW_g
-             EmMWg = HcoState%Spc(HcoID)%EmMW_g
-             MolR  = HcoState%Spc(HcoID)%MolecRatio
-          ELSE
-                MWg   = MW_g
-                EmMWg = EmMW_g
-                MolR  = MolecRatio
-          ENDIF
-
-          CALL HCO_UNIT_GetMassScal( HcoState%Config,             &
-                    unt         = OutUnit,                        &
-                    MW_IN       = MWg,                            &
-                    MW_OUT      = EmMWg,                          &
-                    MOLEC_RATIO = MolR,                           &
-                    Scal        = Scal                             )
-          IF ( Scal <= 0.0_hp ) THEN
-             MSG = 'Cannot find mass scale factor for unit '//TRIM(OutUnit)
-             CALL HCO_ERROR( HcoState%config%Err, MSG, RC, THISLOC=LOC )
-             RETURN
-          ENDIF
-          ThisDiagn%MassScal = 1.0_hp / Scal
 
           !----------------------------------------------------------------
           ! Scale factor for area. This determines the scale factor from
@@ -1035,6 +1106,12 @@ CONTAINS
              ThisDiagn%AreaScal = 1.0_hp / Scal
           ENDIF
 
+          IF (HCO_IsVerb(HcoState%Config%Err,3)) THEN
+             WRITE(MSG, *) '  ThisDiagn%AreaScal = ', ThisDiagn%AreaScal
+             CALL HCO_MSG( HcoState%Config%Err, MSG)
+             WRITE(MSG, *) '  ThisDiagn%MassScal = ', ThisDiagn%MassScal
+             CALL HCO_MSG( HcoState%Config%Err, MSG)
+          ENDIF
           !----------------------------------------------------------------
           ! Determine the normalization factors applied to the diagnostics
           ! before they are written out. Diagnostics are always stored
@@ -1075,7 +1152,7 @@ CONTAINS
           ! Error otherwise
           ELSE
              MSG = 'Cannot determine time normalization: '//TRIM(OutUnit)
-             CALL HCO_ERROR( HcoState%config%Err, MSG, RC, THISLOC=LOC )
+             CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
              RETURN
           ENDIF
        ENDIF ! OutOper not set
@@ -1088,7 +1165,7 @@ CONTAINS
                         Trim(ADJUSTL(cName)), -1, FOUND, TmpDiagn, COL=PS )
     IF ( FOUND ) THEN
 !       MSG = 'There is already a diagnostics with this name: ' // TRIM(cName)
-!       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+!       CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
 !       RETURN
        ThisDiagn%cName = trim(cName) // '_a'
        MSG = 'Changed Diagn name to ' // trim(ThisDiagn%cName)
@@ -1110,7 +1187,7 @@ CONTAINS
              WRITE(MSG,*) 'Diagnostics ', TRIM(TmpDiagn%cName), ' already has ID ', &
                 cID, ' - cannot create diagnostics ', TRIM(cName)
 
-             CALL HCO_ERROR( HcoState%config%Err, MSG, RC, THISLOC=LOC )
+             CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
              RETURN
           ENDIF
 
@@ -1152,7 +1229,7 @@ CONTAINS
   END SUBROUTINE Diagn_Create
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1197,8 +1274,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Apr 2015 - C. Keller - Initialization
-!  19 Sep 2016 - R. Yantosca - Rewritten for Gfortran: remove Scalar and
-!                              Array3d (put those in other overloaded methods)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1222,7 +1298,7 @@ CONTAINS
   END SUBROUTINE Diagn_UpdateSp0d
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1267,8 +1343,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Apr 2015 - C. Keller - Initialization
-!  19 Sep 2016 - R. Yantosca - Rewritten for Gfortran: remove Scalar and
-!                              Array3d (put those in other overloaded methods)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1292,7 +1367,7 @@ CONTAINS
   END SUBROUTINE Diagn_UpdateSp2d
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1337,8 +1412,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Apr 2015 - C. Keller - Initialization
-!  19 Sep 2016 - R. Yantosca - Rewritten for Gfortran: remove Scalar and
-!                              Array2d (put those in other overloaded methods)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1362,7 +1436,7 @@ CONTAINS
   END SUBROUTINE Diagn_UpdateSp3d
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1407,8 +1481,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Apr 2015 - C. Keller   - Initialization
-!  19 Sep 2016 - R. Yantosca - Rewritten for Gfortran: remove Array2d and
-!                              Array3d (put those in other overloaded methods)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1432,7 +1505,7 @@ CONTAINS
   END SUBROUTINE Diagn_UpdateDp0d
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1477,8 +1550,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Apr 2015 - C. Keller   - Initialization
-!  19 Sep 2016 - R. Yantosca - Rewritten for Gfortran: remove Scalar and
-!                              Array3d (put those in other overloaded methods)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1502,7 +1574,7 @@ CONTAINS
   END SUBROUTINE Diagn_UpdateDp2d
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1551,8 +1623,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  20 Apr 2015 - C. Keller   - Initialization
-!  19 Sep 2016 - R. Yantosca - Rewritten for Gfortran: remove Scalar and
-!                              Array2d (put those in other overloaded methods)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1576,7 +1647,7 @@ CONTAINS
   END SUBROUTINE Diagn_UpdateDp3d
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -1678,11 +1749,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller - Initialization
-!  25 Sep 2014 - C. Keller - Now allow updating multiple diagnostics
-!  11 Mar 2015 - C. Keller - Now allow scanning of all diagnostic collections
-!  13 Mar 2015 - C. Keller - Bug fix: only prompt warning if it's a new timestep
-!  17 Jun 2015 - C. Keller - Added argument MinDiagnLev
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -1729,7 +1796,10 @@ CONTAINS
     ! Get collection number.
     CALL DiagnCollection_DefineID( HcoState%Diagn, PS, RC, COL=COL, DEF=-1, &
            OKIfAll=.TRUE., InUse=InUse, ThisColl=ThisColl, HcoState=HcoState )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 18', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Check if we need to scan through all collections. This is only the
     ! case if PS is set to -1
@@ -1766,7 +1836,10 @@ CONTAINS
 
     ! Get the update time ID.
     CALL HcoClock_Get( HcoState%Clock, nSteps=ThisUpdateID, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 19', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Count # of containers that are updated
     CNT = 0
@@ -1861,6 +1934,15 @@ CONTAINS
              CYCLE
           ENDIF
 
+          IF (HCO_IsVerb(HcoState%Config%Err, 3)) THEN
+             WRITE(MSG,*) 'ThisDiagn%cName:    ', trim(ThisDiagn%cName)
+             CALL HCO_MSG(HcoState%Config%Err, MSG)
+             WRITE(MSG,*) 'ThisDiagn%AvgFlag:  ', ThisDiagn%AvgFlag
+             CALL HCO_MSG(HcoState%Config%Err, MSG)
+             WRITE(MSG,*) 'ThisDiagn%SpaceDim: ', ThisDiagn%SpaceDim
+             CALL HCO_MSG(HcoState%Config%Err, MSG)
+          ENDIF
+
           ! Increase counter
           CNT = CNT + 1
 
@@ -1907,7 +1989,7 @@ CONTAINS
              ELSEIF ( PRESENT(Array3D_HP) ) THEN
                 ALLOCATE( Arr3D(ThisColl%NX,ThisColl%NY,ThisColl%NZ),STAT=AS)
                 IF ( AS /= 0 ) THEN
-                   CALL HCO_ERROR( HcoState%Config%Err,&
+                   CALL HCO_ERROR( &
                                    'Allocation error Arr3D', RC, THISLOC=LOC )
                    RETURN
                 ENDIF
@@ -1915,7 +1997,7 @@ CONTAINS
              ELSEIF( PRESENT(Array3D) ) THEN
                 ALLOCATE( Arr3D(ThisColl%NX,ThisColl%NY,ThisColl%NZ),STAT=AS)
                 IF ( AS /= 0 ) THEN
-                   CALL HCO_ERROR( HcoState%Config%Err,&
+                   CALL HCO_ERROR( &
                                    'Allocation error Arr3D', RC, THISLOC=LOC )
                    RETURN
                 ENDIF
@@ -1928,7 +2010,7 @@ CONTAINS
              ELSEIF ( PRESENT(Array2D_HP) ) THEN
                 ALLOCATE( Arr2D(ThisColl%NX,ThisColl%NY),STAT=AS)
                 IF ( AS /= 0 ) THEN
-                   CALL HCO_ERROR( HcoState%Config%Err,&
+                   CALL HCO_ERROR( &
                                    'Allocation error Arr2D', RC, THISLOC=LOC )
                    RETURN
                 ENDIF
@@ -1936,7 +2018,7 @@ CONTAINS
              ELSEIF( PRESENT(Array2D) ) THEN
                 ALLOCATE( Arr2D(ThisColl%NX,ThisColl%NY),STAT=AS)
                 IF ( AS /= 0 ) THEN
-                   CALL HCO_ERROR( HcoState%Config%Err,&
+                   CALL HCO_ERROR( &
                                    'Allocation error Arr2D', RC, THISLOC=LOC )
                    RETURN
                 ENDIF
@@ -1963,7 +2045,10 @@ CONTAINS
                 ! By default, write into single precision array
                 CALL HCO_ArrAssert( ThisDiagn%Arr3D, ThisColl%NX,   &
                                     ThisColl%NY,     ThisColl%NZ, RC )
-                IF ( RC /= HCO_SUCCESS ) RETURN
+                IF ( RC /= HCO_SUCCESS ) THEN
+                    CALL HCO_ERROR( 'ERROR 20', RC, THISLOC=LOC )
+                    RETURN
+                ENDIF
 
                 ! Pass array to diagnostics: reset to zero if counter
                 ! is zero, add to it otherwise.
@@ -1998,7 +2083,10 @@ CONTAINS
                 ! Make sure dimensions agree and diagnostics array is allocated
                 CALL HCO_ArrAssert( ThisDiagn%Arr2D, ThisColl%NX, &
                                     ThisColl%NY,     RC            )
-                IF ( RC /= HCO_SUCCESS ) RETURN
+                IF ( RC /= HCO_SUCCESS ) THEN
+                    CALL HCO_ERROR( 'ERROR 21', RC, THISLOC=LOC )
+                    RETURN
+                ENDIF
 
                 ! Pass array to diagnostics: ignore existing data if counter
                 ! is zero, add to it otherwise.
@@ -2034,7 +2122,7 @@ CONTAINS
                    ENDIF
                 ELSE
                    MSG = 'No array passed for updating ' // TRIM(ThisDiagn%cName)
-                   CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+                   CALL HCO_ERROR ( MSG, RC, THISLOC=LOC )
                    RETURN
                 ENDIF
 
@@ -2185,7 +2273,7 @@ CONTAINS
   END SUBROUTINE Diagn_UpdateDriver
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2258,7 +2346,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller: Initialization
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2270,12 +2358,13 @@ CONTAINS
     LOGICAL                        :: TimeToWrite
     LOGICAL                        :: FOUND, CF
     LOGICAL                        :: SKIPZERO
+    CHARACTER(LEN=255)             :: LOC
 
     !======================================================================
     ! Diagn_Get begins here!
     !======================================================================
-
     ! Init
+    LOC      = 'Diagn_Get (HCO_DIAGN_MOD.F90)'
     FLAG     =  HCO_FAIL
     RC       =  HCO_SUCCESS
     CF       = .FALSE.
@@ -2284,7 +2373,10 @@ CONTAINS
     ! Get collection number
     CALL DiagnCollection_DefineID( HcoState%Diagn, PS, RC, COL=COL, &
                                    ThisColl=ThisColl, HcoState=HcoState )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 22', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Set AutoFill flag
     AF = -1
@@ -2366,7 +2458,10 @@ CONTAINS
     ! Before returning container, make sure its data is ready for output.
     IF ( ASSOCIATED (DgnCont ) ) THEN
        CALL DiagnCont_PrepareOutput ( HcoState, DgnCont, RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 23', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
        FLAG = HCO_SUCCESS
 
        ! Increase number of times this container has been called by
@@ -2381,7 +2476,7 @@ CONTAINS
   END SUBROUTINE Diagn_Get
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2416,7 +2511,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  15 Mar 2015 - C. Keller: Initialization
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2426,12 +2521,14 @@ CONTAINS
     TYPE(DiagnCont),  POINTER  :: DgnCont
     INTEGER                    :: PS
     LOGICAL                    :: FND
+    CHARACTER(LEN=255)         :: LOC
 
     !======================================================================
     ! Diagn_TotalGet begins here!
     !======================================================================
 
     ! Init
+    LOC     = 'Diagn_TotalGet (HCO_DIAGN_MOD.F90)'
     RC      = HCO_FAIL
     Total   = 0.0_sp
     DgnCont => NULL()
@@ -2442,7 +2539,10 @@ CONTAINS
 
     ! Get collection number
     CALL DiagnCollection_DefineID( Diagn, PS, RC, COL=COL )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 24', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! If container name is given, search for diagnostics with
     ! the given name.
@@ -2481,7 +2581,7 @@ CONTAINS
   END SUBROUTINE Diagn_TotalGet
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2500,9 +2600,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller   - Initialization
-!  25 Jan 2016 - R. Yantosca - Bug fix for pgfortran compiler: Test if the
-!                              TMPCONT object is associated before deallocating
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2539,7 +2637,7 @@ CONTAINS
   END SUBROUTINE DiagnList_Cleanup
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2566,7 +2664,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller: Initialization
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2576,19 +2674,24 @@ CONTAINS
     TYPE(DiagnCollection), POINTER :: ThisColl
     INTEGER                        :: I, RC, PS
     LOGICAL                        :: InUse
+    CHARACTER(LEN=255)             :: LOC
 
     !======================================================================
     ! Diagn_AutoFillLevelDefined begins here!
     !======================================================================
 
     ! Initialize
+    LOC       = 'Diagn_AutoFillLevelDefined (HCO_DIAGN_MOD.F90)'
     IsDefined = .FALSE.
     ThisColl  => NULL()
 
     ! Get collection number
     CALL DiagnCollection_DefineID( Diagn, PS, RC, COL=COL, DEF=-1, &
             OKIfAll=.TRUE., InUse=InUse, ThisColl=ThisColl )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 25', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Nothing to do if collection is not in use
     IF ( .NOT. InUse ) RETURN
@@ -2615,7 +2718,7 @@ CONTAINS
   END FUNCTION Diagn_AutoFillLevelDefined
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2655,7 +2758,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller: Initialization
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2665,12 +2768,14 @@ CONTAINS
     TYPE(DiagnCollection), POINTER :: ThisColl
     INTEGER                        :: PS
     LOGICAL                        :: FOUND
+    CHARACTER(LEN=255)             :: LOC
 
     !======================================================================
     ! DiagnCollection_Get begins here!
     !======================================================================
 
     ! Init
+    LOC = 'DiagnCollection_Get (HCO_DIAGN_MOD.F90)'
     ThisColl => NULL()
     IF ( PRESENT(Prefix      ) ) Prefix       = ''
     IF ( PRESENT(InUse       ) ) InUse        = .FALSE.
@@ -2683,7 +2788,10 @@ CONTAINS
 
     ! Get collection number
     CALL DiagnCollection_DefineID( Diagn, PS, RC, COL=COL, InUse=FOUND, ThisColl=ThisColl )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 26', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     IF ( PRESENT(InUse) ) THEN
        InUse = FOUND
@@ -2709,7 +2817,7 @@ CONTAINS
   END SUBROUTINE DiagnCollection_Get
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2740,7 +2848,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller: Initialization
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2750,18 +2858,23 @@ CONTAINS
     TYPE(DiagnCollection), POINTER :: ThisColl
     INTEGER                        :: PS
     LOGICAL                        :: FOUND
+    CHARACTER(LEN=255)             :: LOC
 
     !======================================================================
     ! DiagnCollection_Set begins here!
     !======================================================================
-
+    
     ! Init
+    LOC      = 'DiagnCollection_Set (HCO_DIAGN_MOD.F90)'
     ThisColl => NULL()
     IF ( PRESENT(InUse    ) ) InUse     = .FALSE.
 
     ! Get collection number
     CALL DiagnCollection_DefineID( Diagn, PS, RC, COL=COL, InUse=FOUND, ThisColl=ThisColl )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 27', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     IF ( PRESENT(InUse) ) THEN
        InUse = FOUND
@@ -2782,7 +2895,7 @@ CONTAINS
   END SUBROUTINE DiagnCollection_Set
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2802,6 +2915,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller: Initialization
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2830,7 +2944,6 @@ CONTAINS
     DgnCont%SpaceDim =  2
 
     ! Default values for unit conversion factors
-    DgnCont%MassScal  = 1.0_hp
     DgnCont%AreaScal  = 1.0_hp
     DgnCont%ScaleFact = 1.0_hp
     DgnCont%AreaFlag  = 2
@@ -2862,7 +2975,7 @@ CONTAINS
   END SUBROUTINE DiagnCont_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2886,6 +2999,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller: Initialization
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2912,7 +3026,7 @@ CONTAINS
   END SUBROUTINE DiagnCont_Cleanup
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -2942,7 +3056,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller: Initialization
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -2978,13 +3092,16 @@ CONTAINS
     !-----------------------------------------------------------------------
     CALL DiagnCollection_Find( HcoState%Diagn, DgnCont%CollectionID, &
                                FOUND, RC, ThisColl=ThisColl )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 28', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! This should never happen
     IF ( .NOT. FOUND .OR. .NOT. ASSOCIATED(ThisColl) ) THEN
        WRITE(MSG,*) 'Diagnostics ', TRIM(DgnCont%cName), ' has invalid ', &
                     'collection ID of ', DgnCont%CollectionID
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+       CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
        RETURN
     ENDIF
 
@@ -2997,7 +3114,10 @@ CONTAINS
        IF ( DgnCont%SpaceDim == 2 ) THEN
           CALL HCO_ArrAssert( DgnCont%Arr2D, ThisColl%NX, &
                               ThisColl%NY,   RC            )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+          IF ( RC /= HCO_SUCCESS ) THEN
+              CALL HCO_ERROR( 'ERROR 29', RC, THISLOC=LOC )
+              RETURN
+          ENDIF
 
           ! Make sure it's zero
           DgnCont%Arr2D%Val = 0.0_sp
@@ -3005,7 +3125,10 @@ CONTAINS
        ELSEIF ( DgnCont%SpaceDim == 3 ) THEN
           CALL HCO_ArrAssert( DgnCont%Arr3D, ThisColl%NX, &
                               ThisColl%NY,   ThisColl%NZ, RC )
-          IF ( RC /= HCO_SUCCESS ) RETURN
+          IF ( RC /= HCO_SUCCESS ) THEN
+              CALL HCO_ERROR( 'ERROR 30', RC, THISLOC=LOC )
+              RETURN
+          ENDIF
 
           ! Make sure it's zero
           DgnCont%Arr3D%Val = 0.0_sp
@@ -3014,21 +3137,21 @@ CONTAINS
        ! Prompt warning
        MSG = 'Diagnostics counter is zero - return empty array: ' // &
              TRIM(DgnCont%cName)
-       CALL HCO_WARNING( HcoState%Config%Err, MSG, RC, THISLOC=LOC, WARNLEV=1 )
+       CALL HCO_WARNING( HcoState%Config%Err, MSG, RC, THISLOC=LOC, WARNLEV=2 )
        RETURN
     ENDIF
 
     !-----------------------------------------------------------------------
     ! Output data is calculated as:
-    ! out = saved / norm1 * mult1 * MassScal * AreaScal
+    ! out = saved / norm1 * mult1 * * AreaScal
     ! The normalization factor norm1 and multiplication factor mult1
     ! are used to average to the desired time interval, i.e. per
     ! second, per day, etc.
     ! Since all diagnostics are internally stored in units of [kg/m2]
     ! first convert to [kg/m2/s] and then multiply by the desired time
     ! averaging interval (e.g. seconds/hour to get kg/m2/s). Factors
-    ! MassScal and AreaScal convert mass and area to desired units, as
-    ! determined during initialization of the diagnostics.
+    ! AreaScal convert area to desired units, as determined during
+    ! initialization of the diagnostics.
     !-----------------------------------------------------------------------
 
     ! If the averaging is forced to the sum:
@@ -3051,7 +3174,10 @@ CONTAINS
 
        ! Get current month and year
        CALL HcoClock_Get( HcoState%Clock, cYYYY=YYYY, cMM=MM, RC=RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 31', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        ! Days per year
        IF ( (MOD(YYYY,4) == 0) .AND. (MOD(YYYY,400) /= 0) ) THEN
@@ -3084,7 +3210,7 @@ CONTAINS
        ELSE
           WRITE(MSG,*) 'Illegal time averaging of ', DgnCont%TimeAvg, &
                        ' for diagnostics ', TRIM(DgnCont%cName)
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
           RETURN
        ENDIF
 
@@ -3093,14 +3219,13 @@ CONTAINS
     ! Error trap
     IF ( norm1 <= 0.0_hp ) THEN
        MSG = 'Illegal normalization factor: ' // TRIM(DgnCont%cName)
-       CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+       CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
        RETURN
     ENDIF
 
     ! totscal is the combined scale factor
     totscal = mult1             &
             / norm1             &
-            * DgnCont%MassScal  &
             * DgnCont%AreaScal  &
             * DgnCont%ScaleFact
 
@@ -3165,7 +3290,7 @@ CONTAINS
   END SUBROUTINE DiagnCont_PrepareOutput
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3219,9 +3344,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller: Initialization
-!  25 Sep 2014 - C. Keller: Added Resume flag
-!  09 Apr 2015 - C. Keller: Can now search all collections
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -3232,12 +3355,14 @@ CONTAINS
     TYPE(DiagnCont),       POINTER     :: CurrCnt
     TYPE(DiagnCollection), POINTER     :: ThisColl
     LOGICAL                            :: IsMatch, InUse, Rsm
+    CHARACTER(LEN=255)                 :: LOC
 
     !======================================================================
     ! DiagnCont_Find begins here!
     !======================================================================
 
     ! Initialize
+    LOC      = 'DiagnCont_Find (HCO_DIAGN_MOD.F90)'
     FOUND    = .FALSE.
     CurrCnt  => NULL()
     ThisColl => NULL()
@@ -3246,7 +3371,10 @@ CONTAINS
     CALL DiagnCollection_DefineID( Diagn, PS, RC, COL=COL, Def=-1, &
                       InUse=InUse, OkIfAll=.TRUE., ThisColl=ThisColl )
 
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 32', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Leave if collection not in use
     IF ( .NOT. InUse ) RETURN
@@ -3349,7 +3477,7 @@ CONTAINS
   END SUBROUTINE DiagnCont_Find
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3381,6 +3509,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller: Initialization
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -3411,7 +3540,7 @@ CONTAINS
     IF ( DgnCont%SpaceDim /= 2 ) THEN
        MSG = 'Diagnostics is not 2D: ' // TRIM(DgnCont%cName)
        IF ( PRESENT(HcoState) ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
        ELSE
           CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
        ENDIF
@@ -3422,7 +3551,7 @@ CONTAINS
          SIZE(Trgt2D,2) /= ThisColl%NY       ) THEN
        MSG = 'Incorrect target array size: ' // TRIM(DgnCont%cName)
        IF ( PRESENT(HcoState) ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
        ELSE
           CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
        ENDIF
@@ -3431,7 +3560,10 @@ CONTAINS
 
     ! Define 2D array pointer
     CALL HCO_ArrInit( DgnCont%Arr2D, 0, 0, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 33', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Point to data
     DgnCont%Arr2D%Val => Trgt2D
@@ -3448,7 +3580,7 @@ CONTAINS
   END SUBROUTINE DiagnCont_Link_2D
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3481,6 +3613,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Dec 2013 - C. Keller: Initialization
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -3501,7 +3634,7 @@ CONTAINS
     IF ( DgnCont%AutoFill == 1 ) THEN
        MSG = 'Cannot link AutoFill container: ' // TRIM(DgnCont%cName)
        IF ( PRESENT(HcoState) ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
        ELSE
           CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
        ENDIF
@@ -3520,7 +3653,7 @@ CONTAINS
     IF ( DgnCont%SpaceDim /= 3 ) THEN
        MSG = 'Diagnostics is not 3D: ' // TRIM(DgnCont%cName)
        IF ( PRESENT(HcoState) ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
        ELSE
           CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
        ENDIF
@@ -3533,7 +3666,7 @@ CONTAINS
          SIZE(Trgt3D,3) /= ThisColl%NZ       ) THEN
        MSG = 'Incorrect target array size: ' // TRIM(DgnCont%cName)
        IF ( PRESENT(HcoState) ) THEN
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
        ELSE
           CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
        ENDIF
@@ -3542,7 +3675,10 @@ CONTAINS
 
     ! Define 3D array pointer
     CALL HCO_ArrInit( DgnCont%Arr3D, 0, 0, 0, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 34', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Point to data
     DgnCont%Arr3D%Val => Trgt3D
@@ -3560,7 +3696,7 @@ CONTAINS
   END SUBROUTINE DiagnCont_Link_3D
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3586,7 +3722,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 Aug 2014 - C. Keller - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -3594,7 +3730,7 @@ CONTAINS
 ! !ARGUMENTS:
 !
     TYPE(DiagnCollection), POINTER    :: ThisColl
-    CHARACTER(LEN=255)                :: MSG
+    CHARACTER(LEN=255)                :: MSG, LOC
     INTEGER                           :: RC, PS, nx, ny, nz
     REAL(sp)                          :: sm
 
@@ -3603,12 +3739,16 @@ CONTAINS
     ! ================================================================
 
     ! Initialize
+    LOC      = 'Diagn_Print (HCO_DIAGN_MOD.F90)'
     ThisColl => NULL()
 
     ! Get collection number
     CALL DiagnCollection_DefineID( HcoState%Diagn, PS, RC, &
        COL=Dgn%CollectionID, ThisColl=ThisColl, HcoState=HcoState )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 35', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     sm = 0.0_sp
     nx = 0
@@ -3669,7 +3809,7 @@ CONTAINS
   END SUBROUTINE Diagn_Print
 !EOC
 !------------------------------------------------------------------------------
-!          Harvard University Atmospheric Chemistry Modeling Group            !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3720,14 +3860,14 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  08 Jan 2015 - C. Keller   - Initial version
-!  06 Nov 2015 - C. Keller   - Added OutTimeStamp.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
 ! !ARGUMENTS:
 !
-    TYPE(DiagnCollection), POINTER :: NewCollection => NULL()
+    TYPE(DiagnCollection), POINTER :: NewCollection
     INTEGER                        :: PS
     CHARACTER(LEN=255)             :: MSG
     CHARACTER(LEN=255)             :: LOC = 'DiagnCollection_Create (hco_diagn_mod.F90)'
@@ -3775,7 +3915,7 @@ CONTAINS
              'stamp of ', OutTimeStamp, ' is invalid, must be one of: ', &
              HcoDiagnStart, HcoDiagnMid, HcoDiagnEnd
           IF ( PRESENT(HcoState) ) THEN
-             CALL HCO_ERROR(HcoState%Config%Err,MSG,RC,THISLOC=LOC)
+             CALL HCO_ERROR(MSG,RC,THISLOC=LOC)
           ELSE
              CALL HCO_ERROR(MSG,RC,THISLOC=LOC)
           ENDIF
@@ -3806,7 +3946,7 @@ CONTAINS
   END SUBROUTINE DiagnCollection_Create
 !EOC
 !------------------------------------------------------------------------------
-!          Harvard University Atmospheric Chemistry Modeling Group            !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3826,7 +3966,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  08 Jan 2015 - C. Keller - Initial version
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -3854,13 +3994,19 @@ CONTAINS
        ! Advance
        NextColl                => ThisColl%NextCollection
        ThisColl%NextCollection => NULL()
+
+       ! Free the memory given to ThisColl to avoid memory leaks
+       DEALLOCATE( ThisColl )
+
+       ! Point to the next collection in the list for the next iteration
        ThisColl                => NextColl
+
     ENDDO
 
   END SUBROUTINE DiagnCollection_Cleanup
 !EOC
 !------------------------------------------------------------------------------
-!          Harvard University Atmospheric Chemistry Modeling Group            !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -3899,6 +4045,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 Apr 2015 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -3939,7 +4086,7 @@ CONTAINS
        ELSE
           WRITE(MSG,*) 'Not allowed to select all collections ', PS
           IF ( PRESENT(HcoState) ) THEN
-             CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+             CALL HCO_ERROR ( MSG, RC, THISLOC=LOC )
           ELSE
              CALL HCO_ERROR ( MSG, RC, THISLOC=LOC )
           ENDIF
@@ -3951,7 +4098,10 @@ CONTAINS
 
        ! Try to find collection
        CALL DiagnCollection_Find( Diagn, PS, FOUND, RC, ThisColl=ThisColl )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 36', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
 
        ! Eventually fill argumnet
        IF ( PRESENT(InUse) ) THEN
@@ -3960,7 +4110,7 @@ CONTAINS
        ELSEIF ( .NOT. FOUND ) THEN
           WRITE(MSG,*) 'Diagnostics collection not defined: ', PS
           IF ( PRESENT(HcoState) ) THEN
-             CALL HCO_ERROR ( HcoState%Config%Err, MSG, RC, THISLOC=LOC )
+             CALL HCO_ERROR ( MSG, RC, THISLOC=LOC )
           ELSE
              CALL HCO_ERROR ( MSG, RC, THISLOC=LOC )
           ENDIF
@@ -3973,7 +4123,7 @@ CONTAINS
   END SUBROUTINE DiagnCollection_DefineID
 !EOC
 !------------------------------------------------------------------------------
-!          Harvard University Atmospheric Chemistry Modeling Group            !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4000,8 +4150,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 Apr 2015 - C. Keller   - Initial version
-!  10 Jul 2015 - R. Yantosca - Fixed minor issues in ProTeX header
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4047,7 +4196,7 @@ CONTAINS
   END SUBROUTINE DiagnCollection_Find
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4086,6 +4235,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  06 Aug 2015 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4106,7 +4256,10 @@ CONTAINS
     CALL GetExtOpt ( HcoState%Config, CoreNr, 'DiagnFreq', &
                      OptValChar=WriteFreq, FOUND=FOUND, RC=RC )
 
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 37', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Determine output frequency from given output frequency
     IF ( FOUND ) THEN
@@ -4155,7 +4308,7 @@ CONTAINS
                 TRIM(WriteFreq) // '. The output frequency must be one of '  // &
                 '`Hourly`, `Daily`, `Monthly`, `Annually`, `Always`, `End`,' // &
                 ' or the explicit YYYYMMDD HHMMSS interval (15 characters).'
-          CALL HCO_ERROR( HcoState%Config%Err, MSG, RC, THISLOC=LOC)
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC)
           RETURN
        ENDIF
 
@@ -4178,7 +4331,7 @@ CONTAINS
   END SUBROUTINE DiagnCollection_GetDefaultDelta
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4209,9 +4362,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  06 Aug 2015 - C. Keller   - Initial version
-!  30 Sep 2015 - C. Keller   - Bug fix: now set current hour from 0 to 24 to
-!                              make sure that it will be greater than previous
-!                              hour.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4236,12 +4387,18 @@ CONTAINS
     ! Get collection time interval
     CALL DiagnCollection_Get( HcoState%Diagn, PS, DeltaYMD=dymd, &
                    LastYMD=lymd, DeltaHMS=dhms, LastHMS=lhms, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 38', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Get current simulation date
     CALL HcoClock_Get( HcoState%Clock, IsLast=IsLast, &
                        sYYYY=YYYY,sMM=MM,sDD=DD,sH=h,sM=m,sS=s,RC=RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 39', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Check for last time step
     IF ( IsLast .AND. dymd == 99999999 .AND. dhms == 999999 ) THEN
@@ -4265,7 +4422,7 @@ CONTAINS
   END FUNCTION DiagnCollection_IsTimeToWrite
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4293,6 +4450,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  09 Sep 2015 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4311,7 +4469,10 @@ CONTAINS
     LastTimesSet = .FALSE.
 
     CALL DiagnCollection_Get( Diagn, PS, LastYMD=lymd, LastHMS=lhms, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 40', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Last time stamp is defined if either of the values is greater equal zero.
     IF ( lymd >= 0 .OR. lhms >= 0 ) LastTimesSet = .TRUE.
@@ -4319,7 +4480,7 @@ CONTAINS
   END FUNCTION DiagnCollection_LastTimesSet
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4334,7 +4495,7 @@ CONTAINS
 !
 ! !USES:
 !
-    USE inquireMod,        ONLY : findFreeLUN
+    USE HCO_inquireMod,    ONLY : findFreeLUN
     USE HCO_ExtList_Mod,   ONLY : CoreNr, GetExtOpt
 !
 ! !INPUT PARAMETERS:
@@ -4352,6 +4513,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Apr 2015 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4388,7 +4550,7 @@ CONTAINS
     ! Trap potential errors
     IF ( RC /= HCO_SUCCESS ) THEN
        MSG = 'Could not find "DiagnFile" in configuration file!'
-       CALL HCO_Error( HcoConfig%Err, MSG, RC, LOC )
+       CALL HCO_Error( MSG, RC, LOC )
        RETURN
     ENDIF
 
@@ -4428,7 +4590,7 @@ CONTAINS
        ! If the diagnostics file doesn't exist, then exit
        IF ( .NOT. EXISTS ) THEN
           MSG = 'Cannot read file - it does not exist: ' // TRIM(DiagnFile)
-          CALL HCO_ERROR( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
           RETURN
        ENDIF
 
@@ -4436,7 +4598,7 @@ CONTAINS
        OPEN ( LUN, FILE=TRIM( DiagnFile ), STATUS='OLD', IOSTAT=IOS )
        IF ( IOS /= 0 ) THEN
           MSG = 'Error opening ' // TRIM(DiagnFile)
-          CALL HCO_ERROR( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
           RETURN
        ENDIF
 
@@ -4448,7 +4610,7 @@ CONTAINS
   END SUBROUTINE DiagnFileOpen
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4469,7 +4631,7 @@ CONTAINS
 ! !USES:
 !
     USE HCO_CharTools_Mod
-    USE CHARPAK_Mod,       ONLY : STRREPL, STRSPLIT
+    USE HCO_CHARPAK_Mod,  ONLY : STRREPL, STRSPLIT
 !
 ! !INPUT PARAMETERS:
 !
@@ -4495,7 +4657,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Apr 2015 - C. Keller   - Initial version
-!  23 Feb 2016 - C. Keller   - Added lName and UnitName arguments
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4523,7 +4685,10 @@ CONTAINS
 
     ! Get next line
     CALL GetNextLine( LUN, LINE, EOF, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 41', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Leave here if end of file
     IF ( .NOT. EOF ) THEN
@@ -4537,7 +4702,7 @@ CONTAINS
        ! There must be at least 7 entries
        IF ( N < 7 ) THEN
           MSG = 'Diagnostics entries must have 7 elements: '// TRIM(LINE)
-          CALL HCO_ERROR( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
           RETURN
        ENDIF
 
@@ -4580,7 +4745,7 @@ CONTAINS
   END SUBROUTINE DiagnFileGetNext
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4599,6 +4764,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Apr 2015 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4607,7 +4773,7 @@ CONTAINS
   END SUBROUTINE DiagnFileClose
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4626,6 +4792,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  17 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -4636,13 +4803,16 @@ CONTAINS
        Diagn%HcoDiagnIDDefault = -999
        Diagn%HcoDiagnIDRestart = -999
        Diagn%HcoDiagnIDManual  = -999
+#ifdef ADJOINT
+       Diagn%HcoDiagnIDAdjoint = -999
+#endif
        Diagn%nnCollections     = 0
     ENDIF
 
   END SUBROUTINE DiagnBundle_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -4661,6 +4831,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  17 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC

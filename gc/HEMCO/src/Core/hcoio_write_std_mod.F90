@@ -1,19 +1,26 @@
+!BOC
+#if defined ( MODEL_GCCLASSIC ) || defined( MODEL_WRF ) || defined( MODEL_CESM ) || defined( HEMCO_STANDALONE )
+! The 'standard' HEMCO I/O module is used for:
+! - HEMCO Standalone (HEMCO_STANDALONE)
+! - GEOS-Chem 'Classic' (MODEL_GCCLASSIC)
+! - WRF-GC (MODEL_WRF)
+! - CESM-GC and CAM-Chem / HEMCO-CESM (MODEL_CESM)
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
-! !MODULE: hcoio_write_std_mod.F90
+! !MODULE: hcoio_write_mod.F90
 !
-! !DESCRIPTION: Module HCOIO\_write\_std\_mod.F90 is the HEMCO data output
+! !DESCRIPTION: Module HCOIO\_write\_mod.F90 is the HEMCO data output
 ! interface for the 'standard' model environment. It contains routines to
 ! write out diagnostics into a netCDF file.
 !\\
 !\\
 ! !INTERFACE:
 !
-MODULE HCOIO_WRITE_STD_MOD
+MODULE HCOIO_Write_Mod
 !
 ! !USES:
 !
@@ -22,11 +29,10 @@ MODULE HCOIO_WRITE_STD_MOD
 
   IMPLICIT NONE
   PRIVATE
-#if !defined(ESMF_)
 !
 ! !PUBLIC MEMBER FUNCTIONS:
 !
-  PUBLIC :: HCOIO_WRITE_STD
+  PUBLIC :: HCOIO_Write
 !
 ! !PRIVATE MEMBER FUNCTIONS:
 !
@@ -37,14 +43,8 @@ MODULE HCOIO_WRITE_STD_MOD
 !  at a later time.  They will be turned on when debugging & unit testing.
 !
 ! !REVISION HISTORY:
-!  04 May 2014 - C. Keller   - Initial version.
-!  11 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  11 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
-!  28 Jul 2014 - C. Keller   - Removed GC specific initialization calls and
-!                              moved to HEMCO core.
-!  05 Aug 2014 - C. Keller   - Added dummy interface for ESMF.
-!  03 Apr 2015 - C. Keller   - Added HcoDiagn_Write
-!  22 Feb 2016 - C. Keller   - Split off from hcoio_diagn_mod.F90
+!  04 May 2014 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -58,7 +58,7 @@ MODULE HCOIO_WRITE_STD_MOD
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -82,27 +82,27 @@ CONTAINS
 !\\
 ! !INTERFACE:
 !
-  SUBROUTINE HCOIO_write_std( HcoState, ForceWrite,  &
+  SUBROUTINE HCOIO_Write    ( HcoState, ForceWrite,  &
                               RC,          PREFIX,   UsePrevTime, &
                               OnlyIfFirst, COL                     )
 !
 ! !USES:
 !
-    USE m_netCDF_io_define
-    USE m_netcdf_io_read
-    USE m_netcdf_io_open
-    USE Ncdf_Mod,            ONLY : NC_Open
-    USE Ncdf_Mod,            ONLY : NC_Read_Time
-    USE Ncdf_Mod,            ONLY : NC_Read_Arr
-    USE Ncdf_Mod,            ONLY : NC_Create
-    USE Ncdf_Mod,            ONLY : NC_Close
-    USE Ncdf_Mod,            ONLY : NC_Var_Def
-    USE Ncdf_Mod,            ONLY : NC_Var_Write
-    USE Ncdf_Mod,            ONLY : NC_Get_RefDateTime
-    USE CHARPAK_Mod,         ONLY : TRANLC
+    USE HCO_m_netCDF_io_define
+    USE HCO_m_netcdf_io_read
+    USE HCO_m_netcdf_io_open
+    USE HCO_Ncdf_Mod,        ONLY : NC_Open
+    USE HCO_Ncdf_Mod,        ONLY : NC_Read_Time
+    USE HCO_Ncdf_Mod,        ONLY : NC_Read_Arr
+    USE HCO_Ncdf_Mod,        ONLY : NC_Create
+    USE HCO_Ncdf_Mod,        ONLY : NC_Close
+    USE HCO_Ncdf_Mod,        ONLY : NC_Var_Def
+    USE HCO_Ncdf_Mod,        ONLY : NC_Var_Write
+    USE HCO_Ncdf_Mod,        ONLY : NC_Get_RefDateTime
+    USE HCO_CHARPAK_Mod,     ONLY : TRANLC
     USE HCO_Chartools_Mod,   ONLY : HCO_CharParse
     USE HCO_State_Mod,       ONLY : HCO_State
-    USE JulDay_Mod,          ONLY : JulDay
+    USE HCO_JulDay_Mod,      ONLY : JulDay
     USE HCO_EXTLIST_MOD,     ONLY : GetExtOpt, CoreNr
     USE HCO_Types_Mod,       ONLY : DiagnCont
     USE HCO_Clock_Mod
@@ -126,29 +126,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  12 Sep 2013 - C. Keller   - Initial version
-!  11 Jun 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  11 Jun 2014 - R. Yantosca - Now use F90 freeform indentation
-!  19 Feb 2015 - C. Keller   - Added optional argument OnlyIfFirst
-!  23 Feb 2015 - R. Yantosca - Now make Arr1D REAL(sp) so that we can write
-!                              out lon & lat as float instead of double
-!  06 Nov 2015 - C. Keller   - Output time stamp is now determined from
-!                              variable OutTimeStamp.
-!  14 Jan 2016 - E. Lundgren - Create netcdf title out of filename prefix
-!  20 Jan 2016 - C. Keller   - Added options DiagnRefTime and DiagnNoLevDim.
-!  03 Mar 2016 - M. Sulprizio- Change netCDF format to netCDF-4
-!  26 Oct 2016 - R. Yantosca - Don't nullify local ptrs in declaration stmts
-!  21 Jan 2017 - C. Holmes   - Write all variable metadata in define mode, then
-!                              switch to data mode just once. Much faster
-!                              writing.
-!  17 Feb 2017 - C. Holmes   - Enable netCDF-4 compression
-!  08 Mar 2017 - R. Yantosca - Use unlimited time dimensions for netCDF files
-!  29 Dec 2017 - C. Keller   - Now accept writing multiple time slices into
-!                              same file.
-!  03 Jan 2018 - R. Yantosca - Added more metadata for COARDS compliance.
-!                              Also make TIME a 8-byte var to avoid roundoffs
-!  05 Jan 2018 - R. Yantosca - Now print out all index variables as REAL*8
-!  19 Oct 2018 - E. Lundgren - Disable writing multiple time slices to file
-!                              until move of restart write from HEMCO to HISTORY
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -229,7 +207,10 @@ CONTAINS
     ! Create current time stamps (to be used to archive time stamps)
     CALL HcoClock_Get( HcoState%Clock,sYYYY=YYYY,sMM=MM,&
                        sDD=DD,sH=h,sM=m,sS=s,RC=RC)
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     lymd = YYYY*10000 + MM*100 + DD
     lhms = h   *10000 + m *100 + s
 
@@ -264,7 +245,10 @@ CONTAINS
     NoLevDim = .FALSE.
     CALL GetExtOpt ( HcoState%Config, CoreNr, 'DiagnNoLevDim', &
                      OptValBool=NoLevDim, Found=Found, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
     IF ( Found ) THEN
        IF ( NoLevDim ) THEN
 
@@ -276,7 +260,10 @@ CONTAINS
              ! diagnostics container that contains content.
              CALL Diagn_Get ( HcoState, EOI, &
                               ThisDiagn, FLAG, RC, COL=PS )
-             IF ( RC /= HCO_SUCCESS ) RETURN
+             IF ( RC /= HCO_SUCCESS ) THEN
+                 CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+                 RETURN
+             ENDIF
              IF ( FLAG /= HCO_SUCCESS ) EXIT
 
              ! If this is a 3D diagnostics, we must write the level
@@ -310,7 +297,10 @@ CONTAINS
     ! (if not present) obtained from the HEMCO configuration file.
     CALL ConstructTimeStamp ( HcoState, PS, PrevTime, &
                               YYYY, MM, DD, h, m, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Write datetime
     WRITE( Yrs, '(i4.4)' ) YYYY
@@ -324,7 +314,10 @@ CONTAINS
        Pfx = PREFIX
     ELSE
        CALL DiagnCollection_Get( HcoState%Diagn, PS, PREFIX=Pfx, RC=RC )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 4', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
     ENDIF
     ncFile = TRIM(Pfx)//'.'//Yrs//Mts//Dys//hrs//mns//'.nc'
 
@@ -572,7 +565,10 @@ CONTAINS
     ! Check if reference time is given in HEMCO configuration file
     CALL GetExtOpt ( HcoState%Config, CoreNr, 'DiagnRefTime', &
                      OptValChar=RefTime, Found=Found, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 5', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Use specified reference time (if available)
     IF ( Found ) THEN
@@ -581,7 +577,10 @@ CONTAINS
        CALL NC_GET_REFDATETIME( timeunit, refYYYY, refMM, refDD, refh, &
                                 refm, refs, RC )
        refs = 0
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 6', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
        GMT      = REAL(MAX(refh,0),dp) + (REAL(MAX(refm,0),dp)/60.0_dp) + &
                   (REAL(MAX(refs,0),dp)/3600.0_dp)
        THISDAY  = refDD + ( GMT / 24.0_dp )
@@ -696,7 +695,10 @@ CONTAINS
        ! Get next diagnostics in list. This will return the next
        ! diagnostics container that contains content.
        CALL Diagn_Get ( HcoState, EOI, ThisDiagn, FLAG, RC, COL=PS )
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 7', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
        IF ( FLAG /= HCO_SUCCESS ) EXIT
 
        ! Only write diagnostics if this is the first Diagn_Get call for
@@ -807,10 +809,10 @@ CONTAINS
     ! Return
     RC = HCO_SUCCESS
 
-  END SUBROUTINE HCOIO_write_std
+  END SUBROUTINE HCOIO_Write
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -828,7 +830,7 @@ CONTAINS
 !
     USE HCO_State_Mod,       ONLY : HCO_State
     USE HCO_Clock_Mod
-    USE JULDAY_MOD
+    USE HCO_JULDAY_MOD
 !
 ! !INPUT/OUTPUT PARAMETERS:
 !
@@ -850,6 +852,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  06 Nov 2015 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -874,17 +877,26 @@ CONTAINS
     IF ( .NOT. PrevTime ) THEN
        CALL HcoClock_Get(HcoState%Clock,sYYYY=Y2,sMM=M2,&
                          sDD=D2,sH=h2,sM=n2,sS=s2,RC=RC)
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 8', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
     ELSE
        CALL HcoClock_Get(HcoState%Clock,pYYYY=Y2,pMM=M2,&
                          pDD=D2,pH=h2,pM=n2,pS=s2,RC=RC)
-       IF ( RC /= HCO_SUCCESS ) RETURN
+       IF ( RC /= HCO_SUCCESS ) THEN
+           CALL HCO_ERROR( 'ERROR 9', RC, THISLOC=LOC )
+           RETURN
+       ENDIF
     ENDIF
 
     ! Get timestamp location for this collection
     CALL DiagnCollection_Get( HcoState%Diagn, PS, OutTimeStamp=OutTimeStamp, &
                               LastYMD=LastYMD, LastHMS=LastHMS, RC=RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 10', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Determine dates to be used:
 
@@ -945,6 +957,5 @@ CONTAINS
 
   END SUBROUTINE ConstructTimeStamp
 !EOC
+END MODULE HCOIO_WRITE_MOD
 #endif
-END MODULE HCOIO_WRITE_STD_MOD
-

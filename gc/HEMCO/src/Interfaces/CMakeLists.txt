@@ -1,25 +1,19 @@
-add_library(HCOI STATIC EXCLUDE_FROM_ALL
-	hcoi_esmf_mod.F90
-	hcoi_standalone_mod.F90
-)
-target_link_libraries(HCOI
-	PUBLIC HCOX
-)
-target_compile_options(HCOI
-	PRIVATE
-		""
-		$<$<STREQUAL:"${CMAKE_Fortran_COMPILER_ID}","GNU">:-ffree-line-length-none>
-)
+# HEMCO/src/Interfaces/CMakeLists.txt
 
-if("hemco_standalone" IN_LIST GCCLASSIC_EXE_TARGETS)
-	add_executable(hemco_standalone
-		hemco_standalone.F90
-	)
-	target_link_libraries(hemco_standalone
-		PUBLIC HCOI
-	)
-	install(TARGETS hemco_standalone
-		RUNTIME DESTINATION ${RUNDIR}
-	)
+# Always build shared interface files
+add_subdirectory(Shared)
+
+# For now, always build standalone interface files
+add_subdirectory(Standalone)
+
+# if GCHP CTM:
+if(HEMCO_EXTERNAL_CONFIG AND MAPL_ESMF)
+    add_subdirectory(MAPL_ESMF)
 endif()
 
+# if org GEOS:
+# option (BUILD_GEOS_INTERFACE FALSE)
+
+if (BUILD_GEOS_INTERFACE)
+    add_subdirectory(GEOS)
+endif()

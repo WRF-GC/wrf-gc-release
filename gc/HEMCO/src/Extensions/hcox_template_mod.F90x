@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -32,10 +32,9 @@ MODULE HCOX_<yourname>_mod
   PUBLIC :: HCOX_<yourname>_Init
   PUBLIC :: HCOX_<yourname>_Final
 !
-! !PRIVATE MEMBER FUNCTIONS:
-!
 ! !REVISION HISTORY:
 !  19 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -71,7 +70,7 @@ MODULE HCOX_<yourname>_mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -102,6 +101,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  19 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -109,16 +109,19 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     TYPE(MyInst), POINTER :: Inst => NULL()
-    CHARACTER(LEN=255)    :: MSG
+    CHARACTER(LEN=255)    :: MSG, LOC
 
     !=================================================================
     ! HCOX_<yourname>_RUN begins here!
     !=================================================================
+    LOC = 'HCOX_<yourname>_RUN (HCOX_<yourname>_MOD.F90)'
 
     ! Enter
-    CALL HCO_ENTER( HcoState%Config%Err, &
-       'HCOX_<yourname>_Run (hcox_<yourname>_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 0', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Get pointer to this instance. Varible Inst contains all module
     ! variables for the current instance. The instance number is
@@ -126,7 +129,7 @@ CONTAINS
     CALL InstGet ( ExtState%<yourname>, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
        WRITE(MSG,*) 'Cannot find <yourname> instance Nr. ', ExtState%<yourname>
-       CALL HCO_ERROR(HcoState%Config%Err,MSG,RC)
+       CALL HCO_ERROR(MSG,RC)
        RETURN
     ENDIF
 
@@ -144,7 +147,7 @@ CONTAINS
   END SUBROUTINE HCOX_AeroCom_Run
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -176,6 +179,7 @@ CONTAINS
 
 ! !REVISION HISTORY:
 !  04 Jun 2015 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -184,35 +188,42 @@ CONTAINS
 !
     TYPE(MyInst), POINTER          :: Inst => NULL()
     INTEGER                        :: ExtNr, N
-    CHARACTER(LEN=255)             :: MSG
+    CHARACTER(LEN=255)             :: MSG, LOC
 
     !=================================================================
     ! HCOX_<yourname>_INIT begins here!
     !=================================================================
+    LOC = 'HCOX_<yourname>_INIT (HCOX_<yourname>_MOD.F90)'
 
     ! Extension Nr.
     ExtNr = GetExtNr( HcoState%Config%ExtList, TRIM(ExtName) )
     IF ( ExtNr <= 0 ) RETURN
 
     ! Enter
-    CALL HCO_ENTER( HcoState%Config%Err, 'HCOX_<yourname>_Init (hcox_<yourname>_mod.F90)', RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    CALL HCO_ENTER( HcoState%Config%Err, LOC, RC )
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 1', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Create instance for this simulation. Link instance number to the ExtState object
     ! for future reference to the instance. See InstCreate for more details.
     CALL InstCreate ( ExtNr, ExtState%<yourname>, Inst, RC )
     IF ( RC /= HCO_SUCCESS ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'Cannot create <yourname> instance', RC )
+       CALL HCO_ERROR ( 'Cannot create <yourname> instance', RC )
        RETURN
     ENDIF
 
     ! Get species IDs.
     CALL HCO_GetExtHcoID( HcoState, ExtNr, Inst%SpcIDs, Inst%SpcNames, Inst%nSpc, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 2', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! There must be at least one species
     IF ( Inst%nSpc == 0 ) THEN
-       CALL HCO_ERROR ( HcoState%Config%Err, 'No <yourname> species specified', RC )
+       CALL HCO_ERROR ( 'No <yourname> species specified', RC )
        RETURN
     ENDIF
 
@@ -221,16 +232,22 @@ CONTAINS
     ! Scaling_<SpcName>.
     CALL GetExtSpcVal( HcoState%Config, ExtNr, Inst%nSpc, &
                        Inst%SpcNames, 'Scaling', 1.0_sp, Inst%SpcScl, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 3', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Get species mask fields
     CALL GetExtSpcVal( HcoState%Config, ExtNr, Inst%nSpc, &
                        Inst%SpcNames, 'ScaleField', HCOX_NOSCALE, Inst%SpcScalFldNme, RC )
-    IF ( RC /= HCO_SUCCESS ) RETURN
+    IF ( RC /= HCO_SUCCESS ) THEN
+        CALL HCO_ERROR( 'ERROR 4', RC, THISLOC=LOC )
+        RETURN
+    ENDIF
 
     ! Add conversion factor from kg S to kg of emitted species
     DO N = 1, Inst%nSpc
-       Inst%SpcScl(N) = Inst%SpcScl(N) * HcoState%Spc(Inst%SpcIDs(N))%EmMW_g &
+       Inst%SpcScl(N) = Inst%SpcScl(N) * HcoState%Spc(Inst%SpcIDs(N))%MW_g &
                       * HcoState%Spc(Inst%SpcIDs(N))%MolecRatio / MW_S
     ENDDO
 
@@ -261,7 +278,7 @@ CONTAINS
   END SUBROUTINE HCOX_<yourname>_Init
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -280,6 +297,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  04 Jun 2015 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -291,7 +309,7 @@ CONTAINS
   END SUBROUTINE HCOX_<yourname>_Final
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -313,6 +331,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -345,7 +364,7 @@ CONTAINS
   END SUBROUTINE InstGet
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -375,6 +394,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -422,7 +442,7 @@ CONTAINS
   END SUBROUTINE InstCreate
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -442,26 +462,47 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
     INTEGER                     :: RC
-    TYPE(MyInst), POINTER       :: PrevInst => NULL()
-    TYPE(MyInst), POINTER       :: Inst     => NULL()
+    TYPE(MyInst), POINTER       :: PrevInst
+    TYPE(MyInst), POINTER       :: Inst
 
     !=================================================================
     ! InstRemove begins here!
     !=================================================================
+
+    ! Initialize
+    PrevInst => NULL()
+    Inst     => NULL()
 
     ! Get instance. Also archive previous instance.
     CALL InstGet ( Instance, Inst, RC, PrevInst=PrevInst )
 
     ! Instance-specific deallocation
     IF ( ASSOCIATED(Inst) ) THEN
-       IF ( ALLOCATED(Inst%SpcIDs       ) ) DEALLOCATE ( Inst%SpcIDs        )
-       IF ( ALLOCATED(Inst%SpcScl       ) ) DEALLOCATE ( Inst%SpcScl        )
-       IF ( ALLOCATED(Inst%SpcNames     ) ) DEALLOCATE ( Inst%SpcNames      )
-       IF ( ALLOCATED(Inst%SpcScalFldNme) ) DEALLOCATE ( Inst%SpcScalFldNme )
+
+       !---------------------------------------------------------------------
+       ! Deallocate fields of Inst before popping off from the list
+       ! in order to avoid memory leaks (Bob Yantosca (17 Aug 2022)
+       !---------------------------------------------------------------------
+       IF ( ALLOCATED( Inst%SpcIDs ) ) THEN
+          DEALLOCATE ( Inst%SpcIDs )
+       ENDIF
+
+       IF ( ALLOCATED( Inst%SpcScl ) ) THEN
+          DEALLOCATE ( Inst%SpcScl )
+       ENDIF
+
+       IF ( ALLOCATED( Inst%SpcNames ) ) THEN
+          DEALLOCATE ( Inst%SpcNames )
+       ENDIF
+
+       IF ( ALLOCATED( Inst%SpcScalFldNme ) ) THEN
+          DEALLOCATE( Inst%SpcScalFldNme  )
+       ENDIF
 
        ! ----------------------------------------------------------------
        ! Type specific initialization statements follow below
@@ -477,8 +518,11 @@ CONTAINS
           AllInst => Inst%NextInst
        ENDIF
        DEALLOCATE(Inst)
-       Inst => NULL()
     ENDIF
+
+    ! Free pointers before exiting
+    PrevInst => NULL()
+    Inst     => NULL()
 
    END SUBROUTINE InstRemove
 !EOC

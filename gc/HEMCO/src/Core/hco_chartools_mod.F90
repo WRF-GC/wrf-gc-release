@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !!BOP
 !
@@ -34,13 +34,7 @@ MODULE HCO_CharTools_Mod
 !
 ! !REVISION HISTORY:
 !  18 Dec 2013 - C. Keller   - Initialization
-!  01 Jul 2014 - R. Yantosca - Now use F90 free-format indentation
-!  01 Jul 2014 - R. Yantosca - Cosmetic changes in ProTeX headers
-!  11 Jul 2014 - C. Keller   - Characters added
-!  17 Oct 2014 - C. Keller   - Added parser and tokens ROOT, MET, and RES.
-!  12 Aug 2015 - R. Yantosca - Add new value of DEF_MET for MERRA2
-!  12 Aug 2015 - R. Yantosca - Add new value of DEF_RES for 0.5 x 0.625 grids
-!  20 Sep 2015 - C. Keller   - Moved tokens to hco_extlist_mod.F90
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -65,7 +59,7 @@ MODULE HCO_CharTools_Mod
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -81,7 +75,7 @@ CONTAINS
 !
 ! !USES:
 !
-    USE CharPak_Mod,  ONLY : StrSplit
+    USE HCO_CharPak_Mod,  ONLY : StrSplit
 !
 ! !INPUT PARAMETERS:
 !
@@ -100,6 +94,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Sep 2013 - C. Keller - Initial version (update)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -151,7 +146,7 @@ CONTAINS
   END SUBROUTINE HCO_CharSplit_R8
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -167,7 +162,7 @@ CONTAINS
 !
 ! !USES:
 !
-    USE CharPak_Mod,  ONLY : StrSplit
+    USE HCO_CharPak_Mod,  ONLY : StrSplit
 !
 ! !INPUT PARAMETERS:
 !
@@ -186,6 +181,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Sep 2013 - C. Keller - Initial version (update)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -236,7 +232,7 @@ CONTAINS
   END SUBROUTINE HCO_CharSplit_R4
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -252,7 +248,7 @@ CONTAINS
 !
 ! !USES:
 !
-    USE CharPak_Mod, ONLY : StrSplit
+    USE HCO_CharPak_Mod, ONLY : StrSplit
 !
 ! !INPUT PARAMETERS:
 !
@@ -271,6 +267,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Sep 2013 - C. Keller - Initial version (update)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -321,7 +318,7 @@ CONTAINS
   END SUBROUTINE HCO_CharSplit_INT
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -353,6 +350,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Sep 2013 - C. Keller - Initial version (update)
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -386,7 +384,7 @@ CONTAINS
   END SUBROUTINE HCO_CharMatch
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -445,9 +443,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  01 Oct 2014 - C. Keller - Initial version
-!  20 Sep 2015 - C. Keller - Tokens can now be any option setting set in the
-!                            HEMCO configuration file.
-!  07 Jul 2017 - C. Keller - Extended list of token delimiters.
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -667,7 +663,7 @@ CONTAINS
   END SUBROUTINE HCO_CharParse
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -683,7 +679,7 @@ CONTAINS
 !
 ! !USES:
 !
-    USE CharPak_Mod, ONLY : StrSplit
+    USE HCO_CharPak_Mod, ONLY : StrSplit
 !
 ! !INPUT PARAMETERS:
 !
@@ -699,6 +695,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  16 Mar 2015 - C. Keller - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -731,7 +728,7 @@ CONTAINS
   END SUBROUTINE HCO_GetBase
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -755,6 +752,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  23 Oct 2012 - C. Keller - Initial Version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 
@@ -763,7 +761,7 @@ CONTAINS
   END FUNCTION IsInWord
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -793,6 +791,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  09 Jul 2014 - C. Keller - Initial Version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -832,7 +831,7 @@ CONTAINS
   END FUNCTION NextCharPos
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -863,6 +862,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  10 Apr 2015 - C. Keller - Initial Version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -914,7 +914,7 @@ CONTAINS
   END SUBROUTINE GetNextLine
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -926,6 +926,10 @@ CONTAINS
 ! !INTERFACE:
 !
   SUBROUTINE HCO_ReadLine( LUN, LINE, EOF, RC )
+!
+! !USES:
+!
+    USE Hco_CharPak_Mod, ONLY : CStrip
 !
 ! !INPUT PARAMETERS:
 !
@@ -939,14 +943,14 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  18 Sep 2013 - C. Keller - Initial version (adapted from B. Yantosca's code)
-!  15 Jul 2014 - R. Yantosca - Remove dependency on routine IOERROR
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
 !
 ! !LOCAL VARIABLES:
 !
-    INTEGER             :: IOS
+    INTEGER             :: IOS, C
     CHARACTER(LEN=255)  :: MSG
     CHARACTER(LEN=4095) :: DUM
 
@@ -990,6 +994,14 @@ CONTAINS
     ELSE
        LINE = DUM(1:LEN(LINE))
     ENDIF
+
+    ! Strip tabs and other non-printing characters but keep spaces
+    CALL CStrip( Line, KeepSpaces=.TRUE. )
+
+    ! Skip any comments at the end of a line (unless the 
+    ! comment character # is in the first column)
+    C = INDEX( Line, '#' )
+    IF ( C > 1 ) Line = Line(1:C-1)
 
   END SUBROUTINE HCO_ReadLine
 !EOC

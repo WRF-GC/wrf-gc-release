@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -13,9 +13,7 @@
 !
 ! !REVISION HISTORY:
 !  12 May 2017 - C. Keller   - Modified for use in HEMCO: use hp instead of realkind.
-!  16 May 2017 - R. Yantosca - Do not use SIND, COSD, TAND functions, because
-!                              these are non-standard (Gfortran chokes)
-!  16 May 2017 - R. Yantosca - Replaced TABs with spaces, cosmetic changes
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 
@@ -32,10 +30,6 @@ module interpreter
  !
  !use functp_precision
   use hco_error_mod
-
-  ! Need this to convert degrees to radians, because SIND, COSD, etc
-  ! functions are not supported in GNU Fortran (bmy, 5/16/17)
-  use PhysConstants, ONLY : PI_180
 
   implicit none
 
@@ -59,6 +53,10 @@ module interpreter
   real(kind=hp),       dimension(:), pointer,     private :: pdata
   real(kind=hp),       dimension(:), pointer,     private :: number
   character(len=5),                               public  :: statusflagparser = 'ok'
+
+  ! Need this to convert degrees to radians, because SIND, COSD, etc
+  ! functions are not supported in GNU Fortran (bmy, 5/16/17)
+  real(kind=hp),       parameter,                 private :: PI_180 = 3.14159265358979323e+0
 
 contains
 

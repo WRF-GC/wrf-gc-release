@@ -1,5 +1,5 @@
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -51,6 +51,7 @@ MODULE HCO_TIMESHIFT_MOD
 !
 ! !REVISION HISTORY:
 !  29 Feb 2016 - C. Keller   - Initial version
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -60,7 +61,7 @@ MODULE HCO_TIMESHIFT_MOD
 CONTAINS
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -91,7 +92,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  29 Feb 2016 - C. Keller - Initial version
-!
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -102,7 +103,7 @@ CONTAINS
     CHARACTER(LEN=255)             :: MSG
     CHARACTER(LEN=255)             :: iShift
     CHARACTER(LEN=255)             :: tShift
-    CHARACTER(LEN=255), PARAMETER  :: LOC = 'TimeShift_Set (hco_tShift_mod.F90)'
+    CHARACTER(LEN=255), PARAMETER  :: LOC = 'TimeShift_Set (hco_timeshift_mod.F90)'
 
     !======================================================================
     ! TimeShift_Set begins here!
@@ -173,7 +174,7 @@ CONTAINS
             ( Dta%ncDys(1) == 1 .AND. Dta%ncDys(2) == 7 ) ) THEN
           WRITE(MSG,*) 'Time shift not supported for weekday data: ', &
              TRIM(Dta%ncFile)
-          CALL HCO_ERROR( HcoConfig%Err, MSG, RC, THISLOC=LOC )
+          CALL HCO_ERROR( MSG, RC, THISLOC=LOC )
           RETURN
        ENDIF
     ENDIF
@@ -190,7 +191,7 @@ CONTAINS
   END SUBROUTINE TimeShift_Set
 !EOC
 !------------------------------------------------------------------------------
-!                  Harvard-NASA Emissions Component (HEMCO)                   !
+!                   Harmonized Emissions Component (HEMCO)                    !
 !------------------------------------------------------------------------------
 !BOP
 !
@@ -208,7 +209,7 @@ CONTAINS
 !
 ! !USES:
 !
-    USE Julday_Mod
+    USE HCO_Julday_Mod
     USE HCO_TYPES_MOD,    ONLY : ListCont
 !
 ! !INPUT/OUTPUT PARAMETERS:
@@ -224,8 +225,7 @@ CONTAINS
 !
 ! !REVISION HISTORY:
 !  29 Feb 2016 - C. Keller - Initial version
-!  19 Nov 2018 - C. Keller - Add option TimeShiftCap
-!
+!  See https://github.com/geoschem/hemco for complete history
 !EOP
 !------------------------------------------------------------------------------
 !BOC
@@ -239,7 +239,7 @@ CONTAINS
     REAL(dp)                       :: TimeShift, DAY, UTC, JD
 
     CHARACTER(LEN=255)             :: MSG
-    CHARACTER(LEN=255), PARAMETER  :: LOC = 'TimeShift_Apply (hco_tShift_mod.F90)'
+    CHARACTER(LEN=255), PARAMETER  :: LOC = 'TimeShift_Apply (hco_timeshift_mod.F90)'
 
     !======================================================================
     ! TimeShift_Apply begins here!

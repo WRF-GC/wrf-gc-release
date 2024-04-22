@@ -6,7 +6,7 @@
 ! !MODULE: global_Br_mod.F90
 !
 ! !DESCRIPTION: Module GLOBAL\_Br\_MOD contains variables and routines for
-!  reading the global monthly mean Br concentration from disk.
+!  storing the global monthly mean Br concentration evaluated from HEMCO.
 !\\
 !\\
 ! !INTERFACE:
@@ -57,20 +57,6 @@ MODULE GLOBAL_Br_MOD
 !EOP
 !------------------------------------------------------------------------------
 !BOC
-!
-! !PRIVATE TYPES:
-!
-  ! Pointers to fields in the HEMCO data structure.
-  ! These need to be declared REAL(f4), aka REAL*4.
-  ! NOTE: These are globally SAVEd variables so we can
-  ! nullify these in the declaration statement (bmy, 4/29/16)
-  REAL(f4), POINTER :: Br_GC     (:,:,:) => NULL()
-  REAL(f4), POINTER :: BrO_GC    (:,:,:) => NULL()
-  REAL(f4), POINTER :: Br_GMI    (:,:,:) => NULL()
-  REAL(f4), POINTER :: BrO_GMI   (:,:,:) => NULL()
-  REAL(f4), POINTER :: Br_TOMCAT (:,:,:) => NULL()
-  REAL(f4), POINTER :: BrO_TOMCAT(:,:,:) => NULL()
-  REAL(f4), POINTER :: JBrO      (:,:,:) => NULL()
 
 CONTAINS
 !EOC
@@ -81,9 +67,10 @@ CONTAINS
 !
 ! !IROUTINE: get_global_Br
 !
-! !DESCRIPTION: Subroutine GET\_GLOBAL\_Br reads global Br from
-!  binary punch files stored in the /data/ctm/GEOS\_MEAN directory.  This Br
-!  data is needed as oxidant for mercury chemistry.
+! !DESCRIPTION: Subroutine GET\_GLOBAL\_Br evaluates global Br from
+!  data stored in HEMCO, including application of any masks or scaling
+!  set in the HEMCO configuration file. This Br data is needed as oxidant
+!  for mercury chemistry.
 !\\
 !\\
 ! !INTERFACE:
@@ -94,8 +81,7 @@ CONTAINS
 !
     USE ErrCode_Mod
     USE ERROR_MOD,          ONLY : ERROR_STOP
-    USE HCO_INTERFACE_MOD,  ONLY : HcoState
-    USE HCO_EmisList_Mod,   ONLY : HCO_GetPtr
+    USE HCO_Utilities_GC_Mod, ONLY : HCO_GC_EvalFld
     USE Input_Opt_Mod,      ONLY : OptInput
     USE OCEAN_MERCURY_MOD,  ONLY : LGCBROMINE     !eds 4/19/12
     USE State_Met_Mod,      ONLY : MetState
@@ -111,16 +97,6 @@ CONTAINS
 ! !OUTPUT PARAMETERS:
 !
     INTEGER,        INTENT(OUT) :: RC          ! Success or failure?
-!
-! !REMARKS:
-!  THIS IS A NEW VERSION OF THIS SUBROUTINE WHICH COMBINES Br CONCENTRATIONS
-!  FROM MULTIPLE DATA SOURCES
-!                                                                             .
-!  ##########################################################################
-!  #####    NOTE: BINARY PUNCH INPUT IS BEING PHASED OUT.  THIS DATA    #####
-!  #####    WILL EVENTUALLY BE READ IN FROM netCDF FILES VIA HEMCO!     #####
-!  #####       -- Bob Yantosca (05 Mar 2015)                            #####
-!  ##########################################################################
 !
 ! !REVISION HISTORY:
 !  05 Jul 2006 - C. Holmes - Initial version
@@ -169,159 +145,123 @@ CONTAINS
     IF ( LGCBROMINE ) THEN
 
        !-----------------------------------------------------------------
-       ! Read Br from GEOS-Chem
+       ! Evaluate Br_GC from GEOS-Chem to set Br_MERGE (trop+strat)
        !-----------------------------------------------------------------
-
-       ! Get a pointer to the the GEOS-Chem Br from HEMCO (bmy, 3/11/15)
-       CALL HCO_GetPtr( HcoState, 'Br_GC', Br_GC,  RC )
-
-       ! Trap potential errors
+       CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'Br_GC', Br_MERGE, RC )
        IF ( RC /= GC_SUCCESS ) THEN
-          ErrMsg = 'Cannot get pointer to HEMCO field Br_GC!'
+          ErrMsg = 'Could not find Br_GC in HEMCO data list!'
           CALL GC_Error( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 
-       ! Convert ppbv -> pptv
-       Br_TROP  = Br_GC * 1e+3_fp
+       ! Convert v/v -> pptv
+       Br_MERGE = Br_MERGE * 1e+12_fp
 
        !-----------------------------------------------------------------
-       ! Read BrO from GEOS-Chem
+       ! Evaluate BrO_GC from GEOS-Chem to set BrO_MERGE (trop+strat)
        !-----------------------------------------------------------------
-
-       ! Get a pointer to the GEOS-Chem BrO from HEMCO (bmy, 3/11/15)
-       CALL HCO_GetPtr( HcoState, 'BrO_GC', BrO_GC, RC )
-
-       ! Trap potential errors
+       CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'BrO_GC', BrO_MERGE, RC )
        IF ( RC /= GC_SUCCESS ) THEN
-          ErrMsg = 'Cannot get pointer to HEMCO field BrO_GC!'
+          ErrMsg = 'Could not find BrO_GC in HEMCO data list!'
           CALL GC_Error( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 
-       ! Convert ppbv -> pptv
-       BrO_TROP  = BrO_GC * 1e+3_fp
+       ! Convert v/v -> pptv
+       BrO_MERGE = BrO_MERGE * 1e+12_fp
 
     ELSE
 
        !-----------------------------------------------------------------
-       ! Read Br from pTOMCAT biogenic bromocarbons
+       ! Evaluate Br from pTOMCAT biogenic bromocarbons [pptv]
        !-----------------------------------------------------------------
-
-       ! Get a pointer to the TOMCAT Br from HEMCO (bmy, 3/11/15)
-       CALL HCO_GetPtr( HcoState, 'Br_TOMCAT', Br_TOMCAT, RC )
-
-       ! Trap potential errors
+       CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'Br_TOMCAT', Br_TROP, RC )
        IF ( RC /= GC_SUCCESS ) THEN
-          ErrMsg = 'Cannot get pointer to HEMCO field Br_TOMCAT!'
+          ErrMsg = 'Could not find Br_TOMCAT in HEMCO data list!'
           CALL GC_Error( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 
-       ! Store in Br_TROP array [pptv]
-       Br_TROP = BR_TOMCAT
-
        !-----------------------------------------------------------------
-       ! Read BrO from pTOMCAT biogenic bromocarbons
+       ! Evaluate BrO from pTOMCAT biogenic bromocarbons [pptv]
        !-----------------------------------------------------------------
-
-       ! Get a pointer to the TOMCAT Br from HEMCO (bmy, 3/11/15)
-       CALL HCO_GetPtr( HcoState, 'BrO_TOMCAT', BrO_TOMCAT, RC )
-
-       ! Trap potential errors
+       CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'BrO_TOMCAT', Br_TROP, RC )
        IF ( RC /= GC_SUCCESS ) THEN
-          ErrMsg = 'Cannot get pointer to HEMCO field BrO_TOMCAT!'
+          ErrMsg = 'Could not find BrO_TOMCAT in HEMCO data list!'
           CALL GC_Error( ErrMsg, RC, ThisLoc )
           RETURN
        ENDIF
 
-       ! Store in BrO_TROP array [pptv]
-       BrO_TROP = BRO_TOMCAT
+       !-----------------------------------------------------------------
+       ! Evaluate Br from GMI for stratosphere [pptv]
+       !-----------------------------------------------------------------
+       CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'Br_GMI', Br_STRAT, RC )
+       IF ( RC /= GC_SUCCESS ) THEN
+          ErrMsg = 'Could not find Br_GMI in HEMCO data list!'
+          CALL GC_Error( ErrMsg, RC, ThisLoc )
+          RETURN
+       ENDIF
+
+       !-----------------------------------------------------------------
+       ! Evaluate BrO from GMI for stratosphere [pptv]
+       !-----------------------------------------------------------------
+       CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'BrO_GMI', BrO_STRAT, RC )
+       IF ( RC /= GC_SUCCESS ) THEN
+          ErrMsg = 'Could not find BrO_GMI in HEMCO data list!'
+          CALL GC_Error( ErrMsg, RC, ThisLoc )
+          RETURN
+       ENDIF
+
+       !-----------------------------------------------------------------
+       ! Use pTOMCAT exclusively in the troposphere.
+       ! In the stratosphere, use the greater value from either COMBO or
+       ! the tropospheric model. COMBO source gases include CH3Br and
+       ! halons, while pTOMCAT includes CH3Br and shorter-lived gases.
+       !-----------------------------------------------------------------
+       BR_MERGE  = BR_TROP
+       BRO_MERGE = BRO_TROP
+
+       !$OMP PARALLEL DO        &
+       !$OMP DEFAULT( SHARED )  &
+       !$OMP PRIVATE( I, J, TPL )
+       DO J=1, State_Grid%NY
+       DO I=1, State_Grid%NX
+
+          ! First layer in the stratosphere
+          TPL = State_Met%TropLev(I,J)
+
+          BR_MERGE(I,J,TPL:State_Grid%NZ) = MERGE(      &
+               BR_STRAT(I,J,TPL:State_Grid%NZ),         &
+               BR_TROP(I,J,TPL:State_Grid%NZ),          &
+               MASK = BR_STRAT(I,J,TPL:State_Grid%NZ) > &
+                      BR_TROP(I,J,TPL:State_Grid%NZ) )
+
+          BRO_MERGE(I,J,TPL:State_Grid%NZ) = MERGE(     &
+               BRO_STRAT(I,J,TPL:State_Grid%NZ),        &
+               BRO_TROP(I,J,TPL:State_Grid%NZ),         &
+               MASK = BR_STRAT(I,J,TPL:State_Grid%NZ) > &
+                      BR_TROP(I,J,TPL:State_Grid%NZ) )
+
+       ENDDO
+       ENDDO
+       !$OMP END PARALLEL DO
 
     ENDIF
 
     !-----------------------------------------------------------------
-    ! Read Br from GMI for stratosphere
+    ! Evaluate J_BrO
     !-----------------------------------------------------------------
-
-    ! Get a pointer to the GMI Br from HEMCO (bmy, 3/11/15)
-    CALL HCO_GetPtr( HcoState, 'Br_GMI', Br_GMI, RC )
-
-    ! Trap potential errors
+    CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'JBrO', J_BrO, RC )
     IF ( RC /= GC_SUCCESS ) THEN
-       ErrMsg = 'Cannot get pointer to HEMCO field Br_GMI!'
+       ErrMsg = 'Could not find JBrO in HEMCO data list!'
        CALL GC_Error( ErrMsg, RC, ThisLoc )
        RETURN
     ENDIF
 
-    ! Store in BrO_TROP array [pptv]
-    Br_STRAT = Br_GMI
-
-    !-----------------------------------------------------------------
-    ! Read BrO from GMI for stratosphere
-    !-----------------------------------------------------------------
-
-    ! Get a pointer to the GMI Br from HEMCO (bmy, 3/11/15)
-    CALL HCO_GetPtr( HcoState, 'BrO_GMI', BrO_GMI, RC )
-
-    ! Trap potential errors
-    IF ( RC /= GC_SUCCESS ) THEN
-       ErrMsg = 'Cannot get pointer to HEMCO field BrO_GMI!'
-       CALL GC_Error( ErrMsg, RC, ThisLoc )
-       RETURN
+    ! Only set values up to max chemistry level
+    IF ( State_Grid%MaxChemLev < State_Grid%NZ ) THEN
+       J_BrO(:,:,State_Grid%MaxChemLev+1:State_Grid%NZ) = 0e+0_fp 
     ENDIF
-
-    ! Store in BrO_TROP array [pptv]
-    BrO_STRAT = BrO_GMI
-
-    !-----------------------------------------------------------------
-    ! Use pTOMCAT or GEOS-Chem exclusively in the troposphere.
-    ! In the stratosphere, use the greater value from either COMBO or
-    ! the tropospheric model. COMBO source gases include CH3Br and
-    ! halons, while pTOMCAT and GEOS-Chem includes CH3Br and
-    ! shorter-lived gases.
-    !-----------------------------------------------------------------
-
-    BR_MERGE  = BR_TROP
-    BRO_MERGE = BRO_TROP
-
-    !$OMP PARALLEL DO        &
-    !$OMP DEFAULT( SHARED )  &
-    !$OMP PRIVATE( I, J, TPL )
-    DO J=1, State_Grid%NY
-    DO I=1, State_Grid%NX
-
-       ! First layer in the stratosphere
-       TPL = State_Met%TropLev(I,J)
-
-       BR_MERGE(I,J,TPL:State_Grid%NZ) = MERGE(       &
-             BR_STRAT(I,J,TPL:State_Grid%NZ),         &
-             BR_TROP(I,J,TPL:State_Grid%NZ),          &
-             MASK = BR_STRAT(I,J,TPL:State_Grid%NZ) > &
-                    BR_TROP(I,J,TPL:State_Grid%NZ) )
-
-       BRO_MERGE(I,J,TPL:State_Grid%NZ) = MERGE(      &
-             BRO_STRAT(I,J,TPL:State_Grid%NZ),        &
-             BRO_TROP(I,J,TPL:State_Grid%NZ),         &
-             MASK = BR_STRAT(I,J,TPL:State_Grid%NZ) > &
-                    BR_TROP(I,J,TPL:State_Grid%NZ) )
-
-    ENDDO
-    ENDDO
-    !$OMP END PARALLEL DO
-
-    ! Get a pointer to the GMI Br from HEMCO (bmy, 3/11/15)
-    CALL HCO_GetPtr( HcoState, 'JBrO', JBrO, RC )
-
-    ! Trap potential errors
-    IF ( RC /= GC_SUCCESS ) THEN
-       ErrMsg = 'Cannot get pointer to HEMCO field JBrO!'
-       CALL GC_Error( ErrMsg, RC, ThisLoc )
-       RETURN
-    ENDIF
-
-    ! Assign data from ARRAY2 to the module variable BR
-    J_BrO(:,:,1:State_Grid%MaxChemLev) = JBrO(:,:,1:State_Grid%MaxChemLev)
 
   END SUBROUTINE GET_GLOBAL_Br
 !EOC
@@ -404,7 +344,7 @@ CONTAINS
     !-------------------------------------
 
     ! Allocate J_BrO array
-    ALLOCATE( J_BrO( State_Grid%NX, State_Grid%NY, State_Grid%MaxChemLev ), &
+    ALLOCATE( J_BrO( State_Grid%NX, State_Grid%NY, State_Grid%NZ ), &
               STAT=RC )
     CALL GC_CheckVar( 'global_br_mod.F:J_BrO', 0, RC )
     IF ( RC /= GC_SUCCESS ) RETURN
@@ -507,15 +447,6 @@ CONTAINS
        CALL GC_CheckVar( 'global_br_mod.F90:BrO_MERGE ', 2, RC )
        RETURN
     ENDIF
-
-    ! Free pointers
-    Br_GC      => NULL()
-    BrO_GC     => NULL()
-    Br_GMI     => NULL()
-    BrO_GMI    => NULL()
-    Br_TOMCAT  => NULL()
-    BrO_TOMCAT => NULL()
-    JBrO       => NULL()
 
   END SUBROUTINE CLEANUP_GLOBAL_Br
 !EOC

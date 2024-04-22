@@ -52,19 +52,16 @@ CONTAINS
 !
     USE ErrCode_Mod
     USE ERROR_MOD
-    USE HCO_EMISLIST_MOD,  ONLY : HCO_GetPtr
     USE HCO_Error_Mod
-    USE HCO_INTERFACE_MOD, ONLY : HcoState
+    USE HCO_Utilities_GC_Mod, ONLY : HCO_GC_EvalFld
     USE Input_Opt_Mod,     ONLY : OptInput
+    USE PhysConstants,     ONLY : AIRMW
     USE State_Chm_Mod,     ONLY : ChmState, Ind_
     USE State_Diag_Mod,    ONLY : DgnState
     USE State_Grid_Mod,    ONLY : GrdState
     USE State_Met_Mod,     ONLY : MetState
-    USE UnitConv_Mod,      ONLY : Convert_Spc_Units
-#if defined( MODEL_GEOS )
-    USE PhysConstants,     ONLY : AIRMW
     USE TIME_MOD,          ONLY : GET_TS_DYN
-#endif
+    USE UnitConv_Mod,      ONLY : Convert_Spc_Units
 !
 ! !INPUT PARAMETERS:
 !
@@ -100,25 +97,17 @@ CONTAINS
 ! !LOCAL VARIABLES:
 !
     ! Scalars
-    INTEGER             :: I, J, L, PBL_TOP
+    INTEGER             :: I, J, L, PBL_TOP, id_CH4, DT
     CHARACTER(LEN=63)   :: OrigUnit
-    REAL(fp)            :: CH4
+    REAL(fp)            :: CH4, dCH4
     LOGICAL             :: FOUND
-#if defined( MODEL_GEOS )
-    INTEGER             :: DT
-    REAL(fp)            :: dCH4, MWCH4
-    LOGICAL             :: PseudoFlux
-#endif
 
     ! Strings
     CHARACTER(LEN=255)  :: ErrMsg
     CHARACTER(LEN=255)  :: ThisLoc
 
-    ! SAVEd variables
-    INTEGER, SAVE       :: id_CH4
-
     !=================================================================
-    ! SET_GLOBAL_CH4 begins here!
+    ! SET_CH4 begins here!
     !=================================================================
 
     ! Assume success
@@ -131,28 +120,35 @@ CONTAINS
        RETURN
     ENDIF
 
-    IF ( .not. ASSOCIATED( State_Chm%SFC_CH4 ) ) THEN
+    ! Get species ID
+    id_CH4 = Ind_( 'CH4' )
 
-       ! Get species ID
-       id_CH4 = Ind_( 'CH4' )
+    ! Get dynamic timestep
+    DT = GET_TS_DYN()
 
-       ! Use the NOAA spatially resolved data where available
-       CALL HCO_GetPtr( HcoState, 'NOAA_GMD_CH4', State_Chm%SFC_CH4, RC, FOUND=FOUND )
-       IF (.NOT. FOUND ) THEN
-          FOUND = .TRUE.
-          ! Use the CMIP6 data from Meinshausen et al. 2017, GMD
-          ! https://doi.org/10.5194/gmd-10-2057-2017a
-          CALL HCO_GetPtr( HcoState, 'CMIP6_Sfc_CH4', State_Chm%SFC_CH4, RC, FOUND=FOUND )
-       ENDIF
-       IF (.NOT. FOUND ) THEN
-          ErrMsg = 'Cannot get pointer to NOAA_GMD_CH4 or CMIP6_Sfc_CH4 ' // &
-                   'in SET_CH4! Make sure the data source corresponds '   // &
-                   'to your emissions year in HEMCO_Config.rc (NOAA GMD ' // &
-                   'for 1978 and later; else CMIP6).'
-          CALL GC_Error( ErrMsg, RC, ThisLoc )
-          RETURN
-       ENDIF
-
+    ! Use the NOAA spatially resolved data where available
+    CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'NOAA_GMD_CH4', &
+                         State_Chm%SFC_CH4, RC, FOUND=FOUND )
+    IF (.NOT. FOUND ) THEN
+       FOUND = .TRUE.
+       ! Use the CMIP6 data from Meinshausen et al. 2017, GMD
+       ! https://doi.org/10.5194/gmd-10-2057-2017a
+       CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'CMIP6_Sfc_CH4', &
+                            State_Chm%SFC_CH4, RC, FOUND=FOUND )
+    ENDIF
+    IF (.NOT. FOUND ) THEN
+       FOUND = .TRUE.
+       ! Use the CMIP6 data boundary conditions processed for GCAP 2.0
+       CALL HCO_GC_EvalFld( Input_Opt, State_Grid, 'SfcVMR_CH4', &
+                            State_Chm%SFC_CH4, RC, FOUND=FOUND )
+    ENDIF
+    IF (.NOT. FOUND ) THEN
+       ErrMsg = 'Cannot retrieve data for NOAA_GMD_CH4, CMIP6_Sfc_CH4, or ' // &
+                'SfcVMR_CH4 from HEMCO! Make sure the data source ' // &
+                'corresponds to your emissions year in HEMCO_Config.rc ' // &
+                '(NOAA GMD for 1978 and later; else CMIP6).'
+       CALL GC_Error( ErrMsg, RC, ThisLoc )
+       RETURN
     ENDIF
 
     ! Convert species to [v/v dry] for this routine
@@ -166,20 +162,9 @@ CONTAINS
        RETURN
     ENDIF
 
-#if defined( MODEL_GEOS )
-    ! Write out pseudo (implied) CH4 flux?
-    PseudoFlux = ASSOCIATED(State_Diag%CH4pseudoFlux)
-    MWCH4      = State_Chm%SpcData(id_CH4)%Info%emMW_g
-    IF ( MWCH4 <= 0.0_fp ) MWCH4 = 16.0_fp
-    DT         = GET_TS_DYN()
-#endif
-
-    !$OMP PARALLEL DO                 &
-    !$OMP DEFAULT( SHARED )           &
-    !$OMP PRIVATE( I, J, L, PBL_TOP, CH4 ) &
-#if defined( MODEL_GEOS )
-    !$OMP PRIVATE( dCH4 ) &
-#endif
+    !$OMP PARALLEL DO                            &
+    !$OMP DEFAULT( SHARED )                      &
+    !$OMP PRIVATE( I, J, L, PBL_TOP, CH4, dCH4 ) &
     !$OMP SCHEDULE( DYNAMIC )
     DO J = 1, State_Grid%NY
     DO I = 1, State_Grid%NX
@@ -190,32 +175,28 @@ CONTAINS
        ! Surface CH4 from HEMCO is in units [ppbv], convert to [v/v dry]
        CH4 = State_Chm%SFC_CH4(I,J) * 1e-9_fp
 
-#if defined( MODEL_GEOS )
        ! Zero diagnostics
-       IF ( PseudoFlux ) State_Diag%CH4pseudoFlux(I,J) = 0.0_fp
-#endif
+       IF ( State_Diag%Archive_CH4pseudoFlux ) THEN
+          State_Diag%CH4pseudoFlux(I,J) = 0.0_fp
+       ENDIF
 
        ! Prescribe methane concentrations throughout PBL
        DO L=1,PBL_TOP
 
-#if defined( MODEL_GEOS )
-          ! Eventually compute implied CH4 flux
-          IF ( PseudoFlux ) THEN
+          ! Compute implied CH4 flux if diagnostic is on
+          IF ( State_Diag%Archive_CH4pseudoFlux ) THEN
              ! v/v dry
-             dCH4 = CH4 - State_Chm%Species(I,J,L,id_CH4)
+             dCH4 = CH4 - State_Chm%Species(id_CH4)%Conc(I,J,L)
              ! Convert to kg/kg dry
-             dCH4 = dCH4 * MWCH4 / AIRMW
-!             ! Convert to kg/m2/s
-!             dCH4 = dCH4 * State_Met%AIRDEN(I,J,L) &
-!                  * State_Met%BXHEIGHT(I,J,L) / DT
-              dCH4 = dCH4 * State_Met%AD(I,J,L) / State_Met%AREA_M2(I,J) / DT
+             dCH4 = dCH4 * State_Chm%SpcData(id_CH4)%Info%MW_g / AIRMW
+             ! Convert to kg/m2/s
+             dCH4 = dCH4 * State_Met%AD(I,J,L) / State_Met%AREA_M2(I,J) / DT
              ! Accumulate statistics
              State_Diag%CH4pseudoFlux(I,J) = &
                 State_Diag%CH4pseudoFlux(I,J) + dCH4
           ENDIF
-#endif
 
-          State_Chm%Species(I,J,L,id_CH4) = CH4
+          State_Chm%Species(id_CH4)%Conc(I,J,L) = CH4
        ENDDO
 
     ENDDO

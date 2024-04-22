@@ -1,0 +1,102 @@
+#------------------------------------------------------------------------------
+#                  Harmonized Emissions Component (HEMCO)                     !
+#------------------------------------------------------------------------------
+#BOP
+#
+# !MODULE: HEMCO_Config.rc
+#
+# !DESCRIPTION: Contains configuration information for HEMCO. Define the
+#  emissions inventories and corresponding file paths here. Entire
+#  configuration files can be inserted into this configuration file with
+#  an '>>>include' statement, e.g. '>>>include HEMCO\_Config\_test.rc'
+#  The settings of include-files will be ignored.
+#\\
+#\\
+# !REMARKS:
+#  See The HEMCO User's Guide for file details:
+#    http://wiki.geos-chem.org/The_HEMCO_User%27s_Guide
+#
+# !REVISION HISTORY:
+#  See https://github.com/geoschem/geos-chem for complete history
+#EOP
+#------------------------------------------------------------------------------
+#BOC
+###############################################################################
+### BEGIN SECTION SETTINGS
+###############################################################################
+
+ROOT:                        {DATA_ROOT}/HEMCO
+Logfile:                     HEMCO.log
+DiagnFile:                   HEMCO_Diagn.rc
+DiagnPrefix:                 ./OutputDir/HEMCO_diagnostics
+DiagnFreq:                   End
+Wildcard:                    *
+Separator:                   /
+Unit tolerance:              1
+Negative values:             0
+Only unitless scale factors: false
+Verbose:                     0
+Warnings:                    1
+
+### END SECTION SETTINGS ###
+
+###############################################################################
+### BEGIN SECTION EXTENSION SWITCHES
+###############################################################################
+# ExtNr ExtName                on/off  Species  Years avail.
+0       Base                   : on    *
+    --> CEDSv2                 :       true
+### END SECTION EXTENSION SWITCHES ###
+
+###############################################################################
+### BEGIN SECTION BASE EMISSIONS
+###############################################################################
+
+# ExtNr	Name sourceFile sourceVar sourceTime C/R/E SrcDim SrcUnit Species ScalIDs Cat Hier
+
+#==============================================================================
+# --- CEDS v2 ---
+#
+# %%% This is the default global inventory. You may select either CEDS,
+# EDGAR, HTAP or CMIP6_SFC_LAND_ANTHRO for the global base emissions %%%
+#==============================================================================
+(((CEDSv2
+0 CEDS_NO_AGR     $ROOT/CEDS/v2021-06/$YYYY/NO-em-anthro_CMIP_CEDS_$YYYY.nc            NO_agr            1750-2019/1-12/1/0 C xy kg/m2/s NO    25        1 5
+0 CEDS_NO_ENE     $ROOT/CEDS/v2021-06/$YYYY/NO-em-anthro_CMIP_CEDS_$YYYY.nc            NO_ene            1750-2019/1-12/1/0 C xy kg/m2/s NO    25        1 5
+0 CEDS_NO_IND     $ROOT/CEDS/v2021-06/$YYYY/NO-em-anthro_CMIP_CEDS_$YYYY.nc            NO_ind            1750-2019/1-12/1/0 C xy kg/m2/s NO    25        1 5
+0 CEDS_NO_TRA     $ROOT/CEDS/v2021-06/$YYYY/NO-em-anthro_CMIP_CEDS_$YYYY.nc            NO_tra            1750-2019/1-12/1/0 C xy kg/m2/s NO    25        1 5
+0 CEDS_NO_RCO     $ROOT/CEDS/v2021-06/$YYYY/NO-em-anthro_CMIP_CEDS_$YYYY.nc            NO_rco            1750-2019/1-12/1/0 C xy kg/m2/s NO    25        1 5
+0 CEDS_NO_SLV     $ROOT/CEDS/v2021-06/$YYYY/NO-em-anthro_CMIP_CEDS_$YYYY.nc            NO_slv            1750-2019/1-12/1/0 C xy kg/m2/s NO    25        1 5
+0 CEDS_NO_WST     $ROOT/CEDS/v2021-06/$YYYY/NO-em-anthro_CMIP_CEDS_$YYYY.nc            NO_wst            1750-2019/1-12/1/0 C xy kg/m2/s NO    25        1 5
+)))CEDSv2
+
+#==============================================================================
+# --- Meteorology fields ---
+#==============================================================================
+>>>include $ROOT/Configs/HEMCO_Config.rc.gmao_metfields
+
+### END SECTION BASE EMISSIONS ###
+
+###############################################################################
+### BEGIN SECTION SCALE FACTORS
+###############################################################################
+
+# ScalID Name sourceFile sourceVar sourceTime C/R/E SrcDim SrcUnit Oper
+
+#==============================================================================
+# --- Diurnal scale factors ---
+#==============================================================================
+25 EDGAR_TODNOX $ROOT/EDGARv42/v2015-02/NO/EDGAR_hourly_NOxScal.nc NOXscale 2000/1/1/* C xy unitless 1
+
+### END SECTION SCALE FACTORS ###
+
+###############################################################################
+### BEGIN SECTION MASKS
+###############################################################################
+
+# ScalID Name sourceFile sourceVar sourceTime C/R/E SrcDim SrcUnit Oper Lon1/Lat1/Lon2/Lat2
+
+### END SECTION MASKS ###
+
+### END OF HEMCO INPUT FILE ###
+#EOC

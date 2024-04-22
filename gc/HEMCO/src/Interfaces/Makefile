@@ -66,14 +66,10 @@ EXE     :=hemco_standalone.x
 ###                                                                         ###
 ###############################################################################
 
-.PHONY: clean debug check slowclean
+.PHONY: clean debug slowclean
 
 all:
 	@${MAKE} lib
-	@${MAKE} exe
-
-check:
-	@${MAKE} exe
 
 lib: $(OBJECTS)
 	$(AR) crs $(LIBRARY) $(OBJECTS)
@@ -120,11 +116,6 @@ debug:
 ###                                                                         ###
 ###############################################################################
 
-hcoi_esmf_mod.o : hcoi_esmf_mod.F90
-
-hcoi_standalone_mod.o : hcoi_standalone_mod.F90
-
-hemco_standalone.o : hemco_standalone.F90 \
-                     hcoi_standalone_mod.o
+hco_interface_common.o : hco_interface_common.F90
 
 #EOC
