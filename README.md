@@ -8,15 +8,15 @@ This is the official repository for the **WRF-GC** model, an online two-way coup
 
 ## About WRF-GC
 
-[WRF-GC](https://fugroup.org/index.php/WRF-GC) is an online two-way coupled meteorology-chemistry model using WRF to drive GEOS-Chem chemistry. It is developed by [Haipeng Lin](https://jimmielin.me/), [Xu Feng](https://www.researchgate.net/profile/Xu-Feng-11), and [Tzung-May Fu](https://fugroup.org) and based at the [Atmospheric Chemistry & Climate Group at SUSTech](https://fugroup.org).
+[WRF-GC](https://atmoschem.org.cn/index.php?title=WRF-GC) is an online two-way coupled meteorology-chemistry model using WRF to drive GEOS-Chem chemistry. It is developed by [Haipeng Lin](https://jimmielin.me/), [Xu Feng](https://www.researchgate.net/profile/Xu-Feng-11), and [Tzung-May Fu](https://atmoschem.org.cn/) and based at the [Atmospheric Chemistry & Climate Group at SUSTech](https://atmoschem.org.cn/).
 
 The WRF-GC model includes a versatile coupler coupling GEOS-Chem to WRF in a manner similar to WRF-Chem, making it seamless for WRF-Chem users to use WRF-GC and allowing GEOS-Chem users access to WRF-simulated online weather, with the capability for hindcasts and forecasts.
 
 ### License
 ```
-(c) 2017-2023 Haipeng Lin <hplin@seas.harvard.edu>, Xu Feng <fengx7@pku.edu.cn>, Tzung-May Fu <tmfu@pku.edu.cn>
+(c) 2017-2024 Haipeng Lin <hplin@seas.harvard.edu>, Xu Feng <fengx7@pku.edu.cn>, Tzung-May Fu <tmfu@pku.edu.cn>
 (c) 2017-2018 Atmospheric Chemistry & Climate Group, Peking University
-(c) 2018-2023 Atmospheric Chemistry & Climate Group, SUSTech
+(c) 2018-2024 Atmospheric Chemistry & Climate Group, SUSTech
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to 
