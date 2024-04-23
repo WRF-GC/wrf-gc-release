@@ -56,7 +56,10 @@ module WRFGC_Convert_State_Mod
     use State_Met_Mod,  only: MetState
     use State_Diag_Mod, only: DgnState
     use State_Grid_Mod, only: GrdState
-
+#ifdef use_wrfgc_history_output
+    ! WRF-GC
+    use wrfgc_io_pnetcdf,only: writeDiag
+#endif
     implicit none
     private
 
@@ -1125,9 +1128,14 @@ contains
         ! State_Chm%Species(id_O3)%Conc(:, :, :) holds the O3 information.
         !
         ! NEVER EVER USE IND_ IN A LOOP DIRECTLY, IT IS EXTREMELY SLOW
+#ifdef use_wrfgc_history_output
+        !------------------WRF-GC diagnostics module------------------!
+        call wrf_debug(100, "WRFGC_Convert_State_Mod IO pnetCDF: Start writing diagnostics")
+        call writeDiag(debug_level, Input_Opt, State_Met, State_Chm, grid, State_Grid, State_Diag, its, ite, jts, jte, ide, jde, kte)
+        call wrf_debug(100, "WRFGC_Convert_State_Mod IO pnetCDF: End writing diagnostics")
+#endif
 
         call wrf_debug(1, "WRFGC_Convert_State_Mod updating chemistry concs/diags in WRF from GEOS-Chem values")
-
         ! For now, "WRF-GC" style diagnostics from State_Diag are ALWAYS done.
         ! If you use gc_do_gcdiagn, it only turns on/off the G-C/C GCHP style HISTORY.rc diagns,
         ! it does not affect this.

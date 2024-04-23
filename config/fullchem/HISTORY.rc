@@ -284,6 +284,8 @@ COLLECTIONS: 'Budget',
 # Diagnostics from the KPP solver.
 #
 # Available for full-chemistry simulations (all variations)
+# This needs to be kept on for WRF-GC simulations, as it is necessary for
+# diagnosing KPP errors in nested domain configurations. (hplin, 4/23/24)
 #==============================================================================
   KppDiags.template:      '%y4%m2%d2_%h2%n2z.nc4',
   KppDiags.frequency:     00000000 010000,
