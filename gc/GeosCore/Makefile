@@ -539,7 +539,7 @@ hco_interface_gc_mod.o      : hco_interface_gc_mod.F90                       \
                               hcoi_gc_diagn_mod.o     tomas_mod.o            \
                               flexgrid_read_mod.o     global_ch4_mod.o       \
                               ocean_mercury_mod.o     calc_met_mod.o         \
-                              hco_state_gc_mod.o
+                              hco_state_gc_mod.o      mercury_mod.o
 
 hco_utilities_gc_mod.o      : hco_utilities_gc_mod.F90                       \
                               hco_state_gc_mod.o
