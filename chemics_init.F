@@ -347,7 +347,7 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, &
       call wrf_message("            \/  \/   |_|  \_\_|          \_____|\_____|          ")
       call wrf_message("*****************************************************************")
       call wrf_message("           WRF-GC MODEL, BUILD 2404.22 - WRF BINDINGS            ")
-      call wrf_message("                 WRF-GC v3.0.0 (April 2024)                      ")
+      call wrf_message("                 WRF-GC v3.0.0r2 (Oct 2024)                      ")
       ! call wrf_message(" You are using an experimental future version of WRF-GC 3.0.     ")
       ! call wrf_message(" ** PLEASE VALIDATE YOUR SCIENTIFIC RESULTS AS THIS BUILD IS     ")
       ! call wrf_message(" ** HIGHLY EXPERIMENTAL AND PRONE TO ERRORS!                     ")

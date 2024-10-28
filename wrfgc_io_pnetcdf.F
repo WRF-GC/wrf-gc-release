@@ -703,261 +703,263 @@ contains
                enddo
                call writeDimension('lon_e', Grid_LonE, Current_container%FileId, its, ite+1)
 
-               ! write index variables
-               write(*,*)'index variables: ', trim(IndexVariables(State_Grid%ID)%p%Item%Name)
-               Current_metahistitem => IndexVariables(State_Grid%ID)%p
-              
-               do while(associated(Current_metahistitem))
-                  Current_Item => Current_metahistitem%Item
-                  SELECT CASE(Current_Item%SpaceDim)
-                  CASE( 3 )
-                     if (Current_Item%Source_KindVal == KINDVAL_F8) then
-                        Current_Item%Data_3d = Current_Item%Source_3d_8
-                     else if (Current_Item%Source_KindVal == KINDVAL_F4) then
-                        Current_Item%Data_3d = Current_Item%Source_3d_4
-                     else if (Current_Item%Source_KindVal == KINDVAL_I4) then
-                        Current_Item%Data_3d = Current_Item%Source_3d_I
-                     endif
-                  CASE( 2 )
-                     if (Current_Item%Source_KindVal == KINDVAL_F8) then
-                        Current_Item%Data_2d = Current_Item%Source_2d_8
-                     else if (Current_Item%Source_KindVal == KINDVAL_F4) then
-                        Current_Item%Data_2d = Current_Item%Source_2d_4
-                     else if (Current_Item%Source_KindVal == KINDVAL_I4) then
-                        Current_Item%Data_2d = Current_Item%Source_2d_I
-                     endif
-                  CASE( 1 )
-                     if (Current_Item%Source_KindVal == KINDVAL_F8) then
-                        Current_Item%Data_1d = Current_Item%Source_1d_8
-                     else if (Current_Item%Source_KindVal == KINDVAL_F4) then
-                        Current_Item%Data_1d = Current_Item%Source_1d_4
-                     else if (Current_Item%Source_KindVal == KINDVAL_I4) then
-                        Current_Item%Data_1d = Current_Item%Source_1d_I
-                     endif
-                  CASE( 0 )
-                     
-                     Current_Item%Data_0d = Current_Item%Source_0d_8
-                     
-                  end select
+               ! write index variables only for domain 1
+               if (State_Grid%ID == 1)then
+                  write(*,*)'index variables: ', trim(IndexVariables(State_Grid%ID)%p%Item%Name)
+                  Current_metahistitem => IndexVariables(State_Grid%ID)%p
+               
+                  do while(associated(Current_metahistitem))
+                     Current_Item => Current_metahistitem%Item
+                     SELECT CASE(Current_Item%SpaceDim)
+                     CASE( 3 )
+                        if (Current_Item%Source_KindVal == KINDVAL_F8) then
+                           Current_Item%Data_3d = Current_Item%Source_3d_8
+                        else if (Current_Item%Source_KindVal == KINDVAL_F4) then
+                           Current_Item%Data_3d = Current_Item%Source_3d_4
+                        else if (Current_Item%Source_KindVal == KINDVAL_I4) then
+                           Current_Item%Data_3d = Current_Item%Source_3d_I
+                        endif
+                     CASE( 2 )
+                        if (Current_Item%Source_KindVal == KINDVAL_F8) then
+                           Current_Item%Data_2d = Current_Item%Source_2d_8
+                        else if (Current_Item%Source_KindVal == KINDVAL_F4) then
+                           Current_Item%Data_2d = Current_Item%Source_2d_4
+                        else if (Current_Item%Source_KindVal == KINDVAL_I4) then
+                           Current_Item%Data_2d = Current_Item%Source_2d_I
+                        endif
+                     CASE( 1 )
+                        if (Current_Item%Source_KindVal == KINDVAL_F8) then
+                           Current_Item%Data_1d = Current_Item%Source_1d_8
+                        else if (Current_Item%Source_KindVal == KINDVAL_F4) then
+                           Current_Item%Data_1d = Current_Item%Source_1d_4
+                        else if (Current_Item%Source_KindVal == KINDVAL_I4) then
+                           Current_Item%Data_1d = Current_Item%Source_1d_I
+                        endif
+                     CASE( 0 )
+                        
+                        Current_Item%Data_0d = Current_Item%Source_0d_8
+                        
+                     end select
 
-                  SELECT CASE(Current_Item%Name)
-                  ! CASE('lat_bnds')
-                  !    ierr = nf90mpi_redef(Current_container%FileId)
-                  !    call check(ierr, 'redef')
-                  !    ierr = nf90mpi_def_var(  Current_container%FileId, \
-                  !                            'lat_bnds', \
-                  !                            NF90_FLOAT, \
-                  !                            (/dimids(8),dimids(2)/), \
-                  !                            varid)
-                  !    call check(ierr, 'def var lat_bnds')
-                  !    ierr = nf90mpi_enddef(Current_container%FileId)
-                  !    call check(ierr, 'enddef')
-                     
-                  !    ierr = nf90mpi_put_var_all(   Current_container%FileId,\
-                  !                                  varid,\
-                  !                                  Current_Item%Data_2d,\
-                  !                                  (/int(1,kind=MPI_OFFSET_KIND),jts/),\
-                  !                                  (/int(2,kind=MPI_OFFSET_KIND),jte-jts+1/) )
-                  !    call check(ierr, 'put var latbnds')
-                  ! CASE('lon_bnds')
-                  !    ierr = nf90mpi_redef(Current_container%FileId)
-                  !    call check(ierr, 'redef')
-                  !    ierr = nf90mpi_def_var(  Current_container%FileId, \
-                  !                            'lon_bnds', \
-                  !                            NF90_FLOAT, \
-                  !                            (/dimids(8),dimids(1)/), \
-                  !                            varid)
-                  !    call check(ierr, 'def var lon_bnds')
-                  !    ierr = nf90mpi_enddef(Current_container%FileId)
-                  !    call check(ierr, 'enddef')
+                     SELECT CASE(Current_Item%Name)
+                     ! CASE('lat_bnds')
+                     !    ierr = nf90mpi_redef(Current_container%FileId)
+                     !    call check(ierr, 'redef')
+                     !    ierr = nf90mpi_def_var(  Current_container%FileId, \
+                     !                            'lat_bnds', \
+                     !                            NF90_FLOAT, \
+                     !                            (/dimids(8),dimids(2)/), \
+                     !                            varid)
+                     !    call check(ierr, 'def var lat_bnds')
+                     !    ierr = nf90mpi_enddef(Current_container%FileId)
+                     !    call check(ierr, 'enddef')
+                        
+                     !    ierr = nf90mpi_put_var_all(   Current_container%FileId,\
+                     !                                  varid,\
+                     !                                  Current_Item%Data_2d,\
+                     !                                  (/int(1,kind=MPI_OFFSET_KIND),jts/),\
+                     !                                  (/int(2,kind=MPI_OFFSET_KIND),jte-jts+1/) )
+                     !    call check(ierr, 'put var latbnds')
+                     ! CASE('lon_bnds')
+                     !    ierr = nf90mpi_redef(Current_container%FileId)
+                     !    call check(ierr, 'redef')
+                     !    ierr = nf90mpi_def_var(  Current_container%FileId, \
+                     !                            'lon_bnds', \
+                     !                            NF90_FLOAT, \
+                     !                            (/dimids(8),dimids(1)/), \
+                     !                            varid)
+                     !    call check(ierr, 'def var lon_bnds')
+                     !    ierr = nf90mpi_enddef(Current_container%FileId)
+                     !    call check(ierr, 'enddef')
 
-                  !    ierr = nf90mpi_put_var_all(   Current_container%FileId,\
-                  !                                  varid,\
-                  !                                  Current_Item%Data_2d,\
-                  !                                  (/int(1,kind=MPI_OFFSET_KIND),its/),\
-                  !                                  (/int(2,kind=MPI_OFFSET_KIND),ite-its+1/) )
-                  !    call check(ierr, 'put var lonbnds')
-                  CASE('lev')
-                     ierr = nf90mpi_inq_varid(Current_container%FileId, 'lev', varid)
-                     call check(ierr, 'inq lev')
+                     !    ierr = nf90mpi_put_var_all(   Current_container%FileId,\
+                     !                                  varid,\
+                     !                                  Current_Item%Data_2d,\
+                     !                                  (/int(1,kind=MPI_OFFSET_KIND),its/),\
+                     !                                  (/int(2,kind=MPI_OFFSET_KIND),ite-its+1/) )
+                     !    call check(ierr, 'put var lonbnds')
+                     CASE('lev')
+                        ierr = nf90mpi_inq_varid(Current_container%FileId, 'lev', varid)
+                        call check(ierr, 'inq lev')
 
-                     ierr = nf90mpi_put_var_all(   Current_container%FileId,\
+                        ierr = nf90mpi_put_var_all(   Current_container%FileId,\
+                                                      varid,\
+                                                      Current_Item%Data_1d,\
+                                                      (/int(1, MPI_OFFSET_KIND)/),\
+                                                      (/kte/) )
+                        call check(ierr, 'put var lev')
+                     CASE('ilev')
+                        ierr = nf90mpi_inq_varid(Current_container%FileId, 'ilev', varid)
+                        call check(ierr, 'inq ilev')
+
+                        ierr = nf90mpi_put_var_all(   Current_container%FileId,\
+                                                      varid,\
+                                                      Current_Item%Data_1d,\
+                                                      (/int(1, MPI_OFFSET_KIND)/),\
+                                                      (/kte+1/) )
+                        call check(ierr, 'put var ilev')
+                     CASE('hyam')
+                        ierr = nf90mpi_redef(Current_container%FileId)
+                        call check(ierr, 'redef')
+                        ierr = nf90mpi_def_var(  Current_container%FileId, \
+                                                'hyam', \
+                                                NF90_FLOAT, \
+                                                dimids(3), \
+                                                varid)
+                        call check(ierr, 'def var hyam')
+                        ierr = nf90mpi_put_att(   Current_container%FileId,\
                                                    varid,\
-                                                   Current_Item%Data_1d,\
-                                                   (/int(1, MPI_OFFSET_KIND)/),\
-                                                   (/kte/) )
-                     call check(ierr, 'put var lev')
-                  CASE('ilev')
-                     ierr = nf90mpi_inq_varid(Current_container%FileId, 'ilev', varid)
-                     call check(ierr, 'inq ilev')
-
-                     ierr = nf90mpi_put_var_all(   Current_container%FileId,\
+                                                   'units',\
+                                                   Current_Item%Units)
+                        ierr = nf90mpi_put_att(   Current_container%FileId,\
                                                    varid,\
-                                                   Current_Item%Data_1d,\
-                                                   (/int(1, MPI_OFFSET_KIND)/),\
-                                                   (/kte+1/) )
-                     call check(ierr, 'put var ilev')
-                  CASE('hyam')
-                     ierr = nf90mpi_redef(Current_container%FileId)
-                     call check(ierr, 'redef')
-                     ierr = nf90mpi_def_var(  Current_container%FileId, \
-                                             'hyam', \
-                                             NF90_FLOAT, \
-                                             dimids(3), \
-                                             varid)
-                     call check(ierr, 'def var hyam')
-                     ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                varid,\
-                                                'units',\
-                                                Current_Item%Units)
-                     ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                varid,\
-                                                'long_name',\
-                                                Current_Item%LongName)  
-                     ierr = nf90mpi_enddef(Current_container%FileId)
-                     call check(ierr, 'enddef')
+                                                   'long_name',\
+                                                   Current_Item%LongName)  
+                        ierr = nf90mpi_enddef(Current_container%FileId)
+                        call check(ierr, 'enddef')
 
-                     ierr = nf90mpi_put_var_all(   Current_container%FileId,\
+                        ierr = nf90mpi_put_var_all(   Current_container%FileId,\
+                                                      varid,\
+                                                      Current_Item%Data_1d,\
+                                                      (/int(1, MPI_OFFSET_KIND)/),\
+                                                      (/kte/) )
+                        call check(ierr, 'put var hyam')
+                     CASE('hybm')
+                        ierr = nf90mpi_redef(Current_container%FileId)
+                        call check(ierr, 'redef')
+                        ierr = nf90mpi_def_var(  Current_container%FileId, \
+                                                'hybm', \
+                                                NF90_FLOAT, \
+                                                dimids(3), \
+                                                varid)
+                        call check(ierr, 'def var hybm')
+                        ierr = nf90mpi_put_att(   Current_container%FileId,\
                                                    varid,\
-                                                   Current_Item%Data_1d,\
-                                                   (/int(1, MPI_OFFSET_KIND)/),\
-                                                   (/kte/) )
-                     call check(ierr, 'put var hyam')
-                  CASE('hybm')
-                     ierr = nf90mpi_redef(Current_container%FileId)
-                     call check(ierr, 'redef')
-                     ierr = nf90mpi_def_var(  Current_container%FileId, \
-                                             'hybm', \
-                                             NF90_FLOAT, \
-                                             dimids(3), \
-                                             varid)
-                     call check(ierr, 'def var hybm')
-                     ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                varid,\
-                                                'units',\
-                                                Current_Item%Units)
-                     ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                varid,\
-                                                'long_name',\
-                                                Current_Item%LongName)  
-                     ierr = nf90mpi_enddef(Current_container%FileId)
-                     call check(ierr, 'enddef')
-
-                     ierr = nf90mpi_put_var_all(   Current_container%FileId,\
+                                                   'units',\
+                                                   Current_Item%Units)
+                        ierr = nf90mpi_put_att(   Current_container%FileId,\
                                                    varid,\
-                                                   Current_Item%Data_1d,\
-                                                   (/int(1, MPI_OFFSET_KIND)/),\
-                                                   (/kte/) )
-                     call check(ierr, 'put var hybm')
-                  CASE('hyai')
-                     ierr = nf90mpi_redef(Current_container%FileId)
-                     call check(ierr, 'redef')
-                     ierr = nf90mpi_def_var(  Current_container%FileId, \
-                                             'hyai', \
-                                             NF90_FLOAT, \
-                                             dimids(7), \
-                                             varid)
-                     call check(ierr, 'def var hyai')
-                     ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                varid,\
-                                                'units',\
-                                                Current_Item%Units)
-                     ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                varid,\
-                                                'long_name',\
-                                                Current_Item%LongName)  
-                     ierr = nf90mpi_enddef(Current_container%FileId)
-                     call check(ierr, 'enddef')
+                                                   'long_name',\
+                                                   Current_Item%LongName)  
+                        ierr = nf90mpi_enddef(Current_container%FileId)
+                        call check(ierr, 'enddef')
 
-                     ierr = nf90mpi_put_var_all(   Current_container%FileId,\
+                        ierr = nf90mpi_put_var_all(   Current_container%FileId,\
+                                                      varid,\
+                                                      Current_Item%Data_1d,\
+                                                      (/int(1, MPI_OFFSET_KIND)/),\
+                                                      (/kte/) )
+                        call check(ierr, 'put var hybm')
+                     CASE('hyai')
+                        ierr = nf90mpi_redef(Current_container%FileId)
+                        call check(ierr, 'redef')
+                        ierr = nf90mpi_def_var(  Current_container%FileId, \
+                                                'hyai', \
+                                                NF90_FLOAT, \
+                                                dimids(7), \
+                                                varid)
+                        call check(ierr, 'def var hyai')
+                        ierr = nf90mpi_put_att(   Current_container%FileId,\
                                                    varid,\
-                                                   Current_Item%Data_1d,\
-                                                   (/int(1, MPI_OFFSET_KIND)/),\
-                                                   (/kte/) )
-                     call check(ierr, 'put var hyai')
-                  CASE('hybi')
-                     ierr = nf90mpi_redef(Current_container%FileId)
-                     call check(ierr, 'redef')
-                     ierr = nf90mpi_def_var(  Current_container%FileId, \
-                                             'hybi', \
-                                             NF90_FLOAT, \
-                                             dimids(7), \
-                                             varid)
-                     call check(ierr, 'def var hybi')
-                     ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                varid,\
-                                                'units',\
-                                                Current_Item%Units)
-                     ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                varid,\
-                                                'long_name',\
-                                                Current_Item%LongName)  
-                     ierr = nf90mpi_enddef(Current_container%FileId)
-                     call check(ierr, 'enddef')
-
-                     ierr = nf90mpi_put_var_all(   Current_container%FileId,\
+                                                   'units',\
+                                                   Current_Item%Units)
+                        ierr = nf90mpi_put_att(   Current_container%FileId,\
                                                    varid,\
-                                                   Current_Item%Data_1d,\
-                                                   (/int(1, MPI_OFFSET_KIND)/),\
-                                                   (/kte/) )
-                     call check(ierr, 'put var hybi')
-                  ! ======= AREA is not working for now =======
-                  ! CASE('AREA')
-                  !    ierr = nf90mpi_redef(Current_container%FileId)
-                  !    call check(ierr, 'redef')
-                  !    ierr = nf90mpi_def_var(  Current_container%FileId, \
-                  !                            'AREA', \
-                  !                            NF90_FLOAT, \
-                  !                            (/dimids(1), dimids(2)/), \
-                  !                            varid)
-                  !    call check(ierr, 'def var AREA')
-                  !    ierr = nf90mpi_put_att(   Current_container%FileId,\
-                  !                               varid,\
-                  !                               'units',\
-                  !                               Current_Item%Units)
-                  !    ierr = nf90mpi_put_att(   Current_container%FileId,\
-                  !                               varid,\
-                  !                               'long_name',\
-                  !                               Current_Item%LongName)  
-                  !    ierr = nf90mpi_enddef(Current_container%FileId)
-                  !    call check(ierr, 'enddef')
+                                                   'long_name',\
+                                                   Current_Item%LongName)  
+                        ierr = nf90mpi_enddef(Current_container%FileId)
+                        call check(ierr, 'enddef')
 
-                  !    ierr = nf90mpi_put_var_all(   Current_container%FileId,\
-                  !                                  varid,\
-                  !                                  Current_Item%Data_2d,\
-                  !                                  (/its, jts/),\
-                  !                                  (/ite-its+1, jte-jts+1/) )
-                  !    call check(ierr, 'put var AREA')
-                  CASE('P0')
-                     ierr = nf90mpi_redef(Current_container%FileId)
-                     call check(ierr, 'redef')
-                     ierr = nf90mpi_def_var(  Current_container%FileId, \
-                                             'P0', \
-                                             NF90_FLOAT, \
-                                             varid)
-                     call check(ierr, 'def var P0')
-                     
-                     ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                varid,\
-                                                'units',\
-                                                Current_Item%Units)
-                     ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                varid,\
-                                                'long_name',\
-                                                Current_Item%LongName)                                                
-                     call check(ierr, 'put att P0')
-
-                     ierr = nf90mpi_enddef(Current_container%FileId)
-                     call check(ierr, 'enddef')
-
-                     ierr = nf90mpi_put_var_all(   Current_container%FileId,\
+                        ierr = nf90mpi_put_var_all(   Current_container%FileId,\
+                                                      varid,\
+                                                      Current_Item%Data_1d,\
+                                                      (/int(1, MPI_OFFSET_KIND)/),\
+                                                      (/kte/) )
+                        call check(ierr, 'put var hyai')
+                     CASE('hybi')
+                        ierr = nf90mpi_redef(Current_container%FileId)
+                        call check(ierr, 'redef')
+                        ierr = nf90mpi_def_var(  Current_container%FileId, \
+                                                'hybi', \
+                                                NF90_FLOAT, \
+                                                dimids(7), \
+                                                varid)
+                        call check(ierr, 'def var hybi')
+                        ierr = nf90mpi_put_att(   Current_container%FileId,\
                                                    varid,\
-                                                   Current_Item%Data_0d)
-                     call check(ierr, 'put var P0')
+                                                   'units',\
+                                                   Current_Item%Units)
+                        ierr = nf90mpi_put_att(   Current_container%FileId,\
+                                                   varid,\
+                                                   'long_name',\
+                                                   Current_Item%LongName)  
+                        ierr = nf90mpi_enddef(Current_container%FileId)
+                        call check(ierr, 'enddef')
 
-                  END SELECT
-                  Current_metahistitem => Current_metahistitem%Next
-               end do
+                        ierr = nf90mpi_put_var_all(   Current_container%FileId,\
+                                                      varid,\
+                                                      Current_Item%Data_1d,\
+                                                      (/int(1, MPI_OFFSET_KIND)/),\
+                                                      (/kte/) )
+                        call check(ierr, 'put var hybi')
+                     ! ======= AREA is not working for now =======
+                     ! CASE('AREA')
+                     !    ierr = nf90mpi_redef(Current_container%FileId)
+                     !    call check(ierr, 'redef')
+                     !    ierr = nf90mpi_def_var(  Current_container%FileId, \
+                     !                            'AREA', \
+                     !                            NF90_FLOAT, \
+                     !                            (/dimids(1), dimids(2)/), \
+                     !                            varid)
+                     !    call check(ierr, 'def var AREA')
+                     !    ierr = nf90mpi_put_att(   Current_container%FileId,\
+                     !                               varid,\
+                     !                               'units',\
+                     !                               Current_Item%Units)
+                     !    ierr = nf90mpi_put_att(   Current_container%FileId,\
+                     !                               varid,\
+                     !                               'long_name',\
+                     !                               Current_Item%LongName)  
+                     !    ierr = nf90mpi_enddef(Current_container%FileId)
+                     !    call check(ierr, 'enddef')
+
+                     !    ierr = nf90mpi_put_var_all(   Current_container%FileId,\
+                     !                                  varid,\
+                     !                                  Current_Item%Data_2d,\
+                     !                                  (/its, jts/),\
+                     !                                  (/ite-its+1, jte-jts+1/) )
+                     !    call check(ierr, 'put var AREA')
+                     CASE('P0')
+                        ierr = nf90mpi_redef(Current_container%FileId)
+                        call check(ierr, 'redef')
+                        ierr = nf90mpi_def_var(  Current_container%FileId, \
+                                                'P0', \
+                                                NF90_FLOAT, \
+                                                varid)
+                        call check(ierr, 'def var P0')
+                        
+                        ierr = nf90mpi_put_att(   Current_container%FileId,\
+                                                   varid,\
+                                                   'units',\
+                                                   Current_Item%Units)
+                        ierr = nf90mpi_put_att(   Current_container%FileId,\
+                                                   varid,\
+                                                   'long_name',\
+                                                   Current_Item%LongName)                                                
+                        call check(ierr, 'put att P0')
+
+                        ierr = nf90mpi_enddef(Current_container%FileId)
+                        call check(ierr, 'enddef')
+
+                        ierr = nf90mpi_put_var_all(   Current_container%FileId,\
+                                                      varid,\
+                                                      Current_Item%Data_0d)
+                        call check(ierr, 'put var P0')
+
+                     END SELECT
+                     Current_metahistitem => Current_metahistitem%Next
+                  end do
+               endif
 
             endif
 

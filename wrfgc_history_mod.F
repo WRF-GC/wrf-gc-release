@@ -565,140 +565,148 @@ MODULE WRFGC_History_Mod
       ! add HISTORY ITEM for each netCDF index variable (e.g.
       !  lon, lat, lev, time, area, hyam, hybm, p0)
       ! Fields saved in the Registry object in GeosUtil/grid_registry_mod.F90
-      RegistryNames(1 ) = 'GRID_AREA'
-      RegistryNames(2 ) = 'GRID_P0'
-      RegistryNames(3 ) = 'GRID_HYBI'
-      RegistryNames(4 ) = 'GRID_HYAI'
-      RegistryNames(5 ) = 'GRID_HYBM'
-      RegistryNames(6 ) = 'GRID_HYAM'
-      RegistryNames(7 ) = 'GRID_LON'
-      RegistryNames(8 ) = 'GRID_LONBND'
-      RegistryNames(9 ) = 'GRID_LAT'
-      RegistryNames(10) = 'GRID_LATBND'
-      RegistryNames(11) = 'GRID_ILEV'
-      RegistryNames(12) = 'GRID_LEV'
-      RegistryNames(13) = 'GRID_TIME'
+      ! The registry object current only works for domain 1
+      if (State_Grid%ID == 1) then
+         RegistryNames(1 ) = 'GRID_AREA'
+         RegistryNames(2 ) = 'GRID_P0'
+         RegistryNames(3 ) = 'GRID_HYBI'
+         RegistryNames(4 ) = 'GRID_HYAI'
+         RegistryNames(5 ) = 'GRID_HYBM'
+         RegistryNames(6 ) = 'GRID_HYAM'
+         RegistryNames(7 ) = 'GRID_LON'
+         RegistryNames(8 ) = 'GRID_LONBND'
+         RegistryNames(9 ) = 'GRID_LAT'
+         RegistryNames(10) = 'GRID_LATBND'
+         RegistryNames(11) = 'GRID_ILEV'
+         RegistryNames(12) = 'GRID_LEV'
+         RegistryNames(13) = 'GRID_TIME'
 
-      ! Name for each HISTORY ITEM
-      ItemNames(1 )     = 'AREA'
-      ItemNames(2 )     = 'P0'
-      ItemNames(3 )     = 'hybi'
-      ItemNames(4 )     = 'hyai'
-      ItemNames(5 )     = 'hybm'
-      ItemNames(6 )     = 'hyam'
-      ItemNames(7 )     = 'lon'
-      ItemNames(8 )     = 'lon_bnds'
-      ItemNames(9 )     = 'lat'
-      ItemNames(10)     = 'lat_bnds'
-      ItemNames(11)     = 'ilev'
-      ItemNames(12)     = 'lev'
-      ItemNames(13)     = 'time'
+         ! Name for each HISTORY ITEM
+         ItemNames(1 )     = 'AREA'
+         ItemNames(2 )     = 'P0'
+         ItemNames(3 )     = 'hybi'
+         ItemNames(4 )     = 'hyai'
+         ItemNames(5 )     = 'hybm'
+         ItemNames(6 )     = 'hyam'
+         ItemNames(7 )     = 'lon'
+         ItemNames(8 )     = 'lon_bnds'
+         ItemNames(9 )     = 'lat'
+         ItemNames(10)     = 'lat_bnds'
+         ItemNames(11)     = 'ilev'
+         ItemNames(12)     = 'lev'
+         ItemNames(13)     = 'time'
 
-      ! Dimensions for each HISTORY ITEM
-      ItemDimNames(1 )  = 'xy'
-      ItemDimNames(2 )  = '-'
-      ItemDimNames(3 )  = 'z'
-      ItemDimNames(4 )  = 'z'
-      ItemDimNames(5 )  = 'z'
-      ItemDimNames(6 )  = 'z'
-      ItemDimNames(7 )  = 'x'
-      ItemDimNames(8 )  = 'bx'
-      ItemDimNames(9 )  = 'y'
-      ItemDimNames(10)  = 'by'
-      ItemDimNames(11)  = 'z'
-      ItemDimNames(12)  = 'z'
-      ItemDimNames(13)  = 't'
+         ! Dimensions for each HISTORY ITEM
+         ItemDimNames(1 )  = 'xy'
+         ItemDimNames(2 )  = '-'
+         ItemDimNames(3 )  = 'z'
+         ItemDimNames(4 )  = 'z'
+         ItemDimNames(5 )  = 'z'
+         ItemDimNames(6 )  = 'z'
+         ItemDimNames(7 )  = 'x'
+         ItemDimNames(8 )  = 'bx'
+         ItemDimNames(9 )  = 'y'
+         ItemDimNames(10)  = 'by'
+         ItemDimNames(11)  = 'z'
+         ItemDimNames(12)  = 'z'
+         ItemDimNames(13)  = 't'
 
-      DO N = 1, SIZE(RegistryNames)
-         !---------------------------------------------------------------------
-         ! Look up one of the index fields from grid_registry_mod.F90
-         !---------------------------------------------------------------------
-         CALL Lookup_Grid( Input_Opt      = Input_Opt,                         &
-                           Variable       = RegistryNames(N),                   &
-                           Description    = Description,                       &
-                           Dimensions     = Dimensions,                        &
-                           Source_KindVal = Source_KindVal,                    &
-                           Output_KindVal = Output_KindVal,                    &
-                           Rank           = Rank,                              &
-                           Units          = Units,                             &
-                           OnLevelEdges   = OnLevelEdges,                      &
-                           Ptr0d_8        = Ptr0d_8,                           &
-                           Ptr1d_8        = Ptr1d_8,                           &
-                           Ptr2d_8        = Ptr2d_8,                           &
-                           Ptr2d_4        = Ptr2d_4,                           &
-                           RC             = RC                                )
-         ErrMsg = 'Error looking up grid variable "' // TRIM( RegistryNames(N) ) // '"'
-         CALL checkgc( RC, ErrMsg )
+         DO N = 2, SIZE(RegistryNames)
+            !---------------------------------------------------------------------
+            ! Look up one of the index fields from grid_registry_mod.F90
+            !---------------------------------------------------------------------
+            CALL Lookup_Grid( Input_Opt      = Input_Opt,                         &
+                              Variable       = RegistryNames(N),                   &
+                              Description    = Description,                       &
+                              Dimensions     = Dimensions,                        &
+                              Source_KindVal = Source_KindVal,                    &
+                              Output_KindVal = Output_KindVal,                    &
+                              Rank           = Rank,                              &
+                              Units          = Units,                             &
+                              OnLevelEdges   = OnLevelEdges,                      &
+                              Ptr0d_8        = Ptr0d_8,                           &
+                              Ptr1d_8        = Ptr1d_8,                           &
+                              Ptr2d_8        = Ptr2d_8,                           &
+                              Ptr2d_4        = Ptr2d_4,                           &
+                              RC             = RC                                )
+            ErrMsg = 'Error looking up grid variable "' // TRIM( RegistryNames(N) ) // '"'
+            CALL checkgc( RC, ErrMsg )
 
-         CALL Get_Number_Of_Levels( Container, nLev, nIlev )
+            CALL Get_Number_Of_Levels( Container, nLev, nIlev )
 
-         ! Subset indices
-         Subset_Xc = (/ Container%X0, Container%X1 /)
-         Subset_Yc = (/ Container%Y0, Container%Y1 /)
-         Subset_Zc = (/ Container%Z0, nLev         /)
-         Subset_Ze = (/ Container%Z0, nILev        /)
+            ! Subset indices
+            Subset_Xc = (/CollectionList(State_Grid%ID)%p%Container%X0,CollectionList(State_Grid%ID)%p%Container%X1/)
+            Subset_Yc = (/ CollectionList(State_Grid%ID)%p%Container%Y0,CollectionList(State_Grid%ID)%p%Container%Y1 /)
+            Subset_Zc = (/ CollectionList(State_Grid%ID)%p%Container%Z0, nLev         /)
+            Subset_Ze = (/ CollectionList(State_Grid%ID)%p%Container%Z0, nILev        /)
 
-         SELECT CASE( N )
-            CASE( 2 )                   ! P0
-               Subset_X = (/ 0, 0 /)
-               Subset_Y = (/ 0, 0 /)
-               Subset_Z = (/ 0, 0 /)
-            CASE( 3, 4, 11 )            ! hybi, hyai, ilev
-               Subset_X = Subset_Xc
-               Subset_Y = Subset_Yc
-               Subset_Z = Subset_Ze
-            CASE( 8  )                  ! lon_bnds
-               Subset_X = (/ 1, 2 /)
-               Subset_Y = Subset_Xc
-               Subset_Z = (/ 0, 0 /)
-            CASE( 10 )                  ! lat_bnds
-               Subset_X = (/ 1, 2 /)
-               Subset_Y = Subset_Yc
-               Subset_Z = (/ 0, 0 /)
-            CASE DEFAULT                ! everything else
-               Subset_X = Subset_Xc
-               Subset_Y = Subset_Yc
-               Subset_Z = Subset_Zc
-         END SELECT
+            SELECT CASE( N )
+               CASE( 2 )                   ! P0
+                  Subset_X = (/ 0, 0 /)
+                  Subset_Y = (/ 0, 0 /)
+                  Subset_Z = (/ 0, 0 /)
+               CASE( 3, 4, 11 )            ! hybi, hyai, ilev
+                  Subset_X = Subset_Xc
+                  Subset_Y = Subset_Yc
+                  Subset_Z = Subset_Ze
+               CASE( 8  )                  ! lon_bnds
+                  Subset_X = (/ 1, 2 /)
+                  Subset_Y = Subset_Xc
+                  Subset_Z = (/ 0, 0 /)
+               CASE( 10 )                  ! lat_bnds
+                  Subset_X = (/ 1, 2 /)
+                  Subset_Y = Subset_Yc
+                  Subset_Z = (/ 0, 0 /)
+               CASE DEFAULT                ! everything else
+                  Subset_X = Subset_Xc
+                  Subset_Y = Subset_Yc
+                  Subset_Z = Subset_Zc
+            END SELECT
 
-         !---------------------------------------------------------------------
-         ! Create a HISTORY ITEM for this index field
-         !---------------------------------------------------------------------
-         CALL HistItem_Create( Input_Opt      = Input_Opt,                     &
-         Item           = Item,                          &
-         Id             = N,                             &
-         ContainerId    = 0,                             &
-         Name           = ItemNames(N),                   &
-         LongName       = Description,                   &
-         Units          = Units,                         &
-         SpaceDim       = Rank,                          &
-         OnLevelEdges   = OnLevelEdges,                  &
-         DimNames       = ItemDimNames(N),                &
-         Operation      = 0,                             &
-         Subset_X       = Subset_X,                      &
-         Subset_Y       = Subset_Y,                      &
-         Subset_Z       = Subset_Z,                      &
-         Source_KindVal = Source_KindVal,                &
-         Output_KindVal = Output_KindVal,                &
-         Source_0d_8    = Ptr0d_8,                       &
-         Source_1d_8    = Ptr1d_8,                       &
-         Source_2d_4    = Ptr2d_4,                       &
-         Source_2d_8    = Ptr2d_8,                       &
-         RC             = RC                            )
-         ErrMsg = 'Error creating HISTORY ITEM for grid variable "' // &
-         TRIM( RegistryNames(N) ) // '"'
-         CALL checkgc( RC, ErrMsg )
+            write(*,*)'dingao debug: ', ItemNames(N)      
+            !---------------------------------------------------------------------
+            ! Create a HISTORY ITEM for this index field
+            !---------------------------------------------------------------------
+         if(N==7)then 
+               write(*,*)N
+               write(*,*)Ptr1d_8
+         endif
+            CALL HistItem_Create( Input_Opt      = Input_Opt,                     &
+            Item           = Item,                          &
+            Id             = N,                             &
+            ContainerId    = 0,                             &
+            Name           = ItemNames(N),                   &
+            LongName       = Description,                   &
+            Units          = Units,                         &
+            SpaceDim       = Rank,                          &
+            OnLevelEdges   = OnLevelEdges,                  &
+            DimNames       = ItemDimNames(N),                &
+            Operation      = 0,                             &
+            Subset_X       = Subset_X,                      &
+            Subset_Y       = Subset_Y,                      &
+            Subset_Z       = Subset_Z,                      &
+            Source_KindVal = Source_KindVal,                &
+            Output_KindVal = Output_KindVal,                &
+            Source_0d_8    = Ptr0d_8,                       &
+            Source_1d_8    = Ptr1d_8,                       &
+            Source_2d_4    = Ptr2d_4,                       &
+            Source_2d_8    = Ptr2d_8,                       &
+            RC             = RC                            )
+            ErrMsg = 'Error creating HISTORY ITEM for grid variable "' // &
+            TRIM( RegistryNames(N) ) // '"'
+            CALL checkgc( RC, ErrMsg )
 
-         
+            
 
-         call MetaHistItem_AddNew( Input_Opt   = Input_Opt,             &
-                                 Item        = Item,                    &
-                                 Node        = IndexVariables(State_Grid%ID)%p,     &
-                                 RC          = RC                        )
-         ErrMsg = 'Could not add HISTORY ITEM for grid variable "' // &
-         TRIM( RegistryNames(N) ) // '" to the list of HISTORY ITEMS!'
-         call checkgc(RC, ErrMsg)
-      enddo 
+            call MetaHistItem_AddNew( Input_Opt   = Input_Opt,             &
+                                    Item        = Item,                    &
+                                    Node        = IndexVariables(State_Grid%ID)%p,     &
+                                    RC          = RC                        )
+            ErrMsg = 'Could not add HISTORY ITEM for grid variable "' // &
+            TRIM( RegistryNames(N) ) // '" to the list of HISTORY ITEMS!'
+            call checkgc(RC, ErrMsg)
+         enddo 
+      endif
       !============================
       ! clean up and quit
       !============================
