@@ -249,7 +249,7 @@
 	real, dimension(1:nbin_o) :: xmas_secti, xmas_sectj, xmas_sectc, xmas_sect_sna_oc, xmas_sect_bc, xmas_sect_sala, xmas_sect_salc
 	real, dimension(1:nbin_o) :: xdia_cm
 	real, parameter           :: FRAC2Aitken = 0.10 ! Fraction of modal mass in Aitken mode
-	real, parameter           :: ndust1 = 4         ! Number of dust bins of GEOS-Chem
+	integer, parameter           :: ndust1 = 4         ! Number of dust bins of GEOS-Chem
 	real                      :: dustfrc_gigc4bin(ndust1, nbin_o) ! GEOS-Chem dust size distribution - mass fracs in MOSAIC 4-bins
         real                      :: dgnum_um, dlo_um, dhi_um, duma, sixpi, dlo, dhi, dxbin, relh_frc, dgnum_sna_oc, dgnum_bc, sigma_sna_oc, sigma_bc, &
                                      dgnum_sala, dgnum_salc, sigma_sala, sigma_salc

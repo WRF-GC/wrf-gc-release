@@ -1236,7 +1236,7 @@ contains
       call check(ierr, 'def dim lat')
       ierr = nf90mpi_def_dim(ncid, 'lev', kte, dimids(3))
       call check(ierr, 'def dim lev')
-      ierr = nf90mpi_def_dim(ncid, 'time', 0, dimids(4))
+      ierr = nf90mpi_def_dim(ncid, 'time', 0_MPI_OFFSET_KIND, dimids(4))
       call check(ierr, 'def dim lev')
       ierr = nf90mpi_def_dim(ncid, 'lon_e', ide, dimids(5))
       call check(ierr, 'def dim lon_e')
@@ -1244,7 +1244,7 @@ contains
       call check(ierr, 'def dim lat_e')
       ierr = nf90mpi_def_dim(ncid, 'ilev', kte+1, dimids(7))
       call check(ierr, 'def dim ilev')
-      ierr = nf90mpi_def_dim(ncid, 'nb', 2, dimids(8))
+      ierr = nf90mpi_def_dim(ncid, 'nb', 2_MPI_OFFSET_KIND, dimids(8))
 
       ierr = nf90mpi_def_var(ncid, 'lon', NF90_FLOAT, dimids(1), varid)
       call check(ierr, 'def var lon')

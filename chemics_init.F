@@ -260,7 +260,7 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, &
       ! Temporary kludge to tune down KPP sensitivity if operating in multi-domain
       ! mode. (hplin, 5/20/20)
       if(config_flags%gc_kpp_stop) then                       ! Default behavior
-        if(Global_Input_Opt%KppStop .eq. .true.) then
+        if(Global_Input_Opt%KppStop .eqv. .true.) then
           if(grid%id .ge. 2) then
             Global_Input_Opt%KppStop = .false.
           endif
@@ -270,7 +270,7 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, &
       endif
 
       ! Show a KPP warning for this...
-      if(Global_Input_Opt%KppStop .eq. .false.) then
+      if(Global_Input_Opt%KppStop .eqv. .false.) then
         write(6,*) "*** WRF-GC WARNING ***"
         write(6,*) "YOU ARE RUNNING WRF-GC IN MULTI-DOMAIN NESTED MODE, WHICH DISABLES"
         write(6,*) "CRITICAL INTEGRITY FAILSAFES WITHIN GEOS-CHEM KPP INTEGRATOR."
@@ -285,7 +285,7 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, &
       endif
 
       ! Have we ran this before...?
-      if(GIGC_States(grid%id)%Init .eq. .true.) then
+      if(GIGC_States(grid%id)%Init .eqv. .true.) then
         write(6, *) "WRFGC chemics_init: Domain", grid%id, "already initialized, skipping."
         return
       endif

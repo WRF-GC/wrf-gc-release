@@ -684,16 +684,16 @@ subroutine chem_driver(grid, config_flags &
          ! It now accepts configuration in the WRF namelist for each individual process,
          ! so you can turn off turbulence if it causes spurious results
          ! (hplin, 8/15/18)
-         GIGC_Ops%Conv   = config_flags%gc_do_convection
-         GIGC_Ops%Emis   = config_flags%gc_do_hemco
-         GIGC_Ops%Tend   = .not. config_flags%gc_do_pblmix
-         GIGC_Ops%Turb   = config_flags%gc_do_pblmix
-         GIGC_Ops%Chem   = config_flags%gc_do_chemistry
-         GIGC_Ops%DryDep = config_flags%gc_do_drydep
-         GIGC_Ops%WetDep = config_flags%gc_do_wetdep
+         GIGC_Ops%Conv   = (config_flags%gc_do_convection .eq. 1)
+         GIGC_Ops%Emis   = (config_flags%gc_do_hemco .eq. 1)
+         GIGC_Ops%Tend   = .not. (config_flags%gc_do_pblmix .eq. 1)
+         GIGC_Ops%Turb   = (config_flags%gc_do_pblmix .eq. 1)
+         GIGC_Ops%Chem   = (config_flags%gc_do_chemistry .eq. 1)
+         GIGC_Ops%DryDep = (config_flags%gc_do_drydep .eq. 1)
+         GIGC_Ops%WetDep = (config_flags%gc_do_wetdep .eq. 1)
          GIGC_Ops%Rad    = .false.
 
-         GIGC_Ops%GCDiagn = config_flags%gc_do_gcdiagn
+         GIGC_Ops%GCDiagn = (config_flags%gc_do_gcdiagn .eq. 1)
       else
          GIGC_Ops%Conv   = .false.
          GIGC_Ops%Emis   = .false.
