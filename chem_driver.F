@@ -8,7 +8,7 @@
 !                                                                              !
 !------------------------------------------------------------------------------!
 !         WRF-GC - two-way, nested coupled meteorology-chemistry model         !
-!                             v3.0.0 (April 2024)                              !
+!                             v3.0.1 (August 2025)                             !
 !------------------------------------------------------------------------------!
 !  Formerly known as WRF-GCHP, WRF-GIGC. GCHP-powered chemistry add-on for WRF !
 !  WRF & GCHP are (c) their original authors.                                  !

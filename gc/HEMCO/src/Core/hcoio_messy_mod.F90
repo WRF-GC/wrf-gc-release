@@ -790,8 +790,8 @@ MODULE HCOIO_MESSY_MOD
        ! -------------------------------------------------------------
        LOW = 1
        UPP = 1
-       DO J = 1, YLEV !lat
        DO I = 1, XLEV !lon
+       DO J = 1, YLEV !lat
           UPP                   = LOW + ZLEV - 1 ! Upper index
           ax(N)%dat%vd(LOW:UPP) = lev(I,J,:)     ! Pass to vector
           LOW                   = UPP + 1        ! Next lower index

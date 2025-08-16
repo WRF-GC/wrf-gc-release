@@ -8,7 +8,7 @@
 !                                                                              !
 !------------------------------------------------------------------------------!
 !         WRF-GC - two-way, nested coupled meteorology-chemistry model         !
-!                             v3.0.0 (April 2024)                              !
+!                             v3.0.1 (August 2025)                             !
 !------------------------------------------------------------------------------!
 !  Formerly known as WRF-GCHP, WRF-GIGC. GCHP-powered chemistry add-on for WRF !
 !  WRF & GCHP are (c) their original authors.                                  !
@@ -347,11 +347,9 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, &
       call wrf_message("            \/  \/   |_|  \_\_|          \_____|\_____|          ")
       call wrf_message("*****************************************************************")
       call wrf_message("           WRF-GC MODEL, BUILD 2404.22 - WRF BINDINGS            ")
-      call wrf_message("                 WRF-GC v3.0.0r2 (Oct 2024)                      ")
-      ! call wrf_message(" You are using an experimental future version of WRF-GC 3.0.     ")
-      ! call wrf_message(" ** PLEASE VALIDATE YOUR SCIENTIFIC RESULTS AS THIS BUILD IS     ")
-      ! call wrf_message(" ** HIGHLY EXPERIMENTAL AND PRONE TO ERRORS!                     ")
-      call wrf_message(" For errors, suggestions & feedback email hplin@seas.harvard.edu ")
+      call wrf_message("                 WRF-GC v3.0.1 (August 2025)                     ")
+      call wrf_message(" Please report errors, suggestions & feedback to:                ")
+      call wrf_message("   https://github.com/WRF-GC/wrf-gc-release                      ")
       call wrf_message("*****************************************************************")
       call wrf_message(message_txt)
 

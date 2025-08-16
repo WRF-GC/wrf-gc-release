@@ -121,7 +121,8 @@ help:
 ###                                                                         ###
 ###############################################################################
 
-gckpp_Function.o      : gckpp_Parameters.o
+gckpp_Function.o      : gckpp_Parameters.o \
+                        gckpp_Global.o
 
 gckpp_Global.o        : gckpp_Parameters.o
 

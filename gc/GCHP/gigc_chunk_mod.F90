@@ -1025,6 +1025,7 @@ CONTAINS
                                     value_DAYOFYR  = dayOfYr,    &
                                     value_HOUR     = hour,       &
                                     value_MINUTE   = minute,     &
+                                    value_SECOND   = second,     &
                                     value_HELAPSED = hElapsed,   &
                                     value_UTC      = utc,        &
                                     RC             = RC         )
@@ -1038,9 +1039,7 @@ CONTAINS
     ! Calculate MODIS leaf area indexes needed for dry deposition
     ! WRF-GC only: Avoid re-computing the State_Met%XLAI and State_Met%MODISLAI
     ! State_Met%XLAI and State_Met%MODISLAI are transferred from WRF in wrfgc_convert_mod.
-#if !defined( MODEL_WRF )
-    CALL Compute_XLAI( Input_Opt, State_Grid, State_Met, RC )
-#endif
+    ! CALL Compute_XLAI( Input_Opt, State_Grid, State_Met, RC )
 
     ! Set the pressure at level edges [hPa] from the ESMF environment
     CALL Accept_External_Pedge( State_Met  = State_Met,   &

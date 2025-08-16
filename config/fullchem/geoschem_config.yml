@@ -16,8 +16,8 @@ simulation:
   name: fullchem
   start_date: [19970215, 031100]
   end_date: [20180415, 040000]
-  root_data_dir: /n/holyscratch01/external_repos/GEOS-CHEM/gcgrid/data/ExtData
-  chem_inputs_dir: /n/holyscratch01/external_repos/GEOS-CHEM/gcgrid/data/ExtData/CHEM_INPUTS/
+  root_data_dir: /n/holylfs06/LABS/jacob_lab/Everyone/GEOS-CHEM/gcgrid/gcdata/ExtData
+  chem_inputs_dir: /n/holylfs06/LABS/jacob_lab/Everyone/GEOS-CHEM/gcgrid/gcdata/ExtData/CHEM_INPUTS/
   met_field: GEOSFP
   species_database_file: ./species_database.yml
   species_metadata_output_file: ./geoschem_species_metadata.yml
@@ -66,7 +66,7 @@ operations:
      use_non_local_pbl: true 
 
   photolysis:
-    input_dir: /n/holyscratch01/external_repos/GEOS-CHEM/gcgrid/data/ExtData/CHEM_INPUTS/FAST_JX/v2021-10/
+    input_dir: /n/holylfs06/LABS/jacob_lab/Everyone/GEOS-CHEM/gcgrid/gcdata/ExtData/CHEM_INPUTS/FAST_JX/v2021-10/
     overhead_O3:
       use_online_O3_from_model: true 
       use_column_O3_from_met: true

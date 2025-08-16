@@ -511,66 +511,56 @@ contains
             !     State_Met%XLAI(I,J,S) = State_Met%XLAI_NATIVE(I,J,S+1) / landFrac
             !  Where landFrac is State_Met%LandTypeFrac(I,J,S+1)
             !  This means that it is scaled to be larger or equal to the original LAI
-            !
-            ! For now (hplin, xfeng with discussion 12/1/18) we decide to assign 1.0 fractions to land types
-            ! based on grid%lu_index, so we don't have to scale XLAI from LAI for now.
             if(mminlu_loc .eq. 'USGS') then
-                select case(int(grid%lu_index(i, j)))
-                case (1, 31, 32, 33) ! Urban, residential
-                    State_Met%LandTypeFrac(II, JJ, 2 ) = 1.0_fp
-                    State_Met%XLAI        (II, JJ, 2 ) = grid%lai(i, j)
-                case (2, 3, 4, 5, 6) ! Dryland Cropland, Cr/Grassland Mosaic, Cr/Woodland Mosaic
-                    State_Met%LandTypeFrac(II, JJ, 39) = 1.0_fp ! Cool Irrigated Cropland
-                    State_Met%XLAI        (II, JJ, 39) = grid%lai(i, j)
-                case (7, 8, 9) ! Grassland, Shrubland, Mixed Sh/Gr
-                    State_Met%LandTypeFrac(II, JJ, 43) = 1.0_fp ! Cold Grassland
-                    State_Met%XLAI        (II, JJ, 43) = grid%lai(i, j)
-                case (10) ! Savanna
-                    State_Met%LandTypeFrac(II, JJ, 44) = 1.0_fp ! Woody Savanna
-                    State_Met%XLAI        (II, JJ, 44) = grid%lai(i, j)
-                case (11) ! Deciduous Broadleaf Forest
-                    State_Met%LandTypeFrac(II, JJ, 6 ) = 1.0_fp
-                    State_Met%XLAI        (II, JJ, 6 ) = grid%lai(i, j)
-                case (12) ! Deciduous Needleleaf Forest
-                    State_Met%LandTypeFrac(II, JJ, 5 ) = 1.0_fp
-                    State_Met%XLAI        (II, JJ, 5 ) = grid%lai(i, j)
-                case (13) ! Evergreen Broadleaf Forest
-                    State_Met%LandTypeFrac(II, JJ, 7 ) = 1.0_fp
-                    State_Met%XLAI        (II, JJ, 7 ) = grid%lai(i, j)
-                case (14) ! Evergreen Needleleaf Forest
-                    State_Met%LandTypeFrac(II, JJ, 4 ) = 1.0_fp ! Coniferous Forest
-                    State_Met%XLAI        (II, JJ, 4 ) = grid%lai(i, j)
-                case (15) ! Mixed forest
-                    State_Met%LandTypeFrac(II, JJ, 25) = 1.0_fp
-                    State_Met%XLAI        (II, JJ, 25) = grid%lai(i, j)
-                case (16) ! Water bodies
-                    State_Met%LandTypeFrac(II, JJ, 1 ) = 1.0_fp ! Inland/Sea Water
-                    State_Met%XLAI        (II, JJ, 1 ) = grid%lai(i, j)
-                case (18) ! Wooded Wetland
-                    State_Met%LandTypeFrac(II, JJ, 14) = 1.0_fp ! Wooded Wet Swamp
-                    State_Met%XLAI        (II, JJ, 14) = grid%lai(i, j)
-                case (19) ! Barren or Sparsely Vegetated
-                    State_Met%LandTypeFrac(II, JJ, 3 ) = 1.0_fp ! Low Sparse Grassland
-                    State_Met%XLAI        (II, JJ, 3 ) = grid%lai(i, j)
-                case (21) ! Wooded Tundra
-                    State_Met%LandTypeFrac(II, JJ, 64) = 1.0_fp ! Wooden Tundra
-                    State_Met%XLAI        (II, JJ, 64) = grid%lai(i, j)
-                case (23) ! Bare Ground Tundra
-                    State_Met%LandTypeFrac(II, JJ, 54) = 1.0_fp ! Barren Tundra
-                    State_Met%XLAI        (II, JJ, 54) = grid%lai(i, j)
-                case (24) ! Snow or Ice
-                    State_Met%LandTypeFrac(II, JJ, 13) = 1.0_fp ! Glacier Ice
-                    State_Met%XLAI        (II, JJ, 13) = grid%lai(i, j)
-                case (25) ! Playa
-                    State_Met%LandTypeFrac(II, JJ, 8 ) = 1.0_fp ! Bare Desert
-                    State_Met%XLAI        (II, JJ, 8 ) = grid%lai(i, j)
-                case default
-                    ! default: Urban
-                    State_Met%LandTypeFrac(II, JJ, 2 ) = 1.0_fp
-                    State_Met%XLAI        (II, JJ, 2 ) = grid%lai(i, j)
-                end select
+                State_Met%LandTypeFrac(II, JJ, 2 ) = grid%landusef(i, 1, j) ! Urban
+                State_Met%LandTypeFrac(II, JJ, 39) = grid%landusef(i, 2, j) + grid%landusef(i, 3, j) + grid%landusef(i, 4, j) + grid%landusef(i, 5, j) + grid%landusef(i, 6, j)
+                State_Met%LandTypeFrac(II, JJ, 43) = grid%landusef(i, 7, j) + grid%landusef(i, 8, j) + grid%landusef(i, 9, j) ! Cold Grassland
+                State_Met%LandTypeFrac(II, JJ, 44) = grid%landusef(i, 10, j) ! Woody Savanna
+                State_Met%LandTypeFrac(II, JJ, 6 ) = grid%landusef(i, 11, j)
+                State_Met%LandTypeFrac(II, JJ, 5 ) = grid%landusef(i, 12, j)
+                State_Met%LandTypeFrac(II, JJ, 7 ) = grid%landusef(i, 13, j)
+                State_Met%LandTypeFrac(II, JJ, 4 ) = grid%landusef(i, 14, j) ! Coniferous Forest
+                State_Met%LandTypeFrac(II, JJ, 25) = grid%landusef(i, 15, j)
+                State_Met%LandTypeFrac(II, JJ, 1 ) = grid%landusef(i, 16, j) ! Inland/Sea Water
+                State_Met%LandTypeFrac(II, JJ, 46) = grid%landusef(i, 17, j) ! Marsh wetland
+                State_Met%LandTypeFrac(II, JJ, 14) = grid%landusef(i, 18, j) ! Wooded Wet Swamp
+                State_Met%LandTypeFrac(II, JJ, 3 ) = grid%landusef(i, 19, j)  ! Low Sparse Grassland
+                State_Met%LandTypeFrac(II, JJ, 10) = grid%landusef(i, 20, j) ! Upland tundra
+                State_Met%LandTypeFrac(II, JJ, 64) = grid%landusef(i, 21, j) + grid%landusef(i, 22, j) ! Wooden Tundra
+                State_Met%LandTypeFrac(II, JJ, 54) = grid%landusef(i, 23, j) ! Barren Tundra
+                State_Met%XLAI        (II, JJ, 1 ) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 2 ) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 3 ) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 4 ) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 5 ) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 6 ) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 7 ) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 8 ) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 9 ) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 10) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 11) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 12) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 13) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 14) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 15) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 16) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 17) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 18) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 19) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 20) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 21) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 22) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 23) = grid%lai(i, j)
+                State_Met%XLAI        (II, JJ, 24) = grid%lai(i, j)
             else if(mminlu_loc .eq. 'MODIFIED_IGBP_MODIS_NOAH') then
-
+                write(6, *) "====================================================="
+                write(6, *) "|               W A R N I N G (WRF-GC)              |"
+                write(6, *) "====================================================="
+                write(6, *) "  THE GEOGRAPHICAL DATA SOURCE SELECTED (MODIS)      "
+                write(6, *) " IS UNSUPPORTED IN WRF-GC AT THIS TIME! PLEASE USE   "
+                write(6, *) " THE USGS DATASET WHEN RUNNING GEOGRID.              "
+                write(6, *) "  THE DRY DEPOSITION IN GEOS-CHEM WILL NOT WORK      "
+                write(6, *) " IN THIS CONFIGURATION!                              "
             endif
 
             ! LandTypeFrac      Olson landmap fraction per type (I,J,TYPE) [1]
@@ -631,19 +621,6 @@ contains
 
             ! MODISLAI          Daily LAI computed from monthly offline MODIS [m2/m2]
             State_Met%MODISLAI(II, JJ) = grid%lai(i, j)
-
-            ! ITY
-            ! LWI               Land/water indices [1]
-            ! If LWI = 0 and ALBEDO < 0.695, is WATER box.
-            !    LWI = 1 .. is LAND box.
-            !    LWI = 2 .. is ICE box. (dao_mod.F)
-            ! Currently, we are using LWI = 1 as a kludge. Fixme this from WPS data.
-            
-            if(grid%lu_mask(i, j) .eq. 0) then
-                State_Met%LWI(II, JJ) = 1
-            else if(grid%lu_mask(i, j) .eq. 1) then
-                State_Met%LWI(II, JJ) = 0
-            endif
 
             ! PARDR             Surface downwelling PAR direct flux [W/m^2] | from WRF module_bioemi_beis314.F:subroutine getpar
             ! PARDF             Surface downwelling PAR diffusive flux [W/m^2] | from WRF module_bioemi_beis314.F:subroutine getpar
