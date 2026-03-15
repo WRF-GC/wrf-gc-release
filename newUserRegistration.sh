@@ -34,17 +34,30 @@ thinline="\n-----------------------------------------------------------\n"
 #### Send registration details to atmoschem wordpress website via curl
 ####==========================================================================
 function postRegistration() {
-    #### Sends registration details to API ####
-    curl --location --request POST "https://www.download.atmoschem.org.cn/wp-json/contact-form-7/v1/contact-forms/20/feedback" \
-        --form 'your-name='"${2}" \
-        --form 'your-email='"${1}" \
-        --form 'institution='"${3}" \
-        --form '_wpcf7_unit_tag="wpcf7-f20-p47-o1"' \
-        --form 'name_of_pi='"${4}" \
-        --form 'site='"${5}" \
-        --form 'git_username='"${6}" \
-        --form 'research_interest='"${7}" \
-        --form 'env_type='"${8}" 
+    local email="$1"
+    local name="$2"
+    local institution="$3"
+    local pi="$4"
+    local site="$5"
+    local git_username="$6"
+    local research_interest="$7"
+    local env_type="$8"
+
+    curl -sS -X POST "https://gjetclumoixutpxqfppd.supabase.co/rest/v1/registrations" \
+        -H "apikey: sb_publishable_Mseemc1HPEALvc2i7hTg2Q_jnFS0t_6" \
+        -H "Authorization: Bearer sb_publishable_Mseemc1HPEALvc2i7hTg2Q_jnFS0t_6" \
+        -H "Content-Type: application/json" \
+        -H "Prefer: return=minimal" \
+        -d "{
+            \"email\": \"${email}\",
+            \"name\": \"${name}\",
+            \"institution\": \"${institution}\",
+            \"name_of_pi\": \"${pi}\",
+            \"site\": \"${site}\",
+            \"git_username\": \"${git_username}\",
+            \"research_interest\": \"${research_interest}\",
+            \"env_type\": \"${env_type}\"
+        }"
 }
 
 ####=========================================================================
@@ -86,6 +99,7 @@ function registerNewUser() {
 
     # Ask user several questions
     printf "\nInitiating User Registration:\n"
+    printf "WRF-GC is a community-driven project. We welcome your feedback and contributions.\n"
     printf "You will only need to fill this information out once.\n"
     printf "Please respond to all questions.\n"
 

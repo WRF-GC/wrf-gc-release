@@ -939,6 +939,12 @@ CONTAINS
                 MINALT = MIN(L,MINALT)
                 MAXALT = MAX(L,MAXALT)
              ENDIF
+#if defined( MODEL_WRF )
+             ! Aoxing 20230402
+             IF (MAXALT .eq. State_Grid%NZ) THEN
+                MAXALT = MAXALT - 1
+             ENDIF
+#endif
           ENDIF
 
           IF (.not.RUNCALC) THEN
@@ -1180,7 +1186,11 @@ CONTAINS
                 XNAT_ABOVE = 0.0e+0_fp
                 XICE_ABOVE = 0.0e+0_fp
                 XPSC_ABOVE = 0.0e+0_fp
+#if defined( MODEL_WRF )
+                P_ABOVE = State_Met%PEDGE(I,J,State_Grid%NZ+1) * 100.0e+0_fp
+#else
                 P_ABOVE = State_Met%PEDGE(I,J,L+2) * 100.0e+0_fp
+#endif
                 PSEDABOVE = 0.0e+0_fp
              ENDIF
              ABOVEGRAD = (XPSC_ABOVE-XPSC_0)/(P_0-P_ABOVE)
@@ -1233,7 +1243,11 @@ CONTAINS
                    XNAT_ABOVE = 0.0e+0_fp
                    XICE_ABOVE = 0.0e+0_fp
                    XPSC_ABOVE = 0.0e+0_fp
+#if defined( MODEL_WRF )
+                   P_ABOVE = State_Met%PEDGE(I,J,State_Grid%NZ+1) * 100.0e+0_fp
+#else
                    P_ABOVE = State_Met%PEDGE(I,J,L+2) * 100.0e+0_fp
+#endif
                    PSEDABOVE = 0.0e+0_fp
                 ENDIF
                 ! Note reversal of pressure values as pressure falls with
@@ -3108,12 +3122,14 @@ CONTAINS
        Vy = g0*DENSITY*RADIUS*RADIUS*(1.e-4_fp)/(4.5*ETA*TCENTER)
        VEL = 0.893e+0_fp * Vy * VAL_X
     ENDIF
-
     ! Velocities should be of the order of 0.1 m/s
     IF (VEL.gt.10.e+0_fp) THEN
-      write(6,*) 'Warning: Excessive fall velocity in UCX_Mod. See WRF-GC and GEOS-Chem documentation.'
+#if defined( MODEL_WRF )
+       write(6,*) 'Warning: Excessive fall velocity in UCX_Mod. See WRF-GC and GEOS-Chem documentation.'
       ! Patched out in WRF-GC
-      !  CALL ERROR_STOP(' Excessive fall velocity? ', ' CALC_FALLVEL, UCX_mod')
+#else
+       CALL ERROR_STOP(' Excessive fall velocity? ', ' CALC_FALLVEL, UCX_mod')
+#endif
     ENDIF
 
   END FUNCTION CALC_FALLVEL

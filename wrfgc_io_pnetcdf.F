@@ -120,6 +120,125 @@ contains
       end if
    end subroutine checkgc
 
+   subroutine checkmpi(err, message)
+      use mpi
+      implicit none
+      integer :: err
+      character(len=*), intent(in) :: message
+
+      if (err .NE. MPI_SUCCESS) then
+         write(*,*) 'error: mpi failed ', trim(message), err
+         call MPI_Abort(MPI_COMM_WORLD, -1, err)
+      end if
+   end subroutine checkmpi
+
+   subroutine set_mpi_info_if_env(info, key, env_name)
+      use mpi
+      implicit none
+      integer, intent(in) :: info
+      character(len=*), intent(in) :: key, env_name
+      character(len=128) :: env_value
+      integer :: ierr, istat, ilen
+
+      env_value = ''
+      call get_environment_variable(trim(env_name), env_value, length=ilen, status=istat)
+      if (istat == 0 .and. ilen > 0) then
+         call MPI_Info_set(info, trim(key), trim(env_value), ierr)
+         call checkmpi(ierr, 'MPI_Info_set '//trim(key))
+      endif
+   end subroutine set_mpi_info_if_env
+
+   ! MPI-IO hint configuration for PnetCDF output.
+   !
+   ! Default behavior:
+   !   romio_cb_write = automatic
+   !   romio_cb_read  = automatic
+   !   HEMCO output   = enabled
+   !
+   ! Users can override these defaults at runtime via environment variables:
+   !   WRFGC_MPIINFO_ROMIO_CB_WRITE   -> romio_cb_write
+   !   WRFGC_MPIINFO_ROMIO_CB_READ    -> romio_cb_read
+   !   WRFGC_MPIINFO_CB_NODES         -> cb_nodes
+   !   WRFGC_MPIINFO_CB_BUFFER_SIZE   -> cb_buffer_size (bytes)
+   !   WRFGC_MPIINFO_ROMIO_DS_WRITE   -> romio_ds_write
+   !   WRFGC_MPIINFO_ROMIO_DS_READ    -> romio_ds_read
+   !   WRFGC_ENABLE_HEMCO_OUTPUT      -> enable/disable single-file HEMCO output
+   !
+   ! Meaning of common hints:
+   !   romio_cb_*      controls collective buffering behavior.
+   !   cb_nodes        sets the number of aggregator ranks.
+   !   cb_buffer_size  sets aggregator buffer size in bytes.
+   !   romio_ds_*      controls ROMIO data sieving for noncontiguous access.
+   !   WRFGC_ENABLE_HEMCO_OUTPUT controls whether the HEMCO output path runs.
+   !   If unset, HEMCO output remains enabled. Set to 0/FALSE/OFF/NO/N to disable.
+   !
+   ! Conservative cross-platform starting point:
+   !   export WRFGC_MPIINFO_ROMIO_CB_WRITE=automatic
+   !   export WRFGC_MPIINFO_ROMIO_CB_READ=automatic
+   !   export WRFGC_MPIINFO_CB_NODES=8
+   !   export WRFGC_MPIINFO_CB_BUFFER_SIZE=33554432
+   !   export WRFGC_ENABLE_HEMCO_OUTPUT=1
+   !
+   ! GPFS starting point to try:
+   !   export WRFGC_MPIINFO_ROMIO_CB_WRITE=enable
+   !   export WRFGC_MPIINFO_ROMIO_CB_READ=enable
+   !   export WRFGC_MPIINFO_CB_NODES=8
+   !   export WRFGC_MPIINFO_CB_BUFFER_SIZE=16777216
+   !   export WRFGC_ENABLE_HEMCO_OUTPUT=1
+   !
+   ! Lustre starting point to try:
+   !   export WRFGC_MPIINFO_ROMIO_CB_WRITE=automatic
+   !   export WRFGC_MPIINFO_ROMIO_CB_READ=automatic
+   !   export WRFGC_MPIINFO_CB_NODES=8
+   !   export WRFGC_MPIINFO_CB_BUFFER_SIZE=33554432
+   !   export WRFGC_MPIINFO_ROMIO_DS_WRITE=disable
+   !   export WRFGC_MPIINFO_ROMIO_DS_READ=disable
+   !   export WRFGC_ENABLE_HEMCO_OUTPUT=1
+   !
+   ! Final performance is machine- and filesystem-dependent. Tune with
+   ! simple throughput tests rather than assuming one setting is universal.
+
+   subroutine setup_mpi_info(info)
+      use mpi
+      implicit none
+      integer, intent(out) :: info
+      integer :: ierr
+
+      call MPI_Info_create(info, ierr)
+      call checkmpi(ierr, 'MPI_Info_create')
+
+      call MPI_Info_set(info, 'romio_cb_write', 'automatic', ierr)
+      call checkmpi(ierr, 'MPI_Info_set romio_cb_write')
+      call MPI_Info_set(info, 'romio_cb_read', 'automatic', ierr)
+      call checkmpi(ierr, 'MPI_Info_set romio_cb_read')
+
+      call set_mpi_info_if_env(info, 'romio_cb_write', 'WRFGC_MPIINFO_ROMIO_CB_WRITE')
+      call set_mpi_info_if_env(info, 'romio_cb_read', 'WRFGC_MPIINFO_ROMIO_CB_READ')
+      call set_mpi_info_if_env(info, 'cb_nodes', 'WRFGC_MPIINFO_CB_NODES')
+      call set_mpi_info_if_env(info, 'cb_buffer_size', 'WRFGC_MPIINFO_CB_BUFFER_SIZE')
+      call set_mpi_info_if_env(info, 'romio_ds_write', 'WRFGC_MPIINFO_ROMIO_DS_WRITE')
+      call set_mpi_info_if_env(info, 'romio_ds_read', 'WRFGC_MPIINFO_ROMIO_DS_READ')
+   end subroutine setup_mpi_info
+
+   logical function hemco_output_enabled()
+      use Charpak_Mod, only : To_UpperCase
+      implicit none
+      character(len=32) :: env_value
+      integer :: ilen, istat
+
+      hemco_output_enabled = .true.
+      env_value = ''
+
+      call get_environment_variable('WRFGC_ENABLE_HEMCO_OUTPUT', env_value, length=ilen, status=istat)
+      if (istat == 0 .and. ilen > 0) then
+         env_value = To_UpperCase(trim(env_value))
+         if (env_value == '0' .or. env_value == 'FALSE' .or. env_value == 'OFF' .or. &
+             env_value == 'NO' .or. env_value == 'N') then
+            hemco_output_enabled = .false.
+         endif
+      endif
+   end function hemco_output_enabled
+
    subroutine writeDiag(debug_level, Input_Opt, State_Met, State_Chm, grid, State_Grid, State_Diag, its, ite, jts, jte, ide, jde, kte)
       USE GC_Stateful_Mod,   ONLY : GIGC_States
 
@@ -194,7 +313,7 @@ contains
       ! for hemco
       type(DiagnCollection), pointer :: hco_collection
       type(DiagnCont), pointer :: hco_diag
-      logical :: do_diagn_now 
+      logical :: do_diagn_now, enable_hemco_output
       integer :: delta_s
 
       Source_0d_8 => NULL()
@@ -221,7 +340,7 @@ contains
          return
       endif
 
-      if (debug_level .gt. 200)then
+      if (debug_level .gt. 100)then
          write(*,*) 'The current output domain: ',State_Grid%ID, grid%id;
       endif
       write(domainName, '(A,I2.2)'), 'd', grid%id;
@@ -239,15 +358,26 @@ contains
       ! use wrf history interval as output interval
       xtimei = int(xtime/grid%history_interval)
 
-      write(*,*)'before get collection, line 241'
+      if (debug_level .gt. 100) write(*,*)'before get collection, line 241'
       ! write hemco diagnostic
       hco_collection => GIGC_States(State_Grid%id)%HcoState%Diagn%Collections
 
-      write(*,*)'after get collection, line 245'
+      if (debug_level .gt. 100) write(*,*)'after get collection, line 245'
 
-        do while(associated(hco_collection))
+      enable_hemco_output = hemco_output_enabled()
+      if (.not. enable_hemco_output) then
+         if (debug_level .gt. 100) then
+            write(*,*) 'HEMCO output disabled by WRFGC_ENABLE_HEMCO_OUTPUT'
+         endif
+      endif
+
+      do while(associated(hco_collection))
+         if (.not. enable_hemco_output) then
+            hco_collection => hco_collection%NextCollection
+            cycle
+         endif
          do_diagn_now = .False.
-         if (debug_level .ge. 500) then
+         if (debug_level .gt. 100) then
             write(*,*)'write hemco diagn: ', trim(hco_collection%PREFIX)
             write(*,*)'frequency: ',hco_collection%deltaYMD, hco_collection%deltaHMS
             
@@ -390,25 +520,25 @@ contains
                hco_diag => hco_collection%DiagnList
                do while(associated(hco_diag))
                   if ( hco_diag%SpaceDim == 2 .and. associated(hco_diag%Arr2D))then
-                     if (debug_level .ge. 500) then
+                     if (debug_level .gt. 100) then
                         write(*,*)'def hemco diagn 2d: name: ', hco_diag%cName
                      endif
                      if (associated(hco_diag%Arr2D%Val))then
                         ierr = nf90mpi_def_var(ncid, trim(hco_diag%cName), NF90_FLOAT, (/dimids(1), dimids(2), dimids(4)/), varid)
                         call check(ierr, 'def var')
                      else
-                        write(*,*)'val not allocated'
+                        if (debug_level .gt. 100) write(*,*)'val not allocated'
                      endif
                   endif
                   if (hco_diag%SpaceDim == 3 .and. associated(hco_diag%Arr3D))then
-                     if (debug_level .ge. 500) then
+                     if (debug_level .gt. 100) then
                         write(*,*)'def hemco diagn 3d : name: ', hco_diag%cName
                      endif
                      if (associated(hco_diag%Arr3D%Val))then
                         ierr = nf90mpi_def_var(ncid, trim(hco_diag%cName), NF90_FLOAT, (/dimids(1), dimids(2), dimids(3), dimids(4)/), varid)
                         call check(ierr, 'def var')
                      else 
-                        write(*,*)'val not allocated'
+                        if (debug_level .gt. 100) write(*,*)'val not allocated'
                      endif
                   endif
                   ierr = nf90mpi_put_att(ncid, varid, 'units', trim(hco_diag%OutUnit))
@@ -463,13 +593,13 @@ contains
                 do while(associated(hco_diag))
                   Source_2d_4 => NULL()
                   Source_3d_4 => NULL()
-                  if(debug_level .ge. 500)then
+                  if(debug_level .gt. 100)then
                      write(*,* )'write hemco diagn: ', hco_diag%cID
                   endif
                     if ( hco_diag%SpaceDim == 2 .and. associated(hco_diag%Arr2D))then
                         CALL GetHcoDiagn( HcoState, ExtState,hco_diag%cName, .false., RC, Ptr2D=Source_2d_4, &
                                           COL=HcoState%Diagn%HcoDiagnIDDefault)
-                        if (debug_level .ge. 500) then
+                        if (debug_level .gt. 100) then
                             write(*,*)'write hemco diagn 2d: name: ', hco_diag%cName
                         endif
                         if (associated(Source_2d_4))then
@@ -478,13 +608,13 @@ contains
                                             time_index, ncid, (/dimids(1:2), dimids(4)/),&
                                             trim(hco_diag%OutUnit), trim(hco_diag%long_name))
                         else
-                            write(*,*)'val not allocated'
+                            if (debug_level .gt. 100) write(*,*)'val not allocated'
                         endif
                     endif
                     if (hco_diag%SpaceDim == 3 .and. associated(hco_diag%Arr3D))then
                         CALL GetHcoDiagn( HcoState, ExtState,hco_diag%cName, .false., RC, Ptr3D=Source_3d_4, &
                                           COL=HcoState%Diagn%HcoDiagnIDDefault)
-                        if (debug_level .ge. 500) then
+                        if (debug_level .gt. 100) then
                             write(*,*)'write hemco diagn 3d : name: ', hco_diag%cName
                         endif
                         if (associated(Source_3d_4))then
@@ -493,7 +623,7 @@ contains
                                             kte, time_index, ncid, dimids, &
                                             trim(hco_diag%OutUnit), trim(hco_diag%long_name))
                         else 
-                            write(*,*)'val not allocated'
+                            if (debug_level .gt. 100) write(*,*)'val not allocated'
                         endif
                     endif
                     Source_2d_4 => NULL()
@@ -503,9 +633,9 @@ contains
                 call closefile(ncid)
             endif
             T2 = MPI_Wtime()
-            write(*,*)'hemco write time: ', T2-T1
+            if (debug_level .gt. 100) write(*,*)'hemco write time: ', T2-T1
             hco_collection => hco_collection%NextCollection
-        enddo
+      enddo
 
       ! clean up 
       hco_collection => null()
@@ -631,7 +761,7 @@ contains
             ! write(*,*)'time length: ', time_index
 
             if (time_index == 0) then
-               if (debug_level .ge. 500) then
+               if (debug_level .gt. 100) then
                   write(*,*)'def vars'
                endif
                Current_metahistitem => Current_container%HistItems
@@ -668,10 +798,64 @@ contains
                                           trim(Current_Item%LongName))
                   Current_metahistitem => Current_metahistitem%Next
                enddo
+               if (State_Grid%ID == 1)then
+                  Current_metahistitem => IndexVariables(State_Grid%ID)%p
+                  do while(associated(Current_metahistitem))
+                     Current_Item => Current_metahistitem%Item
+                     SELECT CASE(Current_Item%Name)
+                     CASE('time')
+                        ierr = nf90mpi_inq_varid(Current_container%FileId, 'time', varid)
+                        call check(ierr, 'inq time')
+                        Current_Item%NcVarId = varid
+                     CASE('lev')
+                        ierr = nf90mpi_inq_varid(Current_container%FileId, 'lev', varid)
+                        call check(ierr, 'inq lev')
+                        Current_Item%NcVarId = varid
+                     CASE('ilev')
+                        ierr = nf90mpi_inq_varid(Current_container%FileId, 'ilev', varid)
+                        call check(ierr, 'inq ilev')
+                        Current_Item%NcVarId = varid
+                     CASE('hyam')
+                        ierr = nf90mpi_def_var(Current_container%FileId, 'hyam', NF90_FLOAT, dimids(3), varid)
+                        call check(ierr, 'def var hyam')
+                        Current_Item%NcVarId = varid
+                        ierr = nf90mpi_put_att(Current_container%FileId, varid, 'units', Current_Item%Units)
+                        ierr = nf90mpi_put_att(Current_container%FileId, varid, 'long_name', Current_Item%LongName)
+                     CASE('hybm')
+                        ierr = nf90mpi_def_var(Current_container%FileId, 'hybm', NF90_FLOAT, dimids(3), varid)
+                        call check(ierr, 'def var hybm')
+                        Current_Item%NcVarId = varid
+                        ierr = nf90mpi_put_att(Current_container%FileId, varid, 'units', Current_Item%Units)
+                        ierr = nf90mpi_put_att(Current_container%FileId, varid, 'long_name', Current_Item%LongName)
+                     CASE('hyai')
+                        ierr = nf90mpi_def_var(Current_container%FileId, 'hyai', NF90_FLOAT, dimids(7), varid)
+                        call check(ierr, 'def var hyai')
+                        Current_Item%NcVarId = varid
+                        ierr = nf90mpi_put_att(Current_container%FileId, varid, 'units', Current_Item%Units)
+                        ierr = nf90mpi_put_att(Current_container%FileId, varid, 'long_name', Current_Item%LongName)
+                     CASE('hybi')
+                        ierr = nf90mpi_def_var(Current_container%FileId, 'hybi', NF90_FLOAT, dimids(7), varid)
+                        call check(ierr, 'def var hybi')
+                        Current_Item%NcVarId = varid
+                        ierr = nf90mpi_put_att(Current_container%FileId, varid, 'units', Current_Item%Units)
+                        ierr = nf90mpi_put_att(Current_container%FileId, varid, 'long_name', Current_Item%LongName)
+                     CASE('P0')
+                        ierr = nf90mpi_def_var(Current_container%FileId, 'P0', NF90_FLOAT, varid)
+                        call check(ierr, 'def var P0')
+                        Current_Item%NcVarId = varid
+                        ierr = nf90mpi_put_att(Current_container%FileId, varid, 'units', Current_Item%Units)
+                        ierr = nf90mpi_put_att(Current_container%FileId, varid, 'long_name', Current_Item%LongName)
+                        call check(ierr, 'put att P0')
+                     END SELECT
+                     Current_metahistitem => Current_metahistitem%Next
+                  end do
+               endif
+
                ierr = nf90mpi_enddef(Current_container%FileId)
                call check(ierr, 'enddef, may caused by too many variables in the collection')
+               Current_container%IsFileDefined = .true.
 
-               if (debug_level .ge. 500) then
+               if (debug_level .gt. 100) then
                   write(*,*)'write dimensions'
                endif
 
@@ -705,7 +889,7 @@ contains
 
                ! write index variables only for domain 1
                if (State_Grid%ID == 1)then
-                  write(*,*)'index variables: ', trim(IndexVariables(State_Grid%ID)%p%Item%Name)
+                  if (debug_level .gt. 100) write(*,*)'index variables: ', trim(IndexVariables(State_Grid%ID)%p%Item%Name)
                   Current_metahistitem => IndexVariables(State_Grid%ID)%p
                
                   do while(associated(Current_metahistitem))
@@ -779,125 +963,43 @@ contains
                      !                                  (/int(2,kind=MPI_OFFSET_KIND),ite-its+1/) )
                      !    call check(ierr, 'put var lonbnds')
                      CASE('lev')
-                        ierr = nf90mpi_inq_varid(Current_container%FileId, 'lev', varid)
-                        call check(ierr, 'inq lev')
-
                         ierr = nf90mpi_put_var_all(   Current_container%FileId,\
-                                                      varid,\
+                                                      Current_Item%NcVarId,\
                                                       Current_Item%Data_1d,\
                                                       (/int(1, MPI_OFFSET_KIND)/),\
                                                       (/kte/) )
                         call check(ierr, 'put var lev')
                      CASE('ilev')
-                        ierr = nf90mpi_inq_varid(Current_container%FileId, 'ilev', varid)
-                        call check(ierr, 'inq ilev')
-
                         ierr = nf90mpi_put_var_all(   Current_container%FileId,\
-                                                      varid,\
+                                                      Current_Item%NcVarId,\
                                                       Current_Item%Data_1d,\
                                                       (/int(1, MPI_OFFSET_KIND)/),\
                                                       (/kte+1/) )
                         call check(ierr, 'put var ilev')
                      CASE('hyam')
-                        ierr = nf90mpi_redef(Current_container%FileId)
-                        call check(ierr, 'redef')
-                        ierr = nf90mpi_def_var(  Current_container%FileId, \
-                                                'hyam', \
-                                                NF90_FLOAT, \
-                                                dimids(3), \
-                                                varid)
-                        call check(ierr, 'def var hyam')
-                        ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                   varid,\
-                                                   'units',\
-                                                   Current_Item%Units)
-                        ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                   varid,\
-                                                   'long_name',\
-                                                   Current_Item%LongName)  
-                        ierr = nf90mpi_enddef(Current_container%FileId)
-                        call check(ierr, 'enddef')
-
                         ierr = nf90mpi_put_var_all(   Current_container%FileId,\
-                                                      varid,\
+                                                      Current_Item%NcVarId,\
                                                       Current_Item%Data_1d,\
                                                       (/int(1, MPI_OFFSET_KIND)/),\
                                                       (/kte/) )
                         call check(ierr, 'put var hyam')
                      CASE('hybm')
-                        ierr = nf90mpi_redef(Current_container%FileId)
-                        call check(ierr, 'redef')
-                        ierr = nf90mpi_def_var(  Current_container%FileId, \
-                                                'hybm', \
-                                                NF90_FLOAT, \
-                                                dimids(3), \
-                                                varid)
-                        call check(ierr, 'def var hybm')
-                        ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                   varid,\
-                                                   'units',\
-                                                   Current_Item%Units)
-                        ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                   varid,\
-                                                   'long_name',\
-                                                   Current_Item%LongName)  
-                        ierr = nf90mpi_enddef(Current_container%FileId)
-                        call check(ierr, 'enddef')
-
                         ierr = nf90mpi_put_var_all(   Current_container%FileId,\
-                                                      varid,\
+                                                      Current_Item%NcVarId,\
                                                       Current_Item%Data_1d,\
                                                       (/int(1, MPI_OFFSET_KIND)/),\
                                                       (/kte/) )
                         call check(ierr, 'put var hybm')
                      CASE('hyai')
-                        ierr = nf90mpi_redef(Current_container%FileId)
-                        call check(ierr, 'redef')
-                        ierr = nf90mpi_def_var(  Current_container%FileId, \
-                                                'hyai', \
-                                                NF90_FLOAT, \
-                                                dimids(7), \
-                                                varid)
-                        call check(ierr, 'def var hyai')
-                        ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                   varid,\
-                                                   'units',\
-                                                   Current_Item%Units)
-                        ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                   varid,\
-                                                   'long_name',\
-                                                   Current_Item%LongName)  
-                        ierr = nf90mpi_enddef(Current_container%FileId)
-                        call check(ierr, 'enddef')
-
                         ierr = nf90mpi_put_var_all(   Current_container%FileId,\
-                                                      varid,\
+                                                      Current_Item%NcVarId,\
                                                       Current_Item%Data_1d,\
                                                       (/int(1, MPI_OFFSET_KIND)/),\
                                                       (/kte/) )
                         call check(ierr, 'put var hyai')
                      CASE('hybi')
-                        ierr = nf90mpi_redef(Current_container%FileId)
-                        call check(ierr, 'redef')
-                        ierr = nf90mpi_def_var(  Current_container%FileId, \
-                                                'hybi', \
-                                                NF90_FLOAT, \
-                                                dimids(7), \
-                                                varid)
-                        call check(ierr, 'def var hybi')
-                        ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                   varid,\
-                                                   'units',\
-                                                   Current_Item%Units)
-                        ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                   varid,\
-                                                   'long_name',\
-                                                   Current_Item%LongName)  
-                        ierr = nf90mpi_enddef(Current_container%FileId)
-                        call check(ierr, 'enddef')
-
                         ierr = nf90mpi_put_var_all(   Current_container%FileId,\
-                                                      varid,\
+                                                      Current_Item%NcVarId,\
                                                       Current_Item%Data_1d,\
                                                       (/int(1, MPI_OFFSET_KIND)/),\
                                                       (/kte/) )
@@ -930,29 +1032,8 @@ contains
                      !                                  (/ite-its+1, jte-jts+1/) )
                      !    call check(ierr, 'put var AREA')
                      CASE('P0')
-                        ierr = nf90mpi_redef(Current_container%FileId)
-                        call check(ierr, 'redef')
-                        ierr = nf90mpi_def_var(  Current_container%FileId, \
-                                                'P0', \
-                                                NF90_FLOAT, \
-                                                varid)
-                        call check(ierr, 'def var P0')
-                        
-                        ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                   varid,\
-                                                   'units',\
-                                                   Current_Item%Units)
-                        ierr = nf90mpi_put_att(   Current_container%FileId,\
-                                                   varid,\
-                                                   'long_name',\
-                                                   Current_Item%LongName)                                                
-                        call check(ierr, 'put att P0')
-
-                        ierr = nf90mpi_enddef(Current_container%FileId)
-                        call check(ierr, 'enddef')
-
                         ierr = nf90mpi_put_var_all(   Current_container%FileId,\
-                                                      varid,\
+                                                      Current_Item%NcVarId,\
                                                       Current_Item%Data_0d)
                         call check(ierr, 'put var P0')
 
@@ -983,13 +1064,12 @@ contains
                   ! write(*,*) 'in while loop: ', trim(Current_metahistitem%Item%Name)
                   Current_Item => Current_metahistitem%Item
                   ! write(*,*) 'current item ', Current_Item%Name
-                  if (wrf_debug_level .ge. 500) then
+                  if (debug_level .gt. 100) then
                      write(*,*)'write item: ', Current_Item%Name
                      write(*,*)'write item: ', Current_Item%Units
                      write(*,*)'write item: ', Current_Item%LongName
                   endif
-                  write(*,*)'write item: ', Current_Item%LongName
-                  call writeItemName( Current_Item%Name, Input_Opt, State_Diag, State_Chm, State_Met,&
+                  call writeItemName( Current_Item%Name, Current_Item%NcVarId, Input_Opt, State_Diag, State_Chm, State_Met,&
                      its, ite, jts, jte, ide, jde, kte, time_index, Current_container%FileId, dimids(1:4), &
                      Current_Item%SpaceDim, dimensions, &
                      Current_Item%Source_0d_8, Current_Item%Source_1d_8, Current_Item%Source_2d_8, Current_Item%Source_3d_8, &
@@ -1031,7 +1111,7 @@ contains
                      endif
                      Current_Item%Data_3d = 0.0_f8
                   endif
-                  call writeItemName( Current_Item%Name, Input_Opt, State_Diag, State_Chm, State_Met, &
+                  call writeItemName( Current_Item%Name, Current_Item%NcVarId, Input_Opt, State_Diag, State_Chm, State_Met, &
                      its, ite, jts, jte, ide, jde, kte, time_index, Current_container%FileId, dimids(1:4), &
                      Current_Item%SpaceDim, dimensions, &
                      Data_0d, Data_1d, Data_2d, Data_3d, &
@@ -1097,7 +1177,7 @@ contains
    end subroutine writeDiag
 
 
-   subroutine writeItemName(ItemName, Input_Opt, State_Diag, State_Chm, &
+   subroutine writeItemName(ItemName, varid, Input_Opt, State_Diag, State_Chm, &
       State_Met, its, ite, jts, jte, ide, jde, kte, &
       time_index, ncid, dimids, rank, dimensions, &
       Ptr0d_8, Ptr1d_8, Ptr2d_8, Ptr3d_8, &
@@ -1107,6 +1187,7 @@ contains
       USE Charpak_Mod,           ONLY : To_UpperCase
 
       integer(kind=MPI_OFFSET_KIND), intent(in) :: ide, jde, kte, its, ite, jts, jte, time_index
+      integer, intent(in) :: varid
       integer, intent(in) :: ncid, dimids(4), rank, Dimensions(3)
       character(len=255) :: ItemName, StateChmUC, StateMetUC,Description, ItemNameUC
       integer :: RC
@@ -1154,8 +1235,8 @@ contains
          if (Dimensions(1) == ite-its+1 .and. Dimensions(2) == jte-jts+1) then
             if (associated(Ptr2d_4) .or. associated(Ptr2d_8)) then
                call write2file(  ItemName, Ptr2d_4, Ptr2d_8, its, ite, jts, jte, ide, jde, &
-                                 time_index, ncid, (/dimids(1:2), dimids(4)/),&
-                                 Units, long_name)
+                                 time_index, ncid, (/dimids(1:2), dimids(4)/), &
+                                 Units, long_name, varid)
             else if ( associated(Ptr2d_I) ) then
                write(*,*)'error: integer type not supported'
             end if
@@ -1169,7 +1250,7 @@ contains
             if ( associated(Ptr3d_4) .or. associated(Ptr3d_8)) then
                call write2file3d(ItemName, Ptr3d_4, Ptr3d_8, its, ite, jts, jte, ide, jde, kte, &
                                  time_index, ncid, dimids(1:4), &
-                                 Units, long_name)
+                                 Units, long_name, varid)
             else if ( associated(Ptr3d_I) ) then
                write(*,*)'error: integer type not supported'
             end if
@@ -1215,7 +1296,7 @@ contains
       REAL(f8),            POINTER :: Grid_LatE(:    )
       REAL(f8),            POINTER :: Grid_Lon (:    )
       REAL(f8),            POINTER :: Grid_LonE(:    )
-      integer :: RC, I, cmode
+      integer :: RC, I, cmode, info
 
 
       Grid_Lat       => NULL()
@@ -1227,24 +1308,27 @@ contains
 
       ! initialize file&define dimensions
       cmode = IOR(NF90_CLOBBER, NF90_64BIT_DATA)
+      call setup_mpi_info(info)
       ierr = nf90mpi_create(MPI_COMM_WORLD, trim(filename), cmode, &
-         MPI_INFO_NULL, ncid)
+         info, ncid)
       call check(ierr, 'create file '//filename)
+      call MPI_Info_free(info, ierr)
+      call checkmpi(ierr, 'MPI_Info_free')
       ierr = nf90mpi_def_dim(ncid, 'lon', ide-1, dimids(1))
       call check(ierr, 'def dim lon')
       ierr = nf90mpi_def_dim(ncid, 'lat', jde-1, dimids(2))
       call check(ierr, 'def dim lat')
       ierr = nf90mpi_def_dim(ncid, 'lev', kte, dimids(3))
       call check(ierr, 'def dim lev')
-      ierr = nf90mpi_def_dim(ncid, 'time', 0, dimids(4))
-      call check(ierr, 'def dim lev')
+      ierr = nf90mpi_def_dim(ncid, 'time', 0_MPI_OFFSET_KIND, dimids(4))
+      call check(ierr, 'def dim time')
       ierr = nf90mpi_def_dim(ncid, 'lon_e', ide, dimids(5))
       call check(ierr, 'def dim lon_e')
       ierr = nf90mpi_def_dim(ncid, 'lat_e', jde, dimids(6))
       call check(ierr, 'def dim lat_e')
       ierr = nf90mpi_def_dim(ncid, 'ilev', kte+1, dimids(7))
       call check(ierr, 'def dim ilev')
-      ierr = nf90mpi_def_dim(ncid, 'nb', 2, dimids(8))
+      ierr = nf90mpi_def_dim(ncid, 'nb', 2_MPI_OFFSET_KIND, dimids(8))
 
       ierr = nf90mpi_def_var(ncid, 'lon', NF90_FLOAT, dimids(1), varid)
       call check(ierr, 'def var lon')
@@ -1283,13 +1367,14 @@ contains
    end subroutine closefile
 
    ! the index in wrf is its, ite, jts, jte, kts, kte
-   subroutine write2file3d(varname, data_4, data_8, its, ite, jts, jte, ide, jde, kte,time_s, ncid, dimids, units, longname)
+   subroutine write2file3d(varname, data_4, data_8, its, ite, jts, jte, ide, jde, kte,time_s, ncid, dimids, units, longname, varid_in)
       ! Writes data to a netcdf file
       character(len=*), intent(in) :: varname
       integer(kind=MPI_OFFSET_KIND) :: starts(4), counts(4)
       integer(kind=MPI_OFFSET_KIND), intent(in) :: its, ite, jts, jte, ide, jde, kte, time_s
       integer(kind=MPI_OFFSET_KIND) :: kts
       integer, intent(in) :: ncid, dimids(4)
+      integer, optional, intent(in) :: varid_in
       integer :: varid, ierr, i
       character(len=26) :: filename
       character(len=*), intent(in) :: units, longname
@@ -1300,9 +1385,12 @@ contains
       kts = 1
 
       ! skip coordinates
-      ierr = nf90mpi_inq_varid(ncid, varname, varid)
-      ! call check(ierr, 'inq varid')
-      if (ierr .eq. NF90_ENOTVAR) then
+      if (present(varid_in)) then
+         varid = varid_in
+      else
+         ierr = nf90mpi_inq_varid(ncid, varname, varid)
+      endif
+      if (.not. present(varid_in) .and. ierr .eq. NF90_ENOTVAR) then
          ! define variable
          ierr = nf90mpi_redef(ncid)
          call check(ierr, 'redef')
@@ -1339,12 +1427,13 @@ contains
    endsubroutine write2file3d
 
 
-   subroutine write2file(varname, data_4, data_8, its, ite, jts, jte, ide, jde, time_s, ncid, dimids, units, longname)
+   subroutine write2file(varname, data_4, data_8, its, ite, jts, jte, ide, jde, time_s, ncid, dimids, units, longname, varid_in)
       ! Writes data to a netcdf file
       character(len=*), intent(in) :: varname
       integer(kind=MPI_OFFSET_KIND) :: starts(3), counts(3)
       integer(kind=MPI_OFFSET_KIND), intent(in) :: its, ite, jts, jte, ide, jde, time_s
       integer, intent(in) :: ncid, dimids(3)
+      integer, optional, intent(in) :: varid_in
       integer :: varid, ierr, i
       character(len=26) :: filename
       character(len=*), intent(in) :: units, longname
@@ -1355,9 +1444,12 @@ contains
 
 
       ! skip coordinates
-      ierr = nf90mpi_inq_varid(ncid, varname, varid)
-    !   call check(ierr, 'inq varid')
-      if (ierr .eq. NF90_ENOTVAR) then
+      if (present(varid_in)) then
+         varid = varid_in
+      else
+         ierr = nf90mpi_inq_varid(ncid, varname, varid)
+      endif
+      if (.not. present(varid_in) .and. ierr .eq. NF90_ENOTVAR) then
          ! define variable
          ierr = nf90mpi_redef(ncid)
          call check(ierr, 'redef')

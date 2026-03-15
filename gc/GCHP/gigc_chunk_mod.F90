@@ -558,18 +558,6 @@ CONTAINS
     ! Assume success
     RC = GC_SUCCESS
 
-    ! Update Input_Opt with timing fields
-    ! We will skip defining these in READ_INPUT_FILE
-    Input_Opt%NYMDb   = nymdB           ! YYYYMMDD @ start of simulation
-    Input_Opt%NHMSb   = nhmsB           ! hhmmss   @ end   of simulation
-    Input_Opt%NYMDe   = nymdE           ! YYYYMMDD @ start of simulation
-    Input_Opt%NHMSe   = nhmsE           ! hhmmss   @ end   of simulation
-    Input_Opt%TS_CHEM = INT( tsChem )   ! Chemistry timestep [sec]
-    Input_Opt%TS_EMIS = INT( tsChem )   ! Chemistry timestep [sec]
-    Input_Opt%TS_DYN  = INT( tsDyn  )   ! Dynamic   timestep [sec]
-    Input_Opt%TS_CONV = INT( tsDyn  )   ! Dynamic   timestep [sec]
-    Input_Opt%TS_RAD  = INT( tsRad  )   ! RRTMG     timestep [sec]
-
     ! Initialize GEOS-Chem
     ! GIGC_State_Boot does: Read_Input_File, Linoz_Read, and GC_Allocate_All (only CMN)
     call GIGC_State_Boot(am_I_Root = Input_Opt%AmIRoot,& ! Are we on the root PET?
@@ -581,6 +569,18 @@ CONTAINS
       WRITE(6, *) "### GIGC_CHUNK_INIT/INIT_SIMULATION: fatal error in GIGC_State_Boot. stop."
       stop
     ENDIF
+
+    ! Update Input_Opt with timing fields
+    ! We will skip defining these in READ_INPUT_FILE
+    Input_Opt%NYMDb   = nymdB           ! YYYYMMDD @ start of simulation
+    Input_Opt%NHMSb   = nhmsB           ! hhmmss   @ end   of simulation
+    Input_Opt%NYMDe   = nymdE           ! YYYYMMDD @ start of simulation
+    Input_Opt%NHMSe   = nhmsE           ! hhmmss   @ end   of simulation
+    Input_Opt%TS_CHEM = INT( tsChem )   ! Chemistry timestep [sec]
+    Input_Opt%TS_EMIS = INT( tsChem )   ! Chemistry timestep [sec]
+    Input_Opt%TS_DYN  = INT( tsDyn  )   ! Dynamic   timestep [sec]
+    Input_Opt%TS_CONV = INT( tsDyn  )   ! Dynamic   timestep [sec]
+    Input_Opt%TS_RAD  = INT( tsRad  )   ! RRTMG     timestep [sec]
 
     !=======================================================================
     ! Temporary support for in-PET grid switching: verify if we need to

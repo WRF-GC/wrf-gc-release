@@ -8,7 +8,7 @@
 !                                                                              !
 !------------------------------------------------------------------------------!
 !         WRF-GC - two-way, nested coupled meteorology-chemistry model         !
-!                             v3.0.1 (August 2025)                             !
+!                             v3.0.2 (March 2026)                              !
 !------------------------------------------------------------------------------!
 !  Formerly known as WRF-GCHP, WRF-GIGC. GCHP-powered chemistry add-on for WRF !
 !  WRF & GCHP are (c) their original authors.                                  !
@@ -260,7 +260,7 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, &
       ! Temporary kludge to tune down KPP sensitivity if operating in multi-domain
       ! mode. (hplin, 5/20/20)
       if(config_flags%gc_kpp_stop) then                       ! Default behavior
-        if(Global_Input_Opt%KppStop .eq. .true.) then
+        if(Global_Input_Opt%KppStop) then
           if(grid%id .ge. 2) then
             Global_Input_Opt%KppStop = .false.
           endif
@@ -270,7 +270,7 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, &
       endif
 
       ! Show a KPP warning for this...
-      if(Global_Input_Opt%KppStop .eq. .false.) then
+      if(.not. Global_Input_Opt%KppStop) then
         write(6,*) "*** WRF-GC WARNING ***"
         write(6,*) "YOU ARE RUNNING WRF-GC IN MULTI-DOMAIN NESTED MODE, WHICH DISABLES"
         write(6,*) "CRITICAL INTEGRITY FAILSAFES WITHIN GEOS-CHEM KPP INTEGRATOR."
@@ -285,7 +285,7 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, &
       endif
 
       ! Have we ran this before...?
-      if(GIGC_States(grid%id)%Init .eq. .true.) then
+      if(GIGC_States(grid%id)%Init) then
         write(6, *) "WRFGC chemics_init: Domain", grid%id, "already initialized, skipping."
         return
       endif
@@ -346,8 +346,8 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, &
       call wrf_message("           \  /\  /  | | \ \| |         | |__| | |____           ")
       call wrf_message("            \/  \/   |_|  \_\_|          \_____|\_____|          ")
       call wrf_message("*****************************************************************")
-      call wrf_message("           WRF-GC MODEL, BUILD 2404.22 - WRF BINDINGS            ")
-      call wrf_message("                 WRF-GC v3.0.1 (August 2025)                     ")
+      call wrf_message("           WRF-GC MODEL, BUILD 2603.07 - WRF BINDINGS            ")
+      call wrf_message("                 WRF-GC v3.0.2 (March 2026)                      ")
       call wrf_message(" Please report errors, suggestions & feedback to:                ")
       call wrf_message("   https://github.com/WRF-GC/wrf-gc-release                      ")
       call wrf_message("*****************************************************************")

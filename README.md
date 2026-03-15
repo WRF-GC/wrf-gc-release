@@ -14,9 +14,9 @@ The WRF-GC model includes a versatile coupler coupling GEOS-Chem to WRF in a man
 
 ### License
 ```
-(c) 2017-2025 Haipeng Lin <hplin@seas.harvard.edu>, Xu Feng <fengx7@pku.edu.cn>, Tzung-May Fu <tmfu@pku.edu.cn>
+(c) 2017-2026 Haipeng Lin <hplin@seas.harvard.edu>, Xu Feng <fengx7@pku.edu.cn>, Tzung-May Fu <tmfu@pku.edu.cn>
 (c) 2017-2018 Atmospheric Chemistry & Climate Group, Peking University
-(c) 2018-2025 Atmospheric Chemistry & Climate Group, SUSTech
+(c) 2018-2026 Atmospheric Chemistry & Climate Group, SUSTech
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to 

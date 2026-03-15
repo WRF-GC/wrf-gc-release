@@ -49,7 +49,6 @@ module WRFGC_Convert_State_Mod
     ! GEOS-Chem
     use GIGC_Chunk_Mod
     use PRECISION_MOD
-    use Species_Mod,    only: MISSING_INT
     use ERROR_MOD,      only: IT_IS_NAN
     use Input_Opt_Mod,  only: OptInput
     use State_Chm_Mod,  only: ChmState, Ind_
@@ -1108,7 +1107,7 @@ contains
 #ifdef use_wrfgc_history_output
         !------------------WRF-GC diagnostics module------------------!
         call wrf_debug(100, "WRFGC_Convert_State_Mod IO pnetCDF: Start writing diagnostics")
-        call writeDiag(debug_level, Input_Opt, State_Met, State_Chm, grid, State_Grid, State_Diag, its, ite, jts, jte, ide, jde, kte)
+        call writeDiag(debug_level, Input_Opt, State_Met, State_Chm, grid, State_Grid, State_Diag, int(its, MPI_OFFSET_KIND), int(ite, MPI_OFFSET_KIND), int(jts, MPI_OFFSET_KIND), int(jte, MPI_OFFSET_KIND), int(ide, MPI_OFFSET_KIND), int(jde, MPI_OFFSET_KIND), int(kte, MPI_OFFSET_KIND))
         call wrf_debug(100, "WRFGC_Convert_State_Mod IO pnetCDF: End writing diagnostics")
 #endif
 

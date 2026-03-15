@@ -49,7 +49,6 @@ module WRFGC_Convert_State_Mod
     ! GEOS-Chem
     use GIGC_Chunk_Mod
     use PRECISION_MOD
-    use Species_Mod,    only: MISSING_INT
     use ERROR_MOD,      only: IT_IS_NAN
     use Input_Opt_Mod,  only: OptInput
     use State_Chm_Mod,  only: ChmState, Ind_
@@ -1113,30 +1112,28 @@ contains
             ! FRLAKE            Fraction of lake [1]
             ! FRSNO             Surface snow fraction [1]
             ! FRLANDIC          Fraction of land ice [1]
-            if(grid%lu_mask(i, j) .eq. 0 .and. grid%lakemask(i, j) .eq. 0 .and. grid%snowh(i, j) .eq. 0) then
-                 State_Met%FRLAND(II, JJ) = 1.0_fp
-                 State_Met%FROCEAN(II, JJ) = 0.0_fp
-                 State_Met%FRSNO(II, JJ) = 0.0_fp
-                 State_Met%FRLAKE(II, JJ) = 0.0_fp
-                 State_Met%FRLANDIC(II, JJ) = 0.0_fp
-            else if(grid%lu_mask(i, j) .eq. 1) then
-                 State_Met%FRLAND(II, JJ) = 0.0_fp
-                 State_Met%FROCEAN(II, JJ) = 1.0_fp
-                 State_Met%FRSNO(II, JJ) = 0.0_fp
-                 State_Met%FRLAKE(II, JJ) = 0.0_fp
-                 State_Met%FRLANDIC(II, JJ) = 0.0_fp
-            else if(grid%lakemask(i, j) .eq. 1) then
-                 State_Met%FRLAND(II, JJ) = 0.0_fp
-                 State_Met%FROCEAN(II, JJ) = 0.0_fp
-                 State_Met%FRSNO(II, JJ) = 0.0_fp
-                 State_Met%FRLAKE(II, JJ) = 1.0_fp
-                 State_Met%FRLANDIC(II, JJ) = 0.0_fp
-            else if(grid%snowh(i, j) .ge. 0) then
+            if(grid%lu_index(i, j) .eq. 24) then
                  State_Met%FRLAND(II, JJ) = 0.0_fp
                  State_Met%FROCEAN(II, JJ) = 0.0_fp
                  State_Met%FRSNO(II, JJ) = 1.0_fp
                  State_Met%FRLAKE(II, JJ) = 0.0_fp
                  State_Met%FRLANDIC(II, JJ) = 1.0_fp
+            else if(grid%lu_index(i, j) .eq. 16) then
+                State_Met%FRLAND(II, JJ) = 0.0_fp
+                State_Met%FROCEAN(II, JJ) = 1.0_fp
+                State_Met%FRSNO(II, JJ) = 0.0_fp
+                State_Met%FRLAKE(II, JJ) = 0.0_fp
+                State_Met%FRLANDIC(II, JJ) = 0.0_fp
+                if (grid%lake_depth(i, j) .ne. 10) then
+                    State_Met%FROCEAN(II, JJ) = 0.0_fp
+                    State_Met%FRLAKE(II, JJ) = 1.0_fp
+                endif
+            else
+                 State_Met%FRLAND(II, JJ) = 1.0_fp
+                 State_Met%FROCEAN(II, JJ) = 0.0_fp
+                 State_Met%FRSNO(II, JJ) = 0.0_fp
+                 State_Met%FRLAKE(II, JJ) = 0.0_fp
+                 State_Met%FRLANDIC(II, JJ) = 0.0_fp
             endif
 
             ! FRSEAICE          Surface sea ice fraction [1] | Sea ice fraction [1]
@@ -1172,6 +1169,7 @@ contains
                 State_Met%LandTypeFrac(II, JJ, 10) = grid%landusef(i, 20, j) ! Upland tundra
                 State_Met%LandTypeFrac(II, JJ, 64) = grid%landusef(i, 21, j) + grid%landusef(i, 22, j) ! Wooden Tundra
                 State_Met%LandTypeFrac(II, JJ, 54) = grid%landusef(i, 23, j) ! Barren Tundra
+                State_Met%LandTypeFrac(II, JJ, 13) = grid%landusef(i, 24, j) ! ICE
                 State_Met%XLAI        (II, JJ, 1 ) = grid%lai(i, j)
                 State_Met%XLAI        (II, JJ, 2 ) = grid%lai(i, j)
                 State_Met%XLAI        (II, JJ, 3 ) = grid%lai(i, j)
@@ -1948,7 +1946,7 @@ contains
 #ifdef use_wrfgc_history_output
         !------------------WRF-GC diagnostics module------------------!
         call wrf_debug(100, "WRFGC_Convert_State_Mod IO pnetCDF: Start writing diagnostics")
-        call writeDiag(debug_level, Input_Opt, State_Met, State_Chm, grid, State_Grid, State_Diag, its, ite, jts, jte, ide, jde, kte)
+        call writeDiag(debug_level, Input_Opt, State_Met, State_Chm, grid, State_Grid, State_Diag, int(its, MPI_OFFSET_KIND), int(ite, MPI_OFFSET_KIND), int(jts, MPI_OFFSET_KIND), int(jte, MPI_OFFSET_KIND), int(ide, MPI_OFFSET_KIND), int(jde, MPI_OFFSET_KIND), int(kte, MPI_OFFSET_KIND))
         call wrf_debug(100, "WRFGC_Convert_State_Mod IO pnetCDF: End writing diagnostics")
 #endif
 
