@@ -8,7 +8,7 @@
 !                                                                              !
 !------------------------------------------------------------------------------!
 !         WRF-GC - two-way, nested coupled meteorology-chemistry model         !
-!                             v3.0.2 (March 2026)                              !
+!                             v3.0.3 (June 2026)                               !
 !------------------------------------------------------------------------------!
 !  Formerly known as WRF-GCHP, WRF-GIGC. GCHP-powered chemistry add-on for WRF !
 !  WRF & GCHP are (c) their original authors.                                  !
@@ -753,7 +753,7 @@ subroutine chem_driver(grid, config_flags &
       WRFGC_Time_Temp_Start = MPI_Wtime()
 
       ! Update the last day WRF-GC chem_driver was called (hplin, 4/14/22)
-      WRF_lastNewDay = WRF_dateD
+      WRF_lastNewDay(grid%id) = WRF_dateD
 
       ! Run the conversion routines from GEOS-Chem column chemistry code
       call WRFGC_Set_WRF(am_I_Root, config_flags, grid, num_chem, chem, num_scalar, scalar, num_moist, moist, &
@@ -868,11 +868,13 @@ end do chem_tile_loop_1
 ! No longer first call
    FIRST(grid%id) = .FALSE.
 
-   ! Cleanup
-   ! deallocate(lonCtr )
-   ! deallocate(latCtr )
-   ! deallocate(lonEdge)
-   ! deallocate(latEdge)
+   ! Cleanup (only allocated when do_chemstep is true)
+   if (do_chemstep) then
+      deallocate(lonCtr )
+      deallocate(latCtr )
+      deallocate(lonEdge)
+      deallocate(latEdge)
+   endif
 
    ! For WRF time measurement
    WRF_Time_Last_Call = MPI_Wtime()

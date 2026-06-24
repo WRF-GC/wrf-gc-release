@@ -317,6 +317,8 @@ contains
       integer :: delta_s
 
       Source_0d_8 => NULL()
+      Source_0d_4 => NULL()
+      Source_0d_I => NULL()
       Source_1d_8 => NULL()
       Source_1d_4 => NULL()
       Source_1d_I => NULL()
@@ -519,6 +521,8 @@ contains
                ! def var all at once
                hco_diag => hco_collection%DiagnList
                do while(associated(hco_diag))
+                  ! put_att must only execute when varid was
+                  ! actually set by a successful def_var:
                   if ( hco_diag%SpaceDim == 2 .and. associated(hco_diag%Arr2D))then
                      if (debug_level .gt. 100) then
                         write(*,*)'def hemco diagn 2d: name: ', hco_diag%cName
@@ -526,23 +530,24 @@ contains
                      if (associated(hco_diag%Arr2D%Val))then
                         ierr = nf90mpi_def_var(ncid, trim(hco_diag%cName), NF90_FLOAT, (/dimids(1), dimids(2), dimids(4)/), varid)
                         call check(ierr, 'def var')
+                        ierr = nf90mpi_put_att(ncid, varid, 'units', trim(hco_diag%OutUnit))
+                        ierr = nf90mpi_put_att(ncid, varid, 'long_name', trim(hco_diag%long_name))
                      else
                         if (debug_level .gt. 100) write(*,*)'val not allocated'
                      endif
-                  endif
-                  if (hco_diag%SpaceDim == 3 .and. associated(hco_diag%Arr3D))then
+                  else if (hco_diag%SpaceDim == 3 .and. associated(hco_diag%Arr3D))then
                      if (debug_level .gt. 100) then
                         write(*,*)'def hemco diagn 3d : name: ', hco_diag%cName
                      endif
                      if (associated(hco_diag%Arr3D%Val))then
                         ierr = nf90mpi_def_var(ncid, trim(hco_diag%cName), NF90_FLOAT, (/dimids(1), dimids(2), dimids(3), dimids(4)/), varid)
                         call check(ierr, 'def var')
-                     else 
+                        ierr = nf90mpi_put_att(ncid, varid, 'units', trim(hco_diag%OutUnit))
+                        ierr = nf90mpi_put_att(ncid, varid, 'long_name', trim(hco_diag%long_name))
+                     else
                         if (debug_level .gt. 100) write(*,*)'val not allocated'
                      endif
                   endif
-                  ierr = nf90mpi_put_att(ncid, varid, 'units', trim(hco_diag%OutUnit))
-                  ierr = nf90mpi_put_att(ncid, varid, 'long_name', trim(hco_diag%long_name))
                   hco_diag => hco_diag%NextCont
                enddo
                ierr = nf90mpi_enddef(ncid)
@@ -637,12 +642,12 @@ contains
             hco_collection => hco_collection%NextCollection
       enddo
 
-      ! clean up 
+      ! clean up
       hco_collection => null()
-      Grid_Lat => null()
-      Grid_Lon => null()
-      Grid_LatE => null()
-      Grid_LonE => null()
+      if(associated(Grid_Lat))  deallocate(Grid_Lat)
+      if(associated(Grid_Lon))  deallocate(Grid_Lon)
+      if(associated(Grid_LatE)) deallocate(Grid_LatE)
+      if(associated(Grid_LonE)) deallocate(Grid_LonE)
       Source_2d_4 => NULL()
       Source_3d_4 => NULL()
     
@@ -887,6 +892,12 @@ contains
                enddo
                call writeDimension('lon_e', Grid_LonE, Current_container%FileId, its, ite+1)
 
+               ! deallocate Grid arrays after writing dimensions
+               if(associated(Grid_Lat))  deallocate(Grid_Lat)
+               if(associated(Grid_Lon))  deallocate(Grid_Lon)
+               if(associated(Grid_LatE)) deallocate(Grid_LatE)
+               if(associated(Grid_LonE)) deallocate(Grid_LonE)
+
                ! write index variables only for domain 1
                if (State_Grid%ID == 1)then
                   if (debug_level .gt. 100) write(*,*)'index variables: ', trim(IndexVariables(State_Grid%ID)%p%Item%Name)
@@ -991,18 +1002,22 @@ contains
                                                       (/kte/) )
                         call check(ierr, 'put var hybm')
                      CASE('hyai')
+                        ! hyai is on interface levels (ilev),
+                        ! count must be kte+1 not kte
                         ierr = nf90mpi_put_var_all(   Current_container%FileId,\
                                                       Current_Item%NcVarId,\
                                                       Current_Item%Data_1d,\
                                                       (/int(1, MPI_OFFSET_KIND)/),\
-                                                      (/kte/) )
+                                                      (/kte+1/) )
                         call check(ierr, 'put var hyai')
                      CASE('hybi')
+                        ! hybi is on interface levels (ilev),
+                        ! count must be kte+1 not kte
                         ierr = nf90mpi_put_var_all(   Current_container%FileId,\
                                                       Current_Item%NcVarId,\
                                                       Current_Item%Data_1d,\
                                                       (/int(1, MPI_OFFSET_KIND)/),\
-                                                      (/kte/) )
+                                                      (/kte+1/) )
                         call check(ierr, 'put var hybi')
                      ! ======= AREA is not working for now =======
                      ! CASE('AREA')
@@ -1118,6 +1133,10 @@ contains
                      Source_0d_4, Source_1d_4, Source_2d_4, Source_3d_4, &
                      Source_0d_I, Source_1d_I, Source_2d_I, Source_3d_I, &
                      Current_Item%Units, Current_Item%LongName)
+                  ! deallocate before nullifying to avoid
+                  ! memory leak on every time-averaged output step
+                  if(associated(Data_2d)) deallocate(Data_2d)
+                  if(associated(Data_3d)) deallocate(Data_3d)
                   Data_2d => NULL()
                   Data_3d => NULL()
                   Current_Item%nUpdates = 0

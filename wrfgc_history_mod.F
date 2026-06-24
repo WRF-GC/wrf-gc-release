@@ -57,7 +57,10 @@ MODULE WRFGC_History_Mod
    !
    ! Maximum number of collections (set to a ridiculously big number)
    INTEGER,                 PARAMETER   :: MAX_COLLECTIONS = 500
-   INTEGER :: N
+   ! [C6 fix] Removed module-level INTEGER :: N that was being
+   ! modified as a side-effect by get_collection_name. Using a
+   ! module-scope loop variable causes hidden state mutation.
+   ! N is now declared locally in each subroutine that needs it.
 
    INTEGER,          PARAMETER, PUBLIC :: UNDEFINED_INT      = -999
    REAL(f4),         PARAMETER, PUBLIC :: UNDEFINED          = -1.0e+31_f4
@@ -107,6 +110,7 @@ MODULE WRFGC_History_Mod
       INTEGER                      :: DeltaYMD,       DeltaHMS
       INTEGER                      :: X,              Y
       INTEGER                      :: C,              N,             W
+      INTEGER                      :: iDot,           nSplit
       INTEGER                      :: nX,             nY,            nZ
       INTEGER                      :: fId,            IOS,           LineNum
       INTEGER                      :: nSubs1,         nSubs2
@@ -204,10 +208,16 @@ MODULE WRFGC_History_Mod
       Ptr2d_8 => NULL()
       Ptr2d_4 => NULL()
       
-      ! do N = 1, 8
-      !    allocate(IndexVariables(State_Grid%ID));
-      !    allocate(CollectionList(State_Grid%ID));
-      ! enddo
+      ! [C4 fix] The pointer components of CollectionList and IndexVariables
+      ! must be explicitly nullified before first use. Without this,
+      ! ASSOCIATED() returns undefined results because uninitialized
+      ! pointers have indeterminate association status in Fortran,
+      ! which causes MetaHistContainer_AddNew to dereference garbage
+      ! memory when it checks whether the list head is associated.
+      do C = 1, 8
+         CollectionList(C)%p => NULL()
+         IndexVariables(C)%p => NULL()
+      enddo
 
       ThisLoc = " -> at wrfgc_history_init (in module wfrcg_history_mod.F)"
 
@@ -440,14 +450,19 @@ MODULE WRFGC_History_Mod
 
 
             ! get collection name
-            N = INDEX( Trim(Line), '.' )
-            CName = Line(1:N-1)
+            ! [C6 fix] Use iDot instead of overloading N
+            iDot = INDEX( Trim(Line), '.' )
+            CName = Line(1:iDot-1)
             ! skip all fileds if collection name is not in the list
             CALL Search_CollList( Input_Opt%amIRoot, CollList, CName, Found, RC )
             IF ( .not. Found ) then
+               ! [C7 fix] Added EOF check to prevent infinite hang when
+               ! HISTORY.rc is malformed (missing '::' terminator).
+               ! Without this, the loop reads forever past EOF.
                do
                   Line = ReadOneLine(fId, EOF, IOS, Squeeze = .TRUE.)
                   LineNum = LineNum + 1
+                  if (EOF) exit
                   call StrSqueeze(Line)
                   if (TRIM(Line) == '::') GOTO 500
                end do
@@ -487,8 +502,10 @@ MODULE WRFGC_History_Mod
                ItemTemplate = ItemName
                ItemTemplateUC = To_UpperCase(ItemTemplate)
                if (index(ItemTemplate, "?")>0) then
-                  call StrSplit(ItemTemplate, '?', SubStrs, N)
-                  tagId = SubStrs(N-1)
+                  ! [C6 fix] Use nSplit instead of overloading N, which
+                  ! is also used as the tag loop counter below
+                  call StrSplit(ItemTemplate, '?', SubStrs, nSplit)
+                  tagId = SubStrs(nSplit-1)
                   ItemPrefix = SubStrs(1)
 
                   ! Get number of tags for this wildcard
@@ -884,6 +901,7 @@ MODULE WRFGC_History_Mod
       CHARACTER(LEN=255)     :: TmpCollectionName(MAX_COLLECTIONS)
       CHARACTER(LEN=255)     :: ErrMsg, ThisLoc, Line,  Line2
       INTEGER                :: RC
+      INTEGER                :: N
 
       ! Zero local variables
       RC      = GC_SUCCESS
@@ -1060,13 +1078,18 @@ MODULE WRFGC_History_Mod
 
    subroutine checkgc(RC, message)
       implicit none
-      integer :: RC
-      character(len=*) :: message
+      integer, intent(in) :: RC
+      character(len=*), intent(in) :: message
 
-      ! It is a good idea to check returned value for possible error
+      ! [C5 fix] The original code used "return" here, which exits
+      ! checkgc itself -- NOT the calling subroutine. This made every
+      ! error check in wrfgc_history_init a silent no-op: errors were
+      ! printed but execution continued with corrupted state.
+      ! Use wrf_error_fatal to halt execution on error, consistent
+      ! with WRF-GC error handling conventions elsewhere.
       if (RC .NE. GC_SUCCESS) then
-         write(*,*) message
-         return
+         write(*,*) "WRFGC_History_Mod ERROR: ", message
+         call wrf_error_fatal(message)
       end if
    end subroutine checkgc
 
@@ -1575,8 +1598,12 @@ MODULE WRFGC_History_Mod
 ! Increment number of HISTORY ITEMS in this collection
       Collection%nHistItems = Collection%nHistItems + 1
 
-! Free Item (we have added it to the container and don't need it anymore)
-      DEALLOCATE( Item )
+! [C8 fix] Do NOT deallocate Item -- it was added to the collection's
+! linked list, which now owns the memory. DEALLOCATE here would free
+! the storage while the linked list still holds a pointer to it,
+! creating a dangling pointer that causes crashes or data corruption
+! when the collection is later traversed.
+! Only nullify the local pointer to release our reference.
       Item => NULL()
 
 ! Free pointers

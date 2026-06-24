@@ -8,7 +8,7 @@
 !                                                                              !
 !------------------------------------------------------------------------------!
 !         WRF-GC - two-way, nested coupled meteorology-chemistry model         !
-!                             v3.0.2 (March 2026)                              !
+!                             v3.0.3 (June 2026)                               !
 !------------------------------------------------------------------------------!
 !  Formerly known as WRF-GCHP, WRF-GIGC. GCHP-powered chemistry add-on for WRF !
 !  WRF & GCHP are (c) their original authors.                                  !
@@ -346,8 +346,8 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, &
       call wrf_message("           \  /\  /  | | \ \| |         | |__| | |____           ")
       call wrf_message("            \/  \/   |_|  \_\_|          \_____|\_____|          ")
       call wrf_message("*****************************************************************")
-      call wrf_message("           WRF-GC MODEL, BUILD 2603.07 - WRF BINDINGS            ")
-      call wrf_message("                 WRF-GC v3.0.2 (March 2026)                      ")
+      call wrf_message("           WRF-GC MODEL, BUILD 2606.24 - WRF BINDINGS            ")
+      call wrf_message("                 WRF-GC v3.0.3 (June 2026)                       ")
       call wrf_message(" Please report errors, suggestions & feedback to:                ")
       call wrf_message("   https://github.com/WRF-GC/wrf-gc-release                      ")
       call wrf_message("*****************************************************************")
@@ -619,9 +619,9 @@ subroutine chem_init(id, chem, emis_ant, scalar, dt, bioemdt, photdt, &
       write(message_txt, *) "GIGC chemics_init: GIGC_Chunk_Init completed for ID #", grid%id
       call wrf_debug(1, message_txt)
 
-      ! Cleanup Ap, Bp
-      deallocate(Ap)
-      deallocate(Bp)
+      ! Cleanup Ap, Bp (only allocated when hybrid_opt == 2)
+      if(allocated(Ap)) deallocate(Ap)
+      if(allocated(Bp)) deallocate(Bp)
 #ifdef use_wrfgc_history_output
        ! Initialize wrf-gc history collection list
       call wrfgc_history_init(Global_Input_Opt,    &

@@ -1104,9 +1104,6 @@ contains
                 State_Met%FLASH_DENS(II, JJ) = ( grid%cg_flashrate(i, j) + grid%ic_flashrate(i, j) ) / State_Met%AREA_M2(II, JJ) * 1e+6_fp
             endif
 
-            ! FRCLND            Olson land fraction [1]
-            State_Met%FRCLND(II, JJ) = State_Met%FRLAND(II, JJ)
-
             ! FRLAND            Fraction of land [1]
             ! FROCEAN           Fraction of ocean [1]
             ! FRLAKE            Fraction of lake [1]
@@ -1135,6 +1132,10 @@ contains
                  State_Met%FRLAKE(II, JJ) = 0.0_fp
                  State_Met%FRLANDIC(II, JJ) = 0.0_fp
             endif
+
+            ! FRCLND            Olson land fraction [1]
+            ! Must be set after FRLAND is computed above
+            State_Met%FRCLND(II, JJ) = State_Met%FRLAND(II, JJ)
 
             ! FRSEAICE          Surface sea ice fraction [1] | Sea ice fraction [1]
             State_Met%FRSEAICE(II, JJ) = grid%xice(i, j)
